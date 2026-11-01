@@ -8,17 +8,17 @@ description = "Experimental native egui port of Forui components"
 publish = false
 
 [dependencies]
-egui = "=0.36.2"
+egui = "=0.37.0"
 
 [dev-dependencies]
-egui_kittest = "=0.36.2"
+egui_kittest = "=0.37.0"
 
 [features]
 default = []
 demo = ["dep:eframe"]
 
 [dependencies.eframe]
-version = "=0.36.2"
+version = "=0.37.0"
 optional = true
 default-features = false
 features = ["accesskit", "default_fonts", "glow", "x11"]
