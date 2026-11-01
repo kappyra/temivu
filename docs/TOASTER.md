@@ -2,7 +2,7 @@
 
 `ToasterState` is the caller-owned overlay queue for toasts; `Toaster` renders it
 as a stacked foreground area anchored to the top-right corner. It complements the
-single inline [`Toast`](TOAST.md) widget (see `COVERAGE.md` for the module).
+single inline `Toast` widget (`src/toast.rs`; see `COVERAGE.md` for the module).
 
 ```rust
 use temivu::{ToastEntry, Toaster, ToasterState, Theme};
