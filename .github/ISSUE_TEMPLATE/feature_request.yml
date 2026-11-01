@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest an improvement or an upstream parity gap.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or gap
+      description: What is missing, and why does it matter? Link the component doc and upstream behaviour if possible.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you like it to behave? Include sketches or upstream screenshots when useful.
+    validations:
+      required: true
+  - type: input
+    id: area
+    attributes:
+      label: Area
+      description: Component/module, accessibility, localization, performance, docs, dependency policy, etc.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked docs/COVERAGE.md and this gap is not already tracked.
+          required: true

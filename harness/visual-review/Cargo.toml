@@ -1,0 +1,15 @@
+[package]
+name = "temivu-visual-review"
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+default-run = "temivu-visual-review"
+
+[dependencies]
+temivu = { version = "=0.0.0", path = "../.." }
+egui = "=0.36.2"
+egui_kittest = { version = "=0.36.2", features = ["wgpu"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[workspace]

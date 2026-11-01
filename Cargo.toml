@@ -1,0 +1,28 @@
+[package]
+name = "temivu"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+description = "Experimental native egui port of Forui components"
+publish = false
+
+[dependencies]
+egui = "=0.36.2"
+
+[dev-dependencies]
+egui_kittest = "=0.36.2"
+
+[features]
+default = []
+demo = ["dep:eframe"]
+
+[dependencies.eframe]
+version = "=0.36.2"
+optional = true
+default-features = false
+features = ["accesskit", "default_fonts", "glow", "x11"]
+
+[[example]]
+name = "showcase"
+required-features = ["demo"]
