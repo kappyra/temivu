@@ -62,7 +62,7 @@ every frame (including when an overlay is closed).
 - Add or update tests with every behaviour change. Prefer `egui_kittest` for
   interaction, focus, keyboard and accessibility behaviour.
 - For visual changes, run the off-screen sheet helper if your environment supports
-  it (see `harness/visual-review/`) and mention what you compared. If you cannot
+  it (see `harness/visual-review/` (requires `python3 -m pip install pillow` for the comparison script)) and mention what you compared. If you cannot
   render, say so explicitly in the PR — that is fine, not a failure.
 - Update the relevant `docs/*.md` and `docs/COVERAGE.md` when you close a gap or
   discover a new limitation. Honest documentation is more valuable than a green

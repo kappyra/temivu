@@ -10,7 +10,7 @@
 > nhưng chưa có thành phần nào được xác minh tương đương hoàn toàn với upstream và chưa
 > có bản phát hành ổn định. Vui lòng đọc [Hạn chế đã biết](#hạn-chế-đã-biết) trước khi dùng.
 
-![Xem trước các thành phần đã chuyển](docs/images/buttons.png)
+![Một bảng thành phần tiêu biểu do công cụ đánh giá hình ảnh kết xuất](docs/images/overview.png)
 
 ## Vì sao tôi làm dự án này
 
@@ -28,13 +28,13 @@ quyết định và tiêu chuẩn đánh giá, và tôi chịu trách nhiệm v�
 
 ## Những gì có trong dự án
 
-- **44 mô-đun thành phần sơ bộ** — accordion, alert, autocomplete, avatar, badge,
+- **Toàn bộ 44 mô-đun thành phần của Forui** (sơ bộ), cùng ba mở rộng riêng của dự án — accordion, alert, autocomplete, avatar, badge,
   bottom navigation, breadcrumb, button, calendar, card, checkbox, context menu,
   date field, date-time picker, dialog, divider, header, item, field label, line
   calendar, OTP field, pagination, picker, popover, popover menu, progress, radio,
   resizable, scaffold, select, select group, select menu tile, select tile group,
-  sheet, sidebar, slider, switch, tabs, text field, tile, time field, time picker,
-  toast, toaster và tooltip.
+  sheet, sidebar, slider, range slider, switch, tabs, text field, tile, time field,
+  time picker, toast, toaster và tooltip, cùng multi-select.
 - **Bộ token giao diện trung tính** (sáng, tối, tỉ lệ cảm ứng, giảm chuyển động và
   preset tương phản cao tùy chọn) cùng token kiểu chữ và kích thước.
 - **Hạ tầng bản địa hóa** — 37 thông điệp ngữ nghĩa sinh từ 113 tệp ARB upstream, có
@@ -50,10 +50,10 @@ quyết định và tiêu chuẩn đánh giá, và tôi chịu trách nhiệm v�
 | Lĩnh vực | Hiện trạng |
 | --- | --- |
 | Theme & token | Đủ để thử nghiệm; màu sắc và kích thước phỏng theo Forui, có preset tương phản cao |
-| Nhập liệu & nút | Đã kiểm thử bàn phím và trình đọc màn hình bằng kittest; biểu tượng là ký tự gần đúng |
+| Nhập liệu & nút | Ngữ nghĩa AccessKit và bàn phím đã có kittest; chưa kiểm thử với trình đọc màn hình; biểu tượng là ký tự gần đúng |
 | Select, picker, autocomplete | Tìm kiếm sơ bộ, multi-select, lịch chọn tháng/năm, picker bánh xe, chọn ngày/giờ |
 | Lớp phủ | Dialog, sheet, popover, popover menu, toast/toaster hoạt động nhưng còn thiếu animation và gesture |
-| Tương đương hình ảnh | Đã gần upstream hơn nhưng chưa chứng minh; font, icon, blur và số đo chữ Flutter vẫn là khoảng trống |
+| Tương đương hình ảnh | Một số điểm được chủ động đưa gần upstream hơn, nhưng chưa đo lường hay chứng minh; font, icon, blur và số đo chữ Flutter vẫn là khoảng trống |
 | Khả năng tiếp cận | Vai trò/nhãn/giá trị AccessKit và bàn phím có kiểm thử; chưa có đánh giá thủ công với trình đọc màn hình |
 
 ## Bắt đầu nhanh
@@ -107,7 +107,7 @@ cargo test --all-features
 ## Cấu trúc dự án
 
 ```
-src/               thư viện (44 mô-đun thành phần/nền tảng)
+src/               thư viện (47 mô-đun thành phần cùng phần nền tảng)
 tests/             kiểm thử đơn vị và egui_kittest
 examples/          bản demo native năm trang
 docs/              ghi chú thành phần, ma trận bao phủ, kế hoạch chuyển đổi
@@ -153,8 +153,9 @@ và CodeQL; job phụ thuộc được phép lỗi để báo cáo thay vì che 
 - **Lớp phủ chưa hoàn chỉnh:** animation vào/ra, gesture vuốt và một số trường hợp
   tiêu điểm còn thiếu.
 - **Bản địa hóa một phần:** 37 thông điệp; ngày, giờ, số, số nhiều và RTL chưa có.
-- **Chưa ghi nhận kiểm chứng trên phiên desktop hay CI**; workflow kèm theo dành cho
-  người đóng góp và người bảo trì.
+- **CI đã được cấu hình nhưng demo chưa được chạy trong phiên desktop tại đây.**
+  `.github/workflows/` chạy kiểm tra chất lượng, CodeQL và quét bí mật khi push;
+  kết quả mới nhất ở tab Actions.
 
 ## Đóng góp
 
@@ -185,7 +186,7 @@ Hãy tử tế; đây là dự án học hỏi.
    người dùng thay vì người triển khai.
 3. **1.0** — các gate phát hành đạt hoặc hạn chế được chấp nhận và ghi rõ: không còn
    cảnh báo nghiêm trọng mở, thông báo đầy đủ, build tái lập được và API công khai ổn
-   định. Phạm vi chi tiết sẽ được công bố trong `docs/ROADMAP.md`; rất mong nhận góp ý.
+   định. Phạm vi chi tiết nằm trong [docs/ROADMAP.md](docs/ROADMAP.md); rất mong nhận góp ý.
 
 ## Giấy phép và ghi công
 

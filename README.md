@@ -11,7 +11,7 @@
 > parity and there is no stable release yet. Please read
 > [Known limitations](#known-limitations) before using it.
 
-![A preview of the ported components](docs/images/buttons.png)
+![A representative component sheet rendered by the visual-review helper](docs/images/overview.png)
 
 ## Why I built this
 
@@ -29,13 +29,14 @@ bar, and I am responsible for what is published here.
 
 ## What is in the box
 
-- **44 preliminary widget modules** — accordion, alert, autocomplete, avatar,
+- **All 44 upstream Forui widget modules** (preliminary), plus three first-party
+  extensions — accordion, alert, autocomplete, avatar,
   badge, bottom navigation, breadcrumb, button, calendar, card, checkbox,
   context menu, date field, date-time picker, dialog, divider, header, item,
   field label, line calendar, OTP field, pagination, picker, popover, popover
-  menu, progress, radio, resizable, scaffold, select, select group, select menu
-  tile, select tile group, sheet, sidebar, slider, switch, tabs, text field,
-  tile, time field, time picker, toast, toaster and tooltip.
+  menu, progress, radio, resizable, scaffold, select, multi-select, select group,
+  select menu tile, select tile group, sheet, sidebar, slider, range slider, switch,
+  tabs, text field, tile, time field, time picker, toast, toaster and tooltip.
 - **A neutral design-token theme** (light, dark, touch scale, reduced motion and
   an opt-in high-contrast preset) with typography and size tokens.
 - **Localization infrastructure** — 37 semantic messages generated from 113
@@ -51,10 +52,10 @@ bar, and I am responsible for what is published here.
 | Area | What to expect today |
 | --- | --- |
 | Theme & tokens | Stable enough to experiment with; colours and sizes adapted from Forui, high-contrast preset included |
-| Inputs & buttons | Keyboard- and screen-reader-tested with kittest; icons are text-glyph approximations |
+| Inputs & buttons | AccessKit semantics and keyboard paths covered by kittest; not yet tested with a screen reader; icons are text-glyph approximations |
 | Selects, pickers, autocomplete | Preliminary search, multi-select, calendar month/year picker, wheel picker, time/date pickers |
 | Overlays | Dialog, sheet, popover, popover menu and toast/toaster work, but animations and gestures are incomplete |
-| Visual parity | Measurably closer to upstream, not proven; fonts, icons, blur and Flutter text metrics remain gaps |
+| Visual parity | Some aspects are deliberately closer to upstream, but parity is not measured or proven; fonts, icons, blur and Flutter text metrics remain gaps |
 | Accessibility | AccessKit roles/labels/values and keyboard paths are covered by tests; no manual screen-reader audit yet |
 
 ## Quick start
@@ -109,7 +110,7 @@ cargo test --all-features
 ## Project layout
 
 ```text
-src/               the library (44 widget/foundation modules)
+src/               the library (47 widget modules plus foundation)
 tests/             unit and egui_kittest interaction tests
 examples/          the five-page native showcase
 docs/              component notes, coverage matrix, migration and design docs
@@ -132,6 +133,8 @@ and a dependency audit at integration milestones; and rendered screenshots for
 components whose visuals changed. The current state includes:
 
 - 402 passing Rust tests and passing documentation tests;
+- the initial GitHub Actions runs on `main` passed the quality and CodeQL
+  workflows (the dependency job reports the known advisories without blocking);
 - a CodeQL scan with clean extraction and only two reviewed false positives
   (boolean password-masking flags);
 - a history scan with Gitleaks and no leaked credentials;
@@ -161,8 +164,9 @@ it reports rather than hides this issue.
   focus edge cases remain.
 - **Localization is partial:** 37 messages are generated; dates, times, numbers,
   plurals and RTL are not implemented.
-- **No desktop-session or CI validation has been recorded for this repository
-  yet**; the included workflows are provided for contributors and maintainers.
+- **Continuous integration is configured but the demo has not been exercised in a
+  desktop session here.** `.github/workflows/` runs quality, CodeQL and secret scans on
+  pushes; the latest results are in the Actions tab.
 
 ## Contributing
 
@@ -194,8 +198,8 @@ politely help you find something that fits your interests. Please also read the
    docs rewritten for users rather than implementers.
 3. **1.0** — release gates pass with documented limitations accepted: no open
    high-severity advisories, complete notices, reproducible builds, and a stable
-   public API. A detailed scope will be published in `docs/ROADMAP.md`; feedback on
-   that scope is very welcome.
+   public API. The detailed scope is in [docs/ROADMAP.md](docs/ROADMAP.md); feedback on it
+   is very welcome.
 
 ## License and attribution
 

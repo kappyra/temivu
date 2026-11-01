@@ -8,7 +8,7 @@ is experimental until 1.0; APIs may change between releases.
 ### Added
 
 - First public snapshot of the experimental Temivu library.
-- Preliminary ports of 44 Forui widget modules and a neutral design-token theme
+- All 44 upstream Forui widget modules ported (47 first-party widget modules, including MultiSelect, RangeSlider and Toaster) and a neutral design-token theme
   (light, dark, touch scale, reduced motion, opt-in high contrast).
 - Localization infrastructure generated from 113 upstream ARB files (37 messages).
 - Five-page native `showcase` demo covering every component family.

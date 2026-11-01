@@ -9,7 +9,7 @@
 > 覆盖了全部组件，但没有任何组件经过完整的上游一致性验证，也还没有稳定版本。使用前请
 > 阅读[已知限制](#已知限制)。
 
-![已移植组件的预览](docs/images/buttons.png)
+![由视觉审查工具渲染的代表性组件图集](docs/images/overview.png)
 
 ## 我为什么做这个项目
 
@@ -24,13 +24,13 @@ Forui 引擎的复刻：项目把 Forui 公开的 token 和行为适配到 egui 
 
 ## 项目内容
 
-- **44 个初步组件模块**——accordion、alert、autocomplete、avatar、badge、
+- **Forui 上游全部 44 个组件模块**（初步移植），外加三个本项目扩展——accordion、alert、autocomplete、avatar、badge、
   bottom navigation、breadcrumb、button、calendar、card、checkbox、context menu、
   date field、date-time picker、dialog、divider、header、item、field label、line
   calendar、OTP field、pagination、picker、popover、popover menu、progress、radio、
   resizable、scaffold、select、select group、select menu tile、select tile group、
-  sheet、sidebar、slider、switch、tabs、text field、tile、time field、time picker、
-  toast、toaster 和 tooltip。
+  sheet、sidebar、slider、range slider、switch、tabs、text field、tile、time field、
+  time picker、toast、toaster 和 tooltip，以及 multi-select。
 - **中性设计 token 主题**（浅色、深色、触屏尺寸、减少动效，以及可选的高对比度预设），
   包含字体排印和尺寸 token。
 - **本地化基础设施**——从 113 个上游 ARB 文件生成 37 条语义消息，支持英语回退和
@@ -45,10 +45,10 @@ Forui 引擎的复刻：项目把 Forui 公开的 token 和行为适配到 egui 
 | 领域 | 目前情况 |
 | --- | --- |
 | 主题与 token | 可用于试验；颜色与尺寸改编自 Forui，包含高对比度预设 |
-| 输入与按钮 | 已通过 kittest 验证键盘与屏幕阅读器；图标是文本字形近似 |
-| 选择器、取件器、自动补全 | 初步支持搜索、多选、日历月/年选择、滚轮选择、时间/日期选择 |
+| 输入与按钮 | AccessKit 语义与键盘路径已由 kittest 覆盖；尚未用屏幕阅读器测试；图标是文本字形近似 |
+| 选择器、拾取器、自动补全 | 初步支持搜索、多选、日历月/年选择、滚轮选择、时间/日期选择 |
 | 浮层 | Dialog、sheet、popover、popover menu、toast/toaster 可用，但动画与手势尚不完整 |
-| 视觉一致性 | 已明显接近上游但未证明；字体、图标、模糊和 Flutter 文本度量仍是差距 |
+| 视觉一致性 | 部分方面有意更接近上游，但一致性尚未测量或证明；字体、图标、模糊和 Flutter 文本度量仍是差距 |
 | 可访问性 | AccessKit 角色/标签/值和键盘路径已有测试；尚无人工屏幕阅读器审计 |
 
 ## 快速开始
@@ -100,7 +100,7 @@ cargo test --all-features
 ## 项目结构
 
 ```
-src/               库（44 个组件/基础模块）
+src/               库（47 个组件模块及基础模块）
 tests/             单元测试与 egui_kittest 交互测试
 examples/          五页原生演示
 docs/              组件说明、覆盖矩阵、迁移与设计文档
@@ -139,7 +139,8 @@ third_party/       上游许可证文本
   尚未进行人工屏幕阅读器或强制颜色审计。
 - **浮层不完整：** 进入/退出动画、滑动手势和部分焦点边界仍未实现。
 - **本地化是部分的：** 已生成 37 条消息；日期、时间、数字、复数和 RTL 尚未实现。
-- **尚未记录桌面会话或 CI 验证**；随附的工作流供贡献者和维护者使用。
+- **已配置 CI，但演示尚未在此环境的桌面会话中运行。** `.github/workflows/`
+  会在推送时运行质量、CodeQL 和密钥扫描；最新结果见 Actions 页面。
 
 ## 参与贡献
 
@@ -167,7 +168,7 @@ Forui——有好奇心就够了。可以帮忙的方向：
 2. **Beta**——达到可访问性基线，视觉矩阵使用可测量阈值比较，在有文档的参考机器上定义
    性能预算，文档改写为面向用户。
 3. **1.0**——发布检查通过并记录已接受的限制：没有未解决的高危警告、通知完整、构建可
-   复现、公共 API 稳定。详细范围将发布在 `docs/ROADMAP.md`，非常欢迎反馈。
+   复现、公共 API 稳定。详细范围见 [docs/ROADMAP.md](docs/ROADMAP.md)，非常欢迎反馈。
 
 ## 许可证与署名
 

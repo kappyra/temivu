@@ -33,6 +33,8 @@ baselines. It needs a working Vulkan/GL adapter (the original environment used M
 lavapipe) and the same Rust toolchain:
 
 ```bash
+python3 -m pip install pillow   # needed by compare.py only
+
 # Render every sheet into harness/visual-review/out/<timestamp>/:
 TEMIVU_VISUAL_OUT=harness/visual-review/out cargo run --manifest-path harness/visual-review/Cargo.toml --release
 

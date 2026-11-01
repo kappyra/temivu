@@ -3,3 +3,4 @@ __pycache__/
 *.pyc
 .DS_Store
 harness/visual-review/target/
+harness/visual-review/out/

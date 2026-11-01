@@ -13,8 +13,9 @@ open an issue or discussion if you disagree with a threshold.
 - English plus the existing localization infrastructure (37 semantic messages and
   locale fallback). Full ICU coverage (plurals, dates, times, numbers, RTL) may be
   declared out of scope with a documented limitation.
-- All 44 widget modules have documented in-scope APIs, a working demo entry, tests
-  and a visual reference sheet.
+- All 44 upstream widget modules (47 first-party widget modules, including the
+  MultiSelect, RangeSlider and Toaster extensions) have documented in-scope APIs, a
+  working demo entry, tests and a visual reference sheet.
 
 Explicitly out of scope unless separately approved: hardware-GPU performance
 guarantees, formal screen-reader certification, full vector-icon/font-weight parity,
