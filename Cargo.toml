@@ -11,7 +11,7 @@ publish = false
 egui = "=0.36.2"
 
 [dev-dependencies]
-egui_kittest = "=0.36.2"
+egui_kittest = "=0.37.0"
 
 [features]
 default = []
