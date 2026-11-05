@@ -1,44 +1,24 @@
 # Third-party notices
 
-Temivu adapts neutral palette values, selected widget behavior and 37
-localization messages from 113 Forui ARB locale files. The reference is
-[Forui at revision `eea1e8e`](https://github.com/duobaseio/forui/tree/eea1e8e651d263f14ef43897ccbb7a2576549da5),
-copyright (c) 2026 Duobase IO.
+## Forui
 
-## Forui MIT license
+Temivu adapts the neutral palette, typography, sizing, breakpoint and motion
+tokens, selected widget behavior, and 37 localization messages from 113 Forui
+ARB locale files. Forui is copyright (c) 2026 Duobase IO. The full
+[Forui MIT notice](third_party/forui/LICENSE-MIT) accompanies these adaptations.
 
-Forui
-
-MIT License
-
-Copyright (c) 2026 Duobase IO
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-
+The notice matches the MIT section of both the [root license](https://github.com/duobaseio/forui/blob/eea1e8e651d263f14ef43897ccbb7a2576549da5/LICENSE)
+and the [widget package license](https://github.com/duobaseio/forui/blob/eea1e8e651d263f14ef43897ccbb7a2576549da5/forui/LICENSE)
+at revision `eea1e8e651d263f14ef43897ccbb7a2576549da5`. The Forui font
+and icon bundles are excluded from this source distribution.
 
 ## Inter
 
-The Inter font used in the showcase is distributed under the SIL Open Font
-License 1.1. The bundled [font license and copyright notice](third_party/inter/OFL.txt)
-accompany [Inter.ttf](third_party/inter/Inter.ttf). The font is sourced from the
-[Inter project](https://github.com/rsms/inter).
+Temivu bundles the unmodified [Inter variable font](third_party/inter/Inter.ttf)
+from [Google Fonts](https://github.com/google/fonts/blob/e1d6480102fed30739fead0faee463101f892c8f/ofl/inter/Inter%5Bopsz%2Cwght%5D.ttf).
+It is copyright 2020 The Inter Project Authors and remains under SIL Open Font
+License 1.1. The [copyright and full license](third_party/inter/OFL.txt) are
+included with the font.
 
 ## egui default fonts
 

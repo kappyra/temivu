@@ -40,7 +40,7 @@ The first recording walks through the widget catalog, overlays, data views and l
 
 ## Quick start
 
-Rust 1.95 or later is required. The library is distributed as source through this repository.
+Rust 1.95 or later is required. The library is available as source from [GitHub Releases](https://github.com/kappyra/temivu/releases/latest).
 
 ```bash
 git clone https://github.com/kappyra/temivu.git
@@ -48,7 +48,9 @@ cd temivu
 cargo run --locked --features demo --example showcase
 ```
 
-The showcase needs a desktop graphics session. Local video playback in the Linux showcase also needs system Python with PyGObject, GStreamer 1.0 and plugins for the chosen media format. The library’s `VideoPlayer` is a UI component that accepts a texture and emits playback actions for the host’s media backend.
+The showcase needs a desktop graphics session. To play a local video, open **Widgets → Media**. Select **Choose video…**, or enter a local filename and select **Open path** or press Enter. The chooser uses Zenity on Linux. Playback requires system Python with PyGObject, GStreamer 1.0 and plugins for the chosen media format.
+
+The library’s `VideoPlayer` accepts a texture and emits playback actions for the host’s media backend.
 
 Use a Temivu component in any egui view:
 

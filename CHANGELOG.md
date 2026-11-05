@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
-## 0.1.0
+## [0.1.0] - 2026-11-05
 
 ### Added
 
@@ -12,7 +12,8 @@ is experimental until 1.0; APIs may change between releases.
 - Responsive drawer and floating navigation, a floating bottom bar with
   press-and-drag selection, and an interactive widget catalog in the showcase.
 - Video player controls for seeking, volume, playback speed and fullscreen.
-  The optional Linux showcase includes a local GStreamer playback backend.
+  The optional Linux showcase includes a local GStreamer playback backend, a
+  file chooser and keyboard submission of local paths.
 - Segments, a quantity stepper, directional controls and circular progress.
 
 ### Changed
@@ -58,3 +59,4 @@ is experimental until 1.0; APIs may change between releases.
   Linux accessibility chain; no compatible replacement is currently available.
 
 [0.0.0]: https://github.com/kappyra/temivu/releases/tag/v0.0.0
+[0.1.0]: https://github.com/kappyra/temivu/releases/tag/v0.1.0

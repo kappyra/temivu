@@ -709,6 +709,25 @@ fn catalog_searches_across_media_and_the_reused_sections() {
 }
 
 #[test]
+fn video_source_can_be_opened_from_the_keyboard() {
+    let mut app = harness();
+    app.get_by_label("Widgets").click();
+    app.run_steps(3);
+    app.get_by_label("Media").click();
+    app.run_steps(3);
+    app.get_by_label("Choose video…");
+    app.get_by_label("Open path");
+    app.get_by_role_and_label(egui::accesskit::Role::TextInput, "Local video path")
+        .focus();
+    app.run_steps(2);
+    app.event(egui::Event::Text(" \".\" ".to_owned()));
+    app.run_steps(2);
+    app.key_press(egui::Key::Enter);
+    app.run_steps(3);
+    app.get_by_label("Choose a video file, not a folder.");
+}
+
+#[test]
 fn widgets_zoom_from_the_trigger_and_return_to_the_origin_page() {
     let mut app = harness();
     let trigger = app.get_by_label("Widgets").rect();

@@ -2,13 +2,15 @@ use egui::{ColorImage, Context, Id, TextureHandle, TextureOptions, Ui, ViewportC
 use std::{
     fs,
     io::{self, BufReader, Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{
         Arc, Mutex,
         mpsc::{self, SyncSender},
     },
+    task::Poll,
     thread::{self, JoinHandle},
+    time::Duration,
 };
 use temivu::{
     Button, ButtonVariant, TextField, Theme, VideoAction, VideoPlayer, VideoPlayerState,
@@ -52,14 +54,7 @@ struct Decoder {
 }
 
 impl Decoder {
-    fn start(path: PathBuf, ctx: &Context) -> io::Result<Self> {
-        let path = fs::canonicalize(path)?;
-        if !fs::metadata(&path)?.is_file() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "Choose a local video file.",
-            ));
-        }
+    fn start(path: &Path, ctx: &Context) -> io::Result<Self> {
         let mut process = Command::new("/usr/bin/python3")
             .args(["-I", "-c", include_str!("video_backend.py")])
             .arg(path)
@@ -158,10 +153,76 @@ fn read_packet(stream: &mut impl Read, mailbox: &Mutex<Inbox>) -> io::Result<u8>
     Ok(header[24])
 }
 
+struct FilePicker(Child);
+
+impl FilePicker {
+    fn open() -> io::Result<Self> {
+        Command::new("/usr/bin/zenity")
+            .args(["--file-selection", "--title=Choose a video"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .spawn()
+            .map(Self)
+    }
+
+    fn selection(&mut self, ctx: &Context) -> io::Result<Poll<Option<PathBuf>>> {
+        let Some(status) = self.0.try_wait()? else {
+            ctx.request_repaint_after(Duration::from_millis(80));
+            return Ok(Poll::Pending);
+        };
+        if !status.success() {
+            return if status.code() == Some(1) {
+                Ok(Poll::Ready(None))
+            } else {
+                Err(io::Error::other("The file picker could not open."))
+            };
+        }
+        let mut path = String::new();
+        self.0
+            .stdout
+            .take()
+            .expect("piped file selection")
+            .read_to_string(&mut path)?;
+        Ok(Poll::Ready(Some(PathBuf::from(
+            path.strip_suffix('\n').unwrap_or(&path),
+        ))))
+    }
+}
+
+impl Drop for FilePicker {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn typed_path(input: &str) -> PathBuf {
+    if Path::new(input).is_file() {
+        return PathBuf::from(input);
+    }
+    let input = input.trim();
+    let input = input
+        .strip_prefix('"')
+        .and_then(|path| path.strip_suffix('"'))
+        .or_else(|| {
+            input
+                .strip_prefix('\'')
+                .and_then(|path| path.strip_suffix('\''))
+        })
+        .unwrap_or(input);
+    if let Some(relative) = input.strip_prefix("~/")
+        && let Some(home) = std::env::home_dir()
+    {
+        return home.join(relative);
+    }
+    PathBuf::from(input)
+}
+
 #[derive(Default)]
 pub struct DemoVideo {
     path: String,
     autoload: bool,
+    picker: Option<FilePicker>,
     decoder: Option<Decoder>,
     texture: Option<TextureHandle>,
     player: VideoPlayerState,
@@ -201,34 +262,100 @@ impl DemoVideo {
                     self.command.seek = None;
                 }
                 Err(mpsc::TrySendError::Full(_)) => {
-                    ctx.request_repaint_after(std::time::Duration::from_millis(16))
+                    ctx.request_repaint_after(Duration::from_millis(16))
                 }
                 Err(mpsc::TrySendError::Disconnected(_)) => self.dirty = false,
             }
         }
     }
 
-    fn load(&mut self, ctx: &Context) {
-        self.decoder = None;
+    fn load(&mut self, path: &Path, ctx: &Context) {
+        let path = match fs::canonicalize(path) {
+            Ok(path) if path.is_file() => path,
+            Ok(_) => {
+                self.message = Some("Choose a video file, not a folder.".to_owned());
+                return;
+            }
+            Err(error) => {
+                self.message = Some(format!("Could not open that path. {error}"));
+                return;
+            }
+        };
+        match Decoder::start(&path, ctx) {
+            Ok(decoder) => self.decoder = Some(decoder),
+            Err(error) => {
+                self.message = Some(format!("Could not start the video decoder. {error}"));
+                return;
+            }
+        }
         self.texture = None;
         self.player = VideoPlayerState::default();
         self.status = VideoStatus::default();
         self.command = CommandState::default();
         self.dirty = false;
         self.at_end = false;
-        match Decoder::start(PathBuf::from(self.path.trim()), ctx) {
-            Ok(decoder) => {
-                self.decoder = Some(decoder);
-                self.message = None;
+        self.message = None;
+    }
+
+    fn source_controls(&mut self, ui: &mut Ui, theme: &Theme) {
+        if let Some(picker) = &mut self.picker {
+            let selection = picker.selection(ui.ctx());
+            if !matches!(selection, Ok(Poll::Pending)) {
+                self.picker = None;
             }
-            Err(error) => self.message = Some(error.to_string()),
+            match selection {
+                Ok(Poll::Ready(Some(path))) => {
+                    self.path = path.to_string_lossy().into_owned();
+                    self.load(&path, ui.ctx());
+                }
+                Ok(Poll::Pending | Poll::Ready(None)) => {}
+                Err(error) => self.message = Some(error.to_string()),
+            }
         }
+        let path = TextField::new(&mut self.path, theme, "Local video path")
+            .id(Id::new("demo-video-path"))
+            .hint("/path/to/video.mp4")
+            .show(ui)
+            .response;
+        let submitted = path.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+        ui.horizontal_wrapped(|ui| {
+            if Button::new("Choose video…", theme)
+                .enabled(self.picker.is_none())
+                .show(ui)
+                .clicked()
+            {
+                match FilePicker::open() {
+                    Ok(picker) => {
+                        self.picker = Some(picker);
+                        ui.ctx().request_repaint();
+                    }
+                    Err(_) => {
+                        self.message = Some(
+                            "The file picker requires Zenity. Enter a local path to open a video."
+                                .to_owned(),
+                        )
+                    }
+                }
+            }
+            let open = Button::new("Open path", theme)
+                .variant(ButtonVariant::Outline)
+                .enabled(self.picker.is_none() && !self.path.trim().is_empty())
+                .show(ui);
+            if (open.clicked() || submitted) && open.enabled() {
+                self.load(&typed_path(&self.path), ui.ctx());
+            }
+        });
+        ui.add_space(8.0);
     }
 
     pub fn show(&mut self, ui: &mut Ui, theme: &Theme) {
         if self.autoload {
             self.autoload = false;
-            self.load(ui.ctx());
+            self.load(&typed_path(&self.path), ui.ctx());
+        }
+        let fullscreen = ui.input(|input| input.viewport().fullscreen.unwrap_or(false));
+        if !fullscreen {
+            self.source_controls(ui, theme);
         }
         if let Some(decoder) = &self.decoder {
             let (frame, position, duration, ended, failed) = {
@@ -267,7 +394,13 @@ impl DemoVideo {
                 );
             }
         }
-        let fullscreen = ui.input(|input| input.viewport().fullscreen.unwrap_or(false));
+        if !fullscreen {
+            if let Some(message) = &self.message {
+                ui.label(egui::RichText::new(message).color(theme.error));
+            } else if self.decoder.is_some() && self.texture.is_none() {
+                ui.label("Loading video…");
+            }
+        }
         self.status.fullscreen = fullscreen;
         let viewport_height = ui.ctx().content_rect().height();
         let height = (viewport_height * 0.43).clamp(160.0, 440.0);
@@ -306,28 +439,5 @@ impl DemoVideo {
             self.dirty = true;
         });
         self.flush(ui.ctx());
-        if fullscreen {
-            return;
-        }
-        if let Some(message) = &self.message {
-            ui.label(egui::RichText::new(message).color(theme.error));
-        }
-        ui.add_space(8.0);
-        egui::CollapsingHeader::new("Local video source")
-            .default_open(self.decoder.is_none())
-            .show(ui, |ui| {
-                TextField::new(&mut self.path, theme, "Local video")
-                    .hint("/path/to/video.mp4")
-                    .max_chars(4096)
-                    .show(ui);
-                if Button::new("Open video", theme)
-                    .variant(ButtonVariant::Outline)
-                    .enabled(!self.path.trim().is_empty())
-                    .show(ui)
-                    .clicked()
-                {
-                    self.load(ui.ctx());
-                }
-            });
     }
 }
