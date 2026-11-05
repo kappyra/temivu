@@ -34,7 +34,7 @@ Temivu builds on its [Forui port](docs/MIGRATION.md). Its visual and motion desi
 
 https://github.com/user-attachments/assets/3a0d534d-143f-424b-b976-2acb06b394eb
 
-[Open the demo video (MP4)](docs/demo/temivu_demo.mp4) · [Overview screenshot](docs/demo/overview.png) · [Widget catalog screenshot](docs/demo/catalog.png) · [Dialog screenshot](docs/demo/dialog.png)
+[Watch the demo](https://github.com/user-attachments/assets/3a0d534d-143f-424b-b976-2acb06b394eb) · [Download MP4](https://raw.githubusercontent.com/kappyra/temivu/main/docs/demo/temivu_demo.mp4) · [Overview screenshot](docs/demo/overview.png) · [Widget catalog screenshot](docs/demo/catalog.png) · [Dialog screenshot](docs/demo/dialog.png)
 
 The first recording walks through the widget catalog, overlays, data views and localization. The second demonstrates the video player’s timeline, playback speed and volume controls.
 
