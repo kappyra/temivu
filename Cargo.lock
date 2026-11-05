@@ -2610,6 +2610,7 @@ dependencies = [
 name = "temivu"
 version = "0.1.0"
 dependencies = [
+ "android-activity",
  "eframe",
  "egui",
  "egui_kittest",

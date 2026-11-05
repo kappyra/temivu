@@ -16,16 +16,34 @@ egui_kittest = "=0.36.2"
 [features]
 default = []
 demo = ["dep:eframe"]
+android-showcase = ["demo", "dep:android-activity", "eframe/android-native-activity"]
 
 [dependencies.eframe]
 version = "=0.36.2"
 optional = true
 default-features = false
-features = ["accesskit", "default_fonts", "glow", "x11"]
+features = ["default_fonts", "glow"]
+
+[target.'cfg(not(target_os = "android"))'.dependencies.eframe]
+version = "=0.36.2"
+optional = true
+default-features = false
+features = ["accesskit", "x11"]
 
 [[example]]
 name = "showcase"
 required-features = ["demo"]
+
+[target.'cfg(target_os = "android")'.dependencies.android-activity]
+version = "=0.6.1"
+optional = true
+features = ["native-activity"]
+
+[[example]]
+name = "showcase_android"
+path = "examples/showcase/android.rs"
+crate-type = ["cdylib"]
+required-features = ["android-showcase"]
 
 # Keep the interactive preview responsive without optimizing/rebuilding every
 # platform dependency. These stable paint/layout crates are cached after build.

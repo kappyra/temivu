@@ -176,15 +176,14 @@ pub fn show(state: &mut DemoState, ui: &mut Ui, theme: &Theme) {
 }
 
 fn video(state: &mut DemoState, ui: &mut Ui, theme: &Theme) {
-    studio_panel(
-        ui,
-        theme,
-        "Video player",
-        "Play a local video with sound, seek, and change the playback speed.",
-        |ui| {
-            state.video.show(ui, theme);
-        },
-    );
+    let description = if cfg!(target_os = "android") {
+        "Preview the video controls."
+    } else {
+        "Play a local video with sound, seek, and change the playback speed."
+    };
+    studio_panel(ui, theme, "Video player", description, |ui| {
+        state.video.show(ui, theme);
+    });
 }
 
 fn notifications(state: &mut DemoState, ui: &mut Ui, theme: &Theme) {

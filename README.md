@@ -28,7 +28,7 @@ Temivu helps developers build interfaces for egui applications with a consistent
 | Data and media | Calendar and time controls, pagination, resizable panels and video player controls |
 | Foundation | Monochrome and mint themes, touch sizing, localization and reduced-motion settings |
 
-Temivu builds on its [Forui port](docs/MIGRATION.md). Its visual and motion design also draws on [shadcn/ui](https://ui.shadcn.com/), [SwiftUI and Apple’s iOS 26 Liquid Glass sessions](https://developer.apple.com/videos/play/wwdc2025/219/), [iOS 27 navigation design](https://developer.apple.com/videos/play/wwdc2026/269/) and [Material 3 Expressive](https://design.google/library/expressive-material-design-google-research).
+Temivu began as a [Rust/egui port](docs/MIGRATION.md) of Forui’s Dart/Flutter components. Most widgets now use Temivu’s own rendering, styling and motion. Remaining Forui-derived behavior is being replaced incrementally, and the Forui MIT notice remains included. The visual and motion design draws on [shadcn/ui](https://ui.shadcn.com/), [SwiftUI and Apple’s iOS 26 Liquid Glass sessions](https://developer.apple.com/videos/play/wwdc2025/219/), [iOS 27 navigation design](https://developer.apple.com/videos/play/wwdc2026/269/) and [Material 3 Expressive](https://design.google/library/expressive-material-design-google-research).
 
 ## Demo
 
@@ -76,7 +76,7 @@ Create a theme such as `Theme::light()` in the host, apply it to the egui contex
 - [Accessibility and verification scope](docs/ACCESSIBILITY.md)
 - [Changes since the first public version](CHANGELOG.md)
 
-The native showcase was captured on Linux. The widgets are designed for reuse across egui hosts, with web and mobile validation still pending. The API is pre-1.0. The [dependency advisory record](docs/DEPENDENCY_ADVISORIES.md) tracks three open informational advisories in the optional Linux accessibility stack.
+The showcase recording was captured on Linux. The showcase can also be [built for Android](examples/showcase/android/). Web validation remains open. The API is pre-1.0. The [dependency advisory record](docs/DEPENDENCY_ADVISORIES.md) tracks three open informational advisories in the optional Linux accessibility stack.
 
 ## License
 

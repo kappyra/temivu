@@ -2,7 +2,11 @@
 //! from complete. Run with `cargo run --example showcase --features demo`.
 #[path = "showcase/motion_gallery.rs"]
 mod motion_gallery;
+#[cfg(not(target_os = "android"))]
 #[path = "showcase/video_demo.rs"]
+mod video_demo;
+#[cfg(target_os = "android")]
+#[path = "showcase/video_android.rs"]
 mod video_demo;
 #[path = "showcase/widget_catalog.rs"]
 mod widget_catalog;
@@ -1715,6 +1719,10 @@ impl eframe::App for Showcase {
         } else {
             Theme::mint_light()
         };
+        #[cfg(target_os = "android")]
+        {
+            theme = theme.touch();
+        }
         if self.high_contrast {
             theme = theme.high_contrast();
         }
@@ -1978,6 +1986,7 @@ impl eframe::App for Showcase {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn main() -> eframe::Result {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     let mobile = arguments.iter().any(|argument| argument == "--mobile");
