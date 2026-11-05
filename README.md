@@ -1,10 +1,20 @@
-**[Overview](#overview) · [Demo](#demo) · [Quick start](#quick-start) · [Documentation](#documentation) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md)**
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="branding/temivu-wordmark-matted.png">
+    <img src="branding/temivu-wordmark.png" alt="Temivu" width="448">
+  </picture>
+</p>
 
-<img src="branding/temivu-mark.svg" alt="Temivu mark" width="80">
+<p align="center"><strong>UI components with responsive layouts and spring-based motion for Rust and egui.</strong></p>
 
-# Temivu
-
-**UI components with responsive layouts and spring-based motion for Rust and egui.**
+<p align="center">
+  <a href="#overview">Overview</a> ·
+  <a href="#demo">Demo</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#documentation">Documentation</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
 
 ## Overview
 
@@ -22,11 +32,11 @@ Temivu builds on its [Forui port](docs/MIGRATION.md). Its visual and motion desi
 
 ## Demo
 
-[![Temivu Showcase overview in the monochrome light theme](docs/demo/overview.png)](docs/demo/temivu-showcase.mp4)
+[![Temivu Showcase overview](docs/demo/overview.png)](docs/demo/temivu_demo.mp4)
 
-[Watch or download the showcase recording (MP4)](docs/demo/temivu-showcase.mp4) · [Widget catalog screenshot](docs/demo/catalog.png) · [Dialog screenshot](docs/demo/dialog.png)
+[Open the demo video (MP4)](docs/demo/temivu_demo.mp4) · [Widget catalog screenshot](docs/demo/catalog.png) · [Dialog screenshot](docs/demo/dialog.png)
 
-The native showcase includes an interactive widget catalog and dedicated pages for controls, overlays, data and localization. The recording shows the catalog transition and a dialog entering before the Data page opens.
+The first recording walks through the widget catalog, overlays, data views and localization. The second demonstrates the video player’s timeline, playback speed and volume controls.
 
 ## Quick start
 
@@ -69,3 +79,5 @@ The native showcase was captured on Linux. The widgets are designed for reuse ac
 ## License
 
 Temivu is distributed under the [MIT License](LICENSE). The [third-party notices](THIRD_PARTY_NOTICES.md) preserve Forui attribution and the terms for bundled fonts and other assets. The [first public release](https://github.com/kappyra/temivu/releases/tag/v0.0.0) remains available as a [source ZIP](https://github.com/kappyra/temivu/releases/download/v0.0.0/temivu-v0.0.0-source.zip).
+
+<p align="center"><img src="branding/temivu-mark.svg" alt="Temivu symbol" width="56"></p>

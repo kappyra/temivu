@@ -8,10 +8,10 @@ notice obligation is satisfied.
 
 | Category | Files | Location | Terms |
 | --- | ---: | --- | --- |
-| Project branding (original) | 8 | [branding](../branding) | Project MIT license. See [Branding](../BRANDING.md). |
+| Project branding (original) | 10 | [branding](../branding) | Project MIT license. See [Branding](../BRANDING.md). |
 | Reproduced font license texts | 4 | `third_party/egui-fonts/` | License and attribution texts reproduced from `epaint_default_fonts` 0.36.2; the bundled fonts remain under their own terms |
 | Collected upstream license texts | 40 (including a metadata notice record for `dispatch`) | `third_party/upstream-licenses/` | License texts for cached dependency packages; provenance in `provenance.json` |
-| Showcase screenshots and recording | 4 | [demo](demo/) | Native Linux capture of Temivu using its default theme |
+| Showcase screenshots and recording | 4 | [demo](demo/) | Native Linux captures of Temivu, including the widget catalog and video player |
 | Inter font and license | 2 | [Inter](../third_party/inter/) | SIL Open Font License 1.1 |
 
 The branding is original project work: the geometric mark and its SVG/PNG/ICO
