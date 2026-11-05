@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="448" height="112" viewBox="0 0 448 112" role="img" aria-labelledby="title">
+  <title id="title">Temivu</title>
+  <g transform="translate(8 8) scale(.375)">
+    <rect width="256" height="256" rx="64" fill="#151B18"/>
+    <path fill="#F7FAF8" d="M75 64H144Q154 64 154 74V90Q154 100 144 100H142V174a18 18 0 0 1-36 0v-58q0-16-16-16H75a18 18 0 0 1 0-36Z"/>
+    <rect x="164" y="64" width="36" height="36" rx="13" fill="#8FE3BE"/>
+  </g>
+  <g transform="translate(136 0)" fill="none" stroke="#151B18" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M0 32h41M20.5 32v46"/>
+    <path d="M55 61h39c0-11-7-18-18-18-12 0-21 8-21 19s9 18 21 18c6 0 11-2 15-5"/>
+    <path d="M112 78V45m0 12c0-8 7-14 15-14s14 5 14 14v21m0-21c0-8 6-14 15-14 8 0 14 5 14 14v21"/>
+    <path d="M191 46v32"/>
+    <path d="m212 45 14 30q3 6 6 0l14-30"/>
+    <path d="M263 45v20c0 9 6 15 15 15s16-6 16-15m0-20v33"/>
+  </g>
+  <circle cx="327" cy="31" r="5" fill="#2A795C"/>
+</svg>

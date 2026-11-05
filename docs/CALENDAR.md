@@ -1,5 +1,10 @@
 # Calendar (experimental)
 
+`Calendar` uses the supplied theme's sizes, including the touch variant.
+`CalendarStyle::from_theme(&theme)` and `Calendar::style(...)` customize day
+selection, hover and focus colors and corner radius. Month/year picker styling
+is separate and is not yet covered by these overrides.
+
 A single-month calendar day grid ported from Forui's grid calendar. Visible
 month, selection and keyboard focus are caller-owned; the library never reads
 the wall clock.
@@ -35,8 +40,9 @@ end-of-month clamping, ordering and `clamp`. Supply `today` explicitly;
 
 ## Navigation, bounds and disabled dates
 
-The header exposes previous/next month and previous/next year buttons, each with
-an accessible name. `Calendar::bounds` sets inclusive minimum and maximum dates,
+The header exposes previous/next month buttons with accessible names. Enable
+`year_navigation(true)` to add direct year-jump buttons, or use the month/year
+picker from the compact default header. `Calendar::bounds` sets inclusive minimum and maximum dates,
 clamping an out-of-range visible month and disabling navigation (and day cells)
 outside the range. `Calendar::selectable` adds a caller predicate that disables
 individual dates. `Calendar::toggleable` makes re-selecting the selected date
@@ -88,3 +94,7 @@ visible year and re-anchors if the caller changes the visible year, resets its
 ephemeral mode when the calendar is re-added after a gap of passes, focuses the
 selected month/year on entry, and exposes the selected month/year through the
 AccessKit selected state (in addition to egui's button toggle state). See `COVERAGE.md`.
+
+## Floating date field surface
+
+Date fields open a padded, rounded calendar surface with a preferred 280-point desktop content width (308 with touch sizing), capped to the viewport. The calendar caps its own width and uses compact painted chevrons. Days use circular selection by default; `CalendarStyle::radius` remains configurable. Existing date arithmetic, month/year pickers, bounds and keyboard semantics are preserved.

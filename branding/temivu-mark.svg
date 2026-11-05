@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">Temivu mark</title>
+  <rect width="256" height="256" rx="64" fill="#151B18"/>
+  <path fill="#F7FAF8" d="M75 64H144Q154 64 154 74V90Q154 100 144 100H142V174a18 18 0 0 1-36 0v-58q0-16-16-16H75a18 18 0 0 1 0-36Z"/>
+  <rect x="164" y="64" width="36" height="36" rx="13" fill="#8FE3BE"/>
+</svg>

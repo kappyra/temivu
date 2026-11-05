@@ -1,6 +1,9 @@
 # Third-party notices
 
-This research and planning project references Forui, copyright (c) 2026 Duobase IO, https://github.com/duobaseio/forui, revision eea1e8e651d263f14ef43897ccbb7a2576549da5. Forui is distributed under MIT terms with separate font terms and attributions; see its root and package LICENSE files. Neutral palette values, button and pagination behavior, and selected localization strings from 113 Forui ARB files are adapted from Forui. No upstream font, icon, or other asset is included. Before copying or adapting any material, include its full required copyright and license notices and record its exact provenance here. Forui's Inter and icon packages have additional notices; do not relicense them as MIT.
+Temivu adapts neutral palette values, selected widget behavior and 37
+localization messages from 113 Forui ARB locale files. The reference is
+[Forui at revision `eea1e8e`](https://github.com/duobaseio/forui/tree/eea1e8e651d263f14ef43897ccbb7a2576549da5),
+copyright (c) 2026 Duobase IO.
 
 ## Forui MIT license
 
@@ -30,6 +33,13 @@ SOFTWARE.
 
 
 
+## Inter
+
+The Inter font used in the showcase is distributed under the SIL Open Font
+License 1.1. The bundled [font license and copyright notice](third_party/inter/OFL.txt)
+accompany [Inter.ttf](third_party/inter/Inter.ttf). The font is sourced from the
+[Inter project](https://github.com/rsms/inter).
+
 ## egui default fonts
 
 The locked dependency `epaint_default_fonts` 0.36.2 bundles Hack, Noto Emoji, Ubuntu Light and an emoji icon font. Its font license and attribution text files are reproduced in `third_party/egui-fonts/` from the published crate. These fonts are subject to their own terms; they are not relicensed as MIT. The complete transitive dependency and asset notice review is still outstanding.
@@ -42,7 +52,7 @@ The collected upstream license texts for the cached dependency packages are stor
 under `third_party/upstream-licenses/` (mapping, revisions and hashes in its
 `README.md` and `provenance.json`). These copies cover the packages checked during
 the port; they are not a complete distributable notice bundle for every transitive
-dependency of the optional demo feature or the visual-review helper.
+dependency of the optional demo feature.
 
 ## Recorded gaps
 

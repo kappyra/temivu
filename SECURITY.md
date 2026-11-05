@@ -1,39 +1,19 @@
 # Security policy
 
-Temivu is an experimental project with no supported release yet. I still take
-security reports seriously.
+Temivu is pre-1.0. Security fixes land on `main`.
 
-## Reporting a vulnerability
+## Private reports
 
-Please **do not** open a public issue for a suspected vulnerability. Report it
-privately through GitHub's **Security → Advisories → Report a vulnerability** on
-this repository, or contact the maintainer listed on the GitHub profile. Include:
+Use GitHub’s [private vulnerability report form](https://github.com/kappyra/temivu/security/advisories/new)
+if available, or contact the maintainer privately. Include the affected commit,
+steps to reproduce, expected impact and any known mitigations.
 
-- affected version or commit;
-- a minimal reproduction or description;
-- impact and any known mitigations;
-- whether you would like to be credited.
+## Scope
 
-I will acknowledge reports as soon as I can, investigate, and publish an advisory
-and fix when appropriate. As this is a volunteer project, please allow reasonable
-time for a response.
+The library forbids `unsafe` code. Host applications are responsible for their
+own input, permissions and media handling. The optional Linux demo opens local
+media through a separate system Python and GStreamer process.
 
-## Scope and known dependency advisories
-
-- The crate forbids `unsafe` code.
-- The optional Linux accessibility stack pulls in `zbus`/`zvariant`. `cargo-deny`
-  reports three *informational unmaintained* advisories
-  (`RUSTSEC-2026-0370/0371/0372`). They are not suppressed, and no compatible
-  upgrade or maintained replacement exists as of November 2026. Accessibility
-  remains enabled. See [docs/DEPENDENCY_ADVISORIES.md](docs/DEPENDENCY_ADVISORIES.md).
-- This repository does not store credentials or secrets. History is scanned with
-  Gitleaks in CI.
-- The demo is a native application; it does not sandbox plugins, load remote
-  content, or execute user-provided code.
-- No sandbox is provided for application code using the library. Temivu is a UI
-  library; security of the host application remains the host's responsibility.
-
-## Supported versions
-
-There is no stable release yet; security fixes currently land on `main`. A
-supported-version policy will be published with the first release.
+The [dependency advisory record](docs/DEPENDENCY_ADVISORIES.md) covers the
+informational unmaintained advisories in the optional Linux accessibility stack.
+GitHub Actions runs CodeQL and scans repository history for secrets.

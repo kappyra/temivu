@@ -16,8 +16,9 @@ golden images used for visual comparison.
 
 1. Extract and freeze the design tokens (colours, radii, sizes, typography,
    breakpoints, motion) and the semantic localization messages. Small
-   source-hash-keyed extractors live in `harness/port/`; the generated Rust tables
-   are committed and verified in CI against the pinned checkout.
+   source-hash-keyed extractors were used for the original port. The generated
+   tables remain in [the palette](../src/generated_palette.rs) and
+   [the localization catalog](../src/generated_localizations.rs).
 2. Map Flutter's widget model to egui's immediate-mode model. Persistent state
    (selection, visibility, focus, scroll) is caller-owned; widget IDs must be
    stable and unique; widgets are called every frame, including closed overlays so

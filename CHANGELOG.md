@@ -3,6 +3,35 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
+## 0.1.0
+
+### Added
+
+- Spring-based press feedback, shape transitions and shared-source navigation
+  animations. Bloom and Droplet provide two opening and closing motion presets.
+- Responsive drawer and floating navigation, a floating bottom bar with
+  press-and-drag selection, and an interactive widget catalog in the showcase.
+- Video player controls for seeking, volume, playback speed and fullscreen.
+  The optional Linux showcase includes a local GStreamer playback backend.
+- Segments, a quantity stepper, directional controls and circular progress.
+
+### Changed
+
+- The showcase defaults to monochrome light and dark themes. Mint remains an
+  opt-in preset.
+- Reworked controls, calendar and date inputs, collection and paging layouts,
+  tabs, dialogs and other overlay surfaces for more consistent spacing and motion.
+- Refreshed the English documentation, identity and showcase media.
+- Retired the development Harness from the active source tree. The first release
+  and its historical source remain available under the original tag.
+
+### Verification scope
+
+- Native showcase verified on Linux. Web, mobile and manual screen-reader
+  validation remain open.
+- The three informational Linux accessibility dependency advisories remain open.
+  See [dependency advisories](docs/DEPENDENCY_ADVISORIES.md).
+
 ## [0.0.0] - 2026-11-01
 
 ### Added
@@ -28,4 +57,4 @@ is experimental until 1.0; APIs may change between releases.
 - `cargo-deny` reports three informational unmaintained advisories in the optional
   Linux accessibility chain; no compatible replacement is currently available.
 
-[0.0.0]: https://github.com/vutienthan/temivu/releases/tag/v0.0.0
+[0.0.0]: https://github.com/kappyra/temivu/releases/tag/v0.0.0

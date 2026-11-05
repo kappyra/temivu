@@ -1,5 +1,10 @@
 # Visual and behavioral parity pass (1 November 2026)
 
+This is a historical record of the first public snapshot.
+The paths and results below describe the
+[`v0.0.0` source tree](https://github.com/kappyra/temivu/tree/v0.0.0).
+For current screenshots, see the [showcase](../README.md#demo).
+
 Scope: a second-wave visual and behavioural parity pass across the component families, compared
 against the pinned Forui checkout. The reviewed render set is the 86 component-sheet baselines
 in `harness/visual-review/baselines/`; they are compared against earlier versions of this

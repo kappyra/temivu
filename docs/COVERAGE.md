@@ -1,6 +1,22 @@
-# Coverage
+# Component coverage
+
+Temivu’s showcase includes a searchable Widgets page and dedicated Controls,
+Overlays, Data and Localization pages. The [component inventory](COMPONENTS.md)
+tracks the original Forui scope. Temivu also includes components developed beyond
+that inventory.
+
+| Area | Additional Temivu components and behavior |
+| --- | --- |
+| Motion | [Bloom and Droplet](LIQUID_MOTION.md), shared-source page transitions, animated tab selection and reduced-motion settings |
+| Navigation | [Drawer, fullscreen and floating menus](NAVIGATION_MENU.md), plus a floating bottom bar with press-and-drag selection |
+| Controls | Circular progress, segments, quantity stepper, directional controls and animated volume adjustment |
+| Media | Backend-independent video player controls and local playback in the optional Linux showcase |
+
+The sections below record the status of the original component families.
 
 Upstream revision eea1e8e651d263f14ef43897ccbb7a2576549da5. All 44 exported modules are listed in COMPONENTS.md; every one now has at least a preliminary Temivu port, and none is marked complete. The preliminary modules are `Accordion`, `Alert`, `Autocomplete`, `Avatar`, `Badge`, `BottomNavigation`, `Breadcrumb`, `Button`, `Calendar`, `Card`, `Checkbox`, `ContextMenu`, `DateField`, `DateTimePicker`, `Dialog`, `Divider`, `Header`, `Item`, `FieldLabel`, `LineCalendar`, `OTPField`, `Pagination`, `Picker`, `Popover`, `PopoverMenu`, `Progress`, `Radio`, `Resizable`, `Scaffold`, `Select`, `SelectGroup`, `SelectMenuTile`, `SelectTileGroup`, `Sheet`, `Sidebar`, `Slider`, `Switch`, `Tabs`, `TextField`, `Tile`, `TimeField`, `TimePicker`, `Toast` and `Tooltip`, plus neutral light/dark themes, typography/size/breakpoint/motion tokens, partial localization and a five-page showcase. `tests/button.rs` targets click and disabled input using egui_kittest plus size tokens; test execution and upstream screenshot comparisons are separate verification steps. Do not infer completeness from an API name.
+
+Design renewal: opt-in `Theme::mint_light()` and `Theme::mint_dark()` add a mint accent and semantic surfaces, and `Theme::apply` styles core egui states with the selected palette. The showcase defaults to monochrome and offers mint as an option. It wraps several rows at narrow widths. Buttons and checkboxes inherit the theme's touch variant; switches receive a 44-point-high hit target in that variant. Tests cover palette contrast, touch sizes and a 390-point-wide showcase navigation path. This is an initial pass: component-by-component redesign, visual review and actual web/mobile host validation remain open.
 
 `tests/badge.rs` covers variants, alpha, sizing and accessibility labels; `tests/divider.rs` covers geometry and input validation. Badge typography, exact styles and visual parity, and divider layout and visual parity remain unverified.
 
@@ -97,3 +113,11 @@ The preliminary picker is documented in `PICKER.md`. It renders a scroll-area wh
 The preliminary time picker is documented in `TIME_PICKER.md`. It builds on the picker with hour/minute/second wheels over the validated `Time` type (`0-23`/`0-59`/`0-59` ranges, `TimeError`, parsing and formatting helpers), Up/Down clamping, Left/Right focus movement and group/list-box accessible labels and values. 12-hour clocks, locale formats, typed digits, upstream intervals and animation remain open.
 
 The preliminary date-time picker is documented in `DATE_TIME_PICKER.md`. It combines the calendar and time wheels behind a caller-owned `DateTimePickerState` with a validated `DateTime` value, date bounds/selectable/today/first-day-of-week forwarding, optional seconds, stable child IDs for focus and a group exposing the formatted or empty value; `tests/date_time_picker.rs` covers the combined interactions. Upstream's single date wheel with intervals, localized formats, month/year sub-grids and animation remain open.
+
+## Current design extensions (4 November 2026)
+
+The native showcase now starts with neutral light/dark colors; mint is optional. `NavigationMenu` adds full-screen/floating/adaptive navigation using existing destination IDs. Tabs support caller-owned visual order, drag reordering and Alt+arrow reordering without changing content identity. Date fields use a compact padded popup, selection surfaces are rounded, checkboxes have custom animated paint, and switches animate both thumb position and diameter. These are Temivu design extensions; earlier historical Forui parity descriptions above do not describe their current geometry. Broader migration and platform gaps remain open.
+
+## Floating-surface update (5 November 2026)
+
+Overview/Controls now use shared source-connected bubble expansion/collapse for Select, MultiSelect, Autocomplete and the date-field Popover. The original expansion is named Bloom; the optional improved separation/merging mode is named Droplet. Both have context defaults, per-widget overrides and a live showcase comparison. Logical close removes live controls immediately; cached paint completes the exit. The default 12-point trigger gap and settled outer frame bounds are tested. Generic Dialog supports a source rectangle and NavigationMenu adds a sliding Drawer; Adaptive chooses Drawer on narrow viewports. These local design extensions do not establish exact upstream motion parity. Details, configuration and measurement limits: [LIQUID_MOTION.md](LIQUID_MOTION.md). Theme switches preserve rasterization options to avoid rebuilding the font atlas.
