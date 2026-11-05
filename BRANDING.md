@@ -5,6 +5,8 @@ wordmark are original project assets distributed under the [MIT license](LICENSE
 
 | Asset | Use |
 | --- | --- |
+| [PNG wordmark](branding/temivu-wordmark.png) | Primary project logo |
+| [PNG wordmark on a light matte](branding/temivu-wordmark-matted.png) | Wordmark for dark backgrounds |
 | [SVG mark](branding/temivu-mark.svg) | Primary mark at any size |
 | [PNG mark](branding/temivu-mark-512.png) | Raster avatar or application icon |
 | [SVG lockup](branding/temivu-lockup.svg) | Mark and wordmark on light surfaces |
