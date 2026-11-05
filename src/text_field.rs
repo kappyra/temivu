@@ -25,6 +25,7 @@ pub struct TextField<'a> {
     multiline: bool,
     max_chars: Option<usize>,
     id: Option<egui::Id>,
+    padding: egui::Margin,
 }
 impl<'a> TextField<'a> {
     pub fn new(value: &'a mut String, theme: &'a Theme, label: &'a str) -> Self {
@@ -41,6 +42,7 @@ impl<'a> TextField<'a> {
             multiline: false,
             max_chars: None,
             id: None,
+            padding: egui::Margin::symmetric(10, 8),
         }
     }
     pub fn hint(mut self, hint: &'a str) -> Self {
@@ -81,10 +83,24 @@ impl<'a> TextField<'a> {
         self.id = Some(id);
         self
     }
+    /// Override the editable area's inner spacing.
+    pub fn padding(mut self, padding: egui::Margin) -> Self {
+        self.padding = padding;
+        self
+    }
 
     pub fn show(self, ui: &mut Ui) -> TextFieldOutput {
         ui.vertical(|ui| {
             let label = ui.label(self.label);
+            let frame = egui::Frame::new()
+                .inner_margin(self.padding)
+                .fill(if self.read_only {
+                    egui::Color32::TRANSPARENT
+                } else {
+                    self.theme.card
+                })
+                .stroke(egui::Stroke::new(1.0, self.theme.border))
+                .corner_radius(14);
             let response = if self.read_only {
                 let mut view = self.value.as_str();
                 let edit = make_edit(
@@ -95,7 +111,10 @@ impl<'a> TextField<'a> {
                     self.max_chars,
                     self.id,
                 );
-                ui.add_enabled(self.enabled, edit)
+                ui.add_enabled(
+                    self.enabled,
+                    edit.frame(frame).desired_width(ui.available_width()),
+                )
             } else {
                 let edit = make_edit(
                     self.value,
@@ -105,10 +124,39 @@ impl<'a> TextField<'a> {
                     self.max_chars,
                     self.id,
                 );
-                ui.add_enabled(self.enabled, edit)
+                ui.add_enabled(
+                    self.enabled,
+                    edit.frame(frame).desired_width(ui.available_width()),
+                )
             }
             .labelled_by(label.id);
             let error = self.validator.and_then(|validator| validator(self.value));
+            let focused = crate::motion::spring_bool(
+                ui.ctx(),
+                response.id.with("field-focus"),
+                response.has_focus(),
+                self.theme,
+            )
+            .clamp(0.0, 1.0);
+            let invalid = crate::motion::animate_bool(
+                ui.ctx(),
+                response.id.with("field-error"),
+                error.is_some(),
+                self.theme,
+            );
+            let emphasis = focused.max(invalid);
+            if emphasis > 0.001 {
+                let color = egui::Color32::from(
+                    egui::Rgba::from(self.theme.foreground) * (1.0 - invalid)
+                        + egui::Rgba::from(self.theme.error) * invalid,
+                );
+                ui.painter().rect_stroke(
+                    response.rect.expand(0.8 + 1.8 * focused),
+                    13,
+                    egui::Stroke::new(1.0 + 0.6 * focused, color.gamma_multiply(emphasis)),
+                    egui::StrokeKind::Outside,
+                );
+            }
             let detail = match (self.description, error.as_deref()) {
                 (Some(description), Some(error)) => Some(format!("{description}\n{error}")),
                 (Some(description), None) => Some(description.to_owned()),

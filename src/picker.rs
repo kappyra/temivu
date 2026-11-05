@@ -274,7 +274,13 @@ impl<'a> Picker<'a> {
         let band_rect =
             Rect::from_center_size(viewport_rect.center(), Vec2::new(list_width, row_height));
         let painter = ui.painter();
-        painter.rect_filled(band_rect, 4.0, theme.muted);
+        painter.rect_filled(band_rect.shrink2(Vec2::new(2.0, 1.0)), 14, theme.secondary);
+        painter.rect_stroke(
+            band_rect.shrink2(Vec2::new(2.0, 1.0)),
+            14,
+            Stroke::new(1.0, theme.border),
+            StrokeKind::Inside,
+        );
         if !enabled {
             painter.rect_stroke(
                 band_rect,
@@ -354,16 +360,24 @@ impl<'a> Picker<'a> {
                                 });
                             }
                             let is_selected = *selected == Some(item.id);
-                            let color = if selectable {
+                            let distance = ((row_rect.center().y - band_rect.center().y).abs()
+                                / row_height)
+                                .clamp(0.0, 2.0);
+                            let color = if selectable && is_selected {
                                 theme.foreground
                             } else {
                                 theme.muted_foreground
                             };
+                            let press = crate::motion_controls::press_amount(&row_response, theme);
                             ui.painter().text(
                                 row_rect.center(),
                                 Align2::CENTER_CENTER,
                                 item.label,
-                                FontId::proportional(theme.typography.body.size.max(8.0)),
+                                FontId::proportional(
+                                    theme.typography.body.size.max(8.0)
+                                        * (1.08 - distance * 0.06)
+                                        * crate::motion::press_scale(press),
+                                ),
                                 color,
                             );
                             ui.ctx().accesskit_node_builder(row_response.id, |node| {
@@ -441,7 +455,7 @@ impl<'a> Picker<'a> {
             ui.painter().rect_stroke(
                 band_rect,
                 4.0,
-                Stroke::new(2.0, theme.primary),
+                Stroke::new(1.5, theme.foreground),
                 StrokeKind::Inside,
             );
         }

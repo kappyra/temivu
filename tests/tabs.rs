@@ -130,3 +130,122 @@ fn tabs_container_uses_forui_muted_surface_border_and_radius() {
         container.height()
     );
 }
+
+#[test]
+fn dragging_reorders_tabs_without_losing_content_identity() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(600.0, 200.0))
+        .build_ui_state(
+            |ui, state: &mut (usize, [usize; 3])| {
+                Tabs::new(
+                    &mut state.0,
+                    &["General", "Privacy", "About"],
+                    &Theme::light(),
+                )
+                .unwrap()
+                .reorderable(&mut state.1)
+                .unwrap()
+                .show(ui, |_, _| {});
+            },
+            (0, [0, 1, 2]),
+        );
+    harness.run();
+    let from = harness.get_by_label("General").rect().center();
+    let to = harness.get_by_label("About").rect().center();
+    harness.hover_at(from);
+    harness.step();
+    harness.drag_at(from);
+    harness.step();
+    harness.hover_at(to);
+    harness.step();
+    harness.drop_at(to);
+    harness.run();
+    assert_eq!(harness.state().1, [1, 2, 0]);
+    assert_eq!(harness.state().0, 0);
+    assert!(
+        harness.get_by_label("General").rect().center().x
+            > harness.get_by_label("About").rect().center().x
+    );
+}
+
+#[test]
+fn invalid_tab_orders_are_rejected() {
+    let theme = Theme::light();
+    let mut selected = 0;
+    assert!(
+        Tabs::new(&mut selected, &["A", "B"], &theme)
+            .unwrap()
+            .reorderable(&mut [0, 0])
+            .is_err()
+    );
+    assert!(
+        Tabs::new(&mut selected, &["A", "B"], &theme)
+            .unwrap()
+            .reorderable(&mut [0, 2])
+            .is_err()
+    );
+}
+
+#[test]
+fn reordered_tab_label_moves_with_the_selection_indicator() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(600.0, 200.0))
+        .with_step_dt(0.02)
+        .build_ui_state(
+            |ui, state: &mut (usize, [usize; 3])| {
+                Tabs::new(
+                    &mut state.0,
+                    &["General", "Privacy", "About"],
+                    &Theme::light(),
+                )
+                .unwrap()
+                .reorderable(&mut state.1)
+                .unwrap()
+                .show(ui, |_, _| {});
+            },
+            (0, [0, 1, 2]),
+        );
+    harness
+        .ctx
+        .all_styles_mut(|style| style.animation_time = 0.2);
+    let from = harness.get_by_label("General").rect().center();
+    let to = harness.get_by_label("About").rect().center();
+    harness.hover_at(from);
+    harness.step();
+    harness.drag_at(from);
+    harness.step();
+    harness.hover_at(to);
+    harness.step();
+    harness.drop_at(to);
+    harness.run_steps(2);
+
+    let card = Theme::light().card;
+    let indicator = harness
+        .output()
+        .shapes
+        .iter()
+        .find_map(|entry| match &entry.shape {
+            egui::Shape::Rect(rect) if rect.fill == card && rect.corner_radius.nw == 8 => {
+                Some(rect.rect.center().x)
+            }
+            _ => None,
+        })
+        .expect("selection indicator");
+    let text = harness
+        .output()
+        .shapes
+        .iter()
+        .find_map(|entry| match &entry.shape {
+            egui::Shape::Text(text) if text.galley.job.text == "General" => {
+                Some(text.pos.x + text.galley.size().x / 2.0)
+            }
+            _ => None,
+        })
+        .expect("moving label");
+    assert_eq!(harness.state().1, [1, 2, 0]);
+    assert!(from.x < indicator && indicator < to.x);
+    assert!(
+        (text - indicator).abs() < 2.0,
+        "label={text}, indicator={indicator}"
+    );
+}

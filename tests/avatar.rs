@@ -5,6 +5,22 @@ use egui_kittest::{
 use temivu::{Avatar, Theme};
 
 #[test]
+fn custom_fallback_foreground_is_used_for_painted_text() {
+    let color = egui::Color32::from_rgb(30, 65, 90);
+    let mut harness = Harness::builder().build_ui(|ui| {
+        Avatar::new(&Theme::mint_light())
+            .fallback("TV")
+            .colors(egui::Color32::WHITE, color)
+            .show(ui);
+    });
+    harness.run();
+    assert!(harness.output().shapes.iter().any(|shape| matches!(
+        &shape.shape, egui::Shape::Text(text)
+            if text.galley.job.text == "TV" && text.galley.job.sections[0].format.color == color
+    )));
+}
+
+#[test]
 fn invalid_sizes_are_rejected() {
     let theme = Theme::light();
     for size in [0.0, -1.0, f32::NAN, f32::INFINITY] {

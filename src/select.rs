@@ -31,9 +31,12 @@ pub struct Select<'a> {
     options: &'a [SelectOption<'a>],
     selected: &'a mut Option<Id>,
     enabled: bool,
+    liquid: Option<crate::liquid::LiquidStyle>,
     searchable: bool,
     search_hint: &'a str,
     no_results: &'a str,
+    width: Option<f32>,
+    theme: Option<&'a crate::Theme>,
 }
 impl<'a> Select<'a> {
     pub fn new(
@@ -50,14 +53,35 @@ impl<'a> Select<'a> {
             options,
             selected,
             enabled: true,
+            liquid: None,
             searchable: false,
             search_hint: "Search",
             no_results: "No results",
+            width: None,
+            theme: None,
         }
+    }
+    /// Configure popup motion and trigger separation without replacing egui input.
+    pub fn liquid(mut self, motion: crate::liquid::LiquidStyle) -> Self {
+        self.liquid = Some(motion);
+        self
     }
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
+    }
+    /// Apply the library's semantic colors to this control and its popup.
+    pub fn theme(mut self, theme: &'a crate::Theme) -> Self {
+        self.theme = Some(theme);
+        self
+    }
+    /// Set a preferred width in logical points; it is capped by available space.
+    pub fn width(mut self, width: f32) -> Result<Self, &'static str> {
+        if !width.is_finite() || width <= 0.0 {
+            return Err("width must be finite and positive");
+        }
+        self.width = Some(width);
+        Ok(self)
     }
     /// Show a search field at the top of the popup and filter options by a
     /// case-insensitive substring match on their labels.
@@ -114,15 +138,35 @@ impl<'a> Select<'a> {
         let mut focused_popup: Option<egui::Id> = None;
         let mut accepted_from_keyboard = false;
         let mut was_open = false;
-        let width = ui.available_width().clamp(48.0, 240.0);
+        let available = ui.available_width().max(0.0);
+        let width = self.width.unwrap_or(360.0).min(available);
         let search_key = self.id.with("temivu-select-search");
         let mut widget_id = None;
         let output = ui
             .add_enabled_ui(self.enabled, |ui| {
+                if let Some(theme) = self.theme {
+                    let visuals = ui.visuals_mut();
+                    visuals.extreme_bg_color = theme.card;
+                    visuals.window_fill = theme.card;
+                    for visual in [
+                        &mut visuals.widgets.inactive,
+                        &mut visuals.widgets.noninteractive,
+                        &mut visuals.widgets.open,
+                    ] {
+                        visual.bg_fill = theme.card;
+                        visual.weak_bg_fill = theme.card;
+                        visual.bg_stroke = egui::Stroke::new(1.0, theme.border);
+                        visual.corner_radius = 24.into();
+                    }
+                    visuals.widgets.hovered.bg_fill = theme.secondary;
+                    visuals.widgets.hovered.weak_bg_fill = theme.secondary;
+                    visuals.widgets.hovered.corner_radius = 24.into();
+                }
+                ui.spacing_mut().button_padding = egui::vec2(12.0, 9.0);
                 let id = ui.make_persistent_id(egui::IdSalt::new(self.id));
                 widget_id = Some(id);
                 was_open = ComboBox::is_open(ui.ctx(), id);
-                let min_height = ui.spacing().interact_size.y.max(32.0);
+                let min_height = ui.spacing().interact_size.y.max(40.0);
                 ui.spacing_mut().interact_size.y = min_height;
                 if !can_change && was_open {
                     // egui 0.36 derives this popup ID from the combo widget ID.
@@ -130,11 +174,9 @@ impl<'a> Select<'a> {
                 }
                 let just_opened = !was_open;
                 let mut visible_buttons: Vec<(egui::Id, bool)> = Vec::new();
-                ComboBox::from_id_salt(self.id)
-                    .selected_text(current)
-                    .width(width)
-                    .truncate()
-                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                crate::liquid_combo::LiquidCombo::new(id, current, width)
+                    .liquid(self.liquid)
+                    .theme(self.theme)
                     .show_ui(ui, |ui| {
                         let mut query = if self.searchable {
                             ui.ctx().data(|data| {
@@ -147,6 +189,7 @@ impl<'a> Select<'a> {
                         if self.searchable {
                             let search = ui.add(
                                 egui::TextEdit::singleline(&mut query)
+                                    .margin(egui::Margin::symmetric(8, 6))
                                     .hint_text(self.search_hint)
                                     .desired_width(f32::INFINITY),
                             );
@@ -186,7 +229,7 @@ impl<'a> Select<'a> {
                                             can_change && option.enabled,
                                             egui::Button::selectable(selected, option.label)
                                                 .wrap()
-                                                .min_size(egui::vec2(0.0, 32.0)),
+                                                .min_size(egui::vec2(ui.available_width(), 44.0)),
                                         )
                                     },
                                 )

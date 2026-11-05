@@ -16,6 +16,82 @@ fn enable_animations<State>(harness: &Harness<'_, State>) {
 }
 
 #[test]
+fn interaction_spring_retargets_and_respects_reduced_motion() {
+    let mut harness = Harness::builder().build_ui_state(
+        |ui, state: &mut (bool, f32, bool)| {
+            let mut theme = Theme::mint_light();
+            theme.motion.reduced_motion = state.2;
+            state.1 = temivu::motion::spring_bool(ui.ctx(), animation_id(), state.0, &theme);
+        },
+        (false, 0.0, false),
+    );
+    enable_animations(&harness);
+    harness.input_mut().time = Some(0.0);
+    harness.step();
+    harness.state_mut().0 = true;
+    harness.input_mut().time = Some(0.05);
+    harness.step();
+    assert_eq!(
+        harness.state().1,
+        0.0,
+        "the new target starts at the input event"
+    );
+    harness.input_mut().time = Some(0.075);
+    harness.step();
+    assert!(harness.state().1 > 0.0 && harness.state().1 < 1.0);
+    harness.state_mut().0 = false;
+    harness.input_mut().time = Some(0.1);
+    harness.step();
+    assert!(harness.state().1.is_finite());
+    harness.state_mut().2 = true;
+    harness.step();
+    assert_eq!(harness.state().1, 0.0);
+}
+
+#[test]
+fn changing_spring_speed_preserves_the_pose_at_the_retarget_event() {
+    let mut harness = Harness::builder().build_ui_state(
+        |ui, state: &mut (bool, bool, [f32; 2])| {
+            let mut theme = Theme::light();
+            let reference = if state.0 { 1.0 } else { 0.0 };
+            let target = if state.1 { 0.0 } else { reference };
+            state.2[0] =
+                temivu::motion::spring_f32(ui.ctx(), animation_id(), 0.0, reference, &theme);
+            if state.1 {
+                theme.motion.normal *= 0.75;
+            }
+            state.2[1] = temivu::motion::spring_f32(
+                ui.ctx(),
+                animation_id().with("retarget"),
+                0.0,
+                target,
+                &theme,
+            );
+        },
+        (false, false, [0.0; 2]),
+    );
+    enable_animations(&harness);
+    for (time, open, close) in [(0.0, false, false), (0.05, true, false), (0.08, true, true)] {
+        harness.state_mut().0 = open;
+        harness.state_mut().1 = close;
+        harness.input_mut().time = Some(time);
+        harness.step();
+    }
+    let [reference, retarget] = harness.state().2;
+    assert!(reference > 0.0);
+    assert!((reference - retarget).abs() < 0.0001);
+    harness.input_mut().time = Some(0.083);
+    harness.step();
+    assert!(
+        harness.state().2[1] > retarget,
+        "the spring carries its velocity through reversal"
+    );
+    harness.input_mut().time = Some(0.2);
+    harness.step();
+    assert!(harness.state().2[1] < retarget);
+}
+
+#[test]
 fn bool_animation_advances_then_stops_requesting_repaints() {
     let theme = Theme::light();
     let mut harness = Harness::builder().build_ui_state(
@@ -248,4 +324,73 @@ fn float_animation_supports_values_outside_the_unit_range() {
     harness.input_mut().time = Some(1.0);
     harness.step();
     assert_eq!(*harness.state(), 10.0);
+}
+
+#[test]
+fn spring_settles_after_a_long_frame_instead_of_stretching_time() {
+    let theme = Theme::light();
+    let mut harness = Harness::builder().build_ui_state(
+        |ui, value: &mut f32| {
+            *value = temivu::motion::spring_f32(ui.ctx(), animation_id(), 0.0, 1.0, &theme);
+        },
+        0.0,
+    );
+    enable_animations(&harness);
+    harness.input_mut().time = Some(0.0);
+    harness.step();
+    harness.input_mut().time = Some(2.0);
+    harness.step();
+    assert_eq!(*harness.state(), 1.0);
+    harness.input_mut().time = Some(2.1);
+    harness.step();
+    assert!(!harness.ctx.has_requested_repaint());
+}
+
+#[test]
+fn spring_does_not_skip_an_interaction_after_idle() {
+    let theme = Theme::light();
+    let mut harness = Harness::builder().build_ui_state(
+        |ui, state: &mut (bool, f32)| {
+            state.1 = temivu::motion::spring_bool(ui.ctx(), animation_id(), state.0, &theme);
+        },
+        (false, 0.0),
+    );
+    enable_animations(&harness);
+    harness.input_mut().time = Some(0.0);
+    harness.step();
+    harness.state_mut().0 = true;
+    harness.input_mut().time = Some(30.0);
+    harness.step();
+    assert_eq!(
+        harness.state().1,
+        0.0,
+        "idle time must not count toward the new interaction"
+    );
+    harness.input_mut().time = Some(30.04);
+    harness.step();
+    assert!(harness.state().1 > 0.0 && harness.state().1 < 1.0);
+}
+
+#[test]
+fn spring_pose_is_independent_of_frame_spacing() {
+    fn sample(times: &[f64]) -> f32 {
+        let ctx = egui::Context::default();
+        let theme = Theme::light();
+        let mut value = 0.0;
+        for &time in times {
+            let mut output = ctx.run_ui(
+                egui::RawInput {
+                    time: Some(time),
+                    ..Default::default()
+                },
+                |ui| {
+                    value = temivu::motion::spring_f32(ui.ctx(), animation_id(), 0.0, 1.0, &theme);
+                },
+            );
+            output.textures_delta.clear();
+        }
+        value
+    }
+    let regular: Vec<_> = (0..=12).map(|frame| frame as f64 / 60.0).collect();
+    assert!((sample(&regular) - sample(&[0.0, 0.013, 0.057, 0.14, 0.2])).abs() < 0.0001);
 }

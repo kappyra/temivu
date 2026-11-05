@@ -1,12 +1,10 @@
 [package]
 name = "temivu"
-version = "0.0.0"
+version = "0.1.0"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
-description = "Experimental native egui port of Forui components"
-repository = "https://github.com/vutienthan/temivu"
-readme = "README.md"
+description = "Motion-first UI components for Rust and egui"
 publish = false
 
 [dependencies]
@@ -28,3 +26,15 @@ features = ["accesskit", "default_fonts", "glow", "x11"]
 [[example]]
 name = "showcase"
 required-features = ["demo"]
+
+# Keep the interactive preview responsive without optimizing/rebuilding every
+# platform dependency. These stable paint/layout crates are cached after build.
+[profile.dev.package.egui]
+opt-level = 2
+
+[profile.dev.package.epaint]
+opt-level = 2
+
+# Keep test executables small without rebuilding dependency debug information.
+[profile.test.package.temivu]
+strip = "debuginfo"

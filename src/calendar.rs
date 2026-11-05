@@ -765,12 +765,36 @@ pub struct CalendarResponse {
     pub changed: bool,
 }
 
+/// Colors and corner radius for day cells.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CalendarStyle {
+    pub selected_fill: egui::Color32,
+    pub selected_text: egui::Color32,
+    pub hover_fill: egui::Color32,
+    pub focus: egui::Color32,
+    pub radius: u8,
+}
+
+impl CalendarStyle {
+    pub fn from_theme(theme: &Theme) -> Self {
+        Self {
+            selected_fill: theme.primary,
+            selected_text: theme.primary_foreground,
+            hover_fill: theme.secondary,
+            focus: theme.foreground,
+            radius: 255,
+        }
+    }
+}
+
 /// A single-month calendar grid bound to caller-owned [`CalendarState`].
 pub struct Calendar<'a> {
     state: &'a mut CalendarState,
     theme: &'a Theme,
     config: Config<'a>,
     id: Option<Id>,
+    style: CalendarStyle,
+    year_navigation: bool,
 }
 
 impl<'a> Calendar<'a> {
@@ -790,7 +814,7 @@ impl<'a> Calendar<'a> {
             state,
             theme,
             config: Config {
-                sizes: Sizes::desktop(),
+                sizes: theme.sizes,
                 min_date: Self::default_min_date(),
                 max_date: Self::default_max_date(),
                 selectable: None,
@@ -802,7 +826,16 @@ impl<'a> Calendar<'a> {
                 picker: CalendarPickerLabels::english(),
             },
             id: None,
+            style: CalendarStyle::from_theme(theme),
+            year_navigation: false,
         }
+    }
+
+    /// Add direct previous/next year buttons. The compact default uses the
+    /// month/year picker for year changes, keeping the day header uncluttered.
+    pub fn year_navigation(mut self, visible: bool) -> Self {
+        self.year_navigation = visible;
+        self
     }
 
     /// Set the inclusive selectable date bounds. The argument order does not
@@ -845,10 +878,16 @@ impl<'a> Calendar<'a> {
         self
     }
 
-    /// Set the responsive size tokens. The day cell is `sizes.calendar` square,
-    /// shrunk when the available width cannot fit seven columns.
+    /// Set responsive size references. Day cells prefer at least 40 points,
+    /// shrinking when the available width cannot fit seven columns.
     pub fn sizes(mut self, sizes: Sizes) -> Self {
         self.config.sizes = sizes;
+        self
+    }
+
+    /// Override day-cell colors and corner radius.
+    pub fn style(mut self, style: CalendarStyle) -> Self {
+        self.style = style;
         self
     }
 
@@ -875,8 +914,16 @@ impl<'a> Calendar<'a> {
         let id = self
             .id
             .unwrap_or_else(|| ui.next_auto_id().with("temivu-calendar"));
-        ui.scope_builder(egui::UiBuilder::new().id(id), |ui| self.show_inner(ui, id))
-            .inner
+        ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
+            ui.set_width(
+                ui.available_width()
+                    .min(self.config.sizes.calendar.max(40.0) * 7.0),
+            );
+            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.spacing_mut().button_padding = Vec2::splat(4.0);
+            self.show_inner(ui, id)
+        })
+        .inner
     }
 
     fn show_inner(self, ui: &mut Ui, id: Id) -> CalendarResponse {
@@ -884,6 +931,8 @@ impl<'a> Calendar<'a> {
             state,
             theme,
             config,
+            style,
+            year_navigation,
             ..
         } = self;
 
@@ -951,7 +1000,7 @@ impl<'a> Calendar<'a> {
                 (labels.month_heading)(state.visible_month().year(), state.visible_month().month());
             let mut month_delta = 0i64;
             ui.horizontal(|ui| {
-                let heading = ui.heading(&heading_text);
+                let heading = ui.label(egui::RichText::new(&heading_text).size(16.0).strong());
                 ui.ctx().accesskit_node_builder(heading.id, |node| {
                     // Label-type widgets carry their text in the value slot, so
                     // promote the text to the heading's label as well.
@@ -959,12 +1008,7 @@ impl<'a> Calendar<'a> {
                     node.set_level(2);
                     node.set_label(heading_text.clone());
                 });
-                let choose = ui.add(egui::Button::new("v").small().min_size(Vec2::splat(24.0)));
-                ui.ctx().accesskit_node_builder(choose.id, |node| {
-                    node.set_label(picker.choose_month);
-                    node.clear_toggled();
-                });
-                if choose.clicked() {
+                if navigation_button(ui, theme, "v", picker.choose_month, config.enabled) {
                     open_picker = true;
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -977,16 +1021,27 @@ impl<'a> Calendar<'a> {
                         config.enabled && config.shifted_month(visible, -1).is_some();
                     let can_previous_year =
                         config.enabled && config.shifted_month(visible, -12).is_some();
-                    if navigation_button(ui, ">>", labels.next_year, can_next_year) {
+                    if year_navigation
+                        && navigation_button(ui, theme, ">>", labels.next_year, can_next_year)
+                    {
                         month_delta += 12;
                     }
-                    if navigation_button(ui, ">", labels.next_month, can_next_month) {
+                    if navigation_button(ui, theme, ">", labels.next_month, can_next_month) {
                         month_delta += 1;
                     }
-                    if navigation_button(ui, "<", labels.previous_month, can_previous_month) {
+                    if navigation_button(ui, theme, "<", labels.previous_month, can_previous_month)
+                    {
                         month_delta -= 1;
                     }
-                    if navigation_button(ui, "<<", labels.previous_year, can_previous_year) {
+                    if year_navigation
+                        && navigation_button(
+                            ui,
+                            theme,
+                            "<<",
+                            labels.previous_year,
+                            can_previous_year,
+                        )
+                    {
                         month_delta -= 12;
                     }
                 });
@@ -1132,6 +1187,7 @@ impl<'a> Calendar<'a> {
         let cell = config
             .sizes
             .calendar
+            .max(40.0)
             .min((available / DAYS_PER_WEEK as f32).max(1.0))
             .max(1.0);
         let header_height = (cell * 0.75).max(14.0);
@@ -1196,6 +1252,11 @@ impl<'a> Calendar<'a> {
         let grid_start = visible.first_of_month().add_days(-(offset as i64));
         let focus_cell = state.focused();
 
+        let month = visible.year() as f32 * 12.0 + f32::from(visible.month());
+        let animated_month =
+            crate::motion::spring_f32(ui.ctx(), id.with("month-slide"), month, month, theme);
+        let travel = (animated_month - month).clamp(-1.0, 1.0);
+        let offset = egui::vec2(travel * 10.0, 0.0);
         let mut clicked_date = None;
         ui.scope_builder(
             egui::UiBuilder::new()
@@ -1229,6 +1290,8 @@ impl<'a> Calendar<'a> {
                     );
                 }
 
+                let mut cells = painter.with_clip_rect(grid_rect.intersect(ui.clip_rect()));
+                cells.multiply_opacity(1.0 - travel.abs() * 0.42);
                 for row in 0..rows {
                     for column in 0..DAYS_PER_WEEK {
                         let index = row * DAYS_PER_WEEK + column;
@@ -1254,6 +1317,12 @@ impl<'a> Calendar<'a> {
                         let adjacent =
                             date.month() != visible.month() || date.year() != visible.year();
                         let focused = focus_cell == Some(date);
+                        let selected_amount = crate::motion::spring_bool(
+                            ui.ctx(),
+                            day_id.with("selected-motion"),
+                            selected,
+                            theme,
+                        );
                         let label = day_accessible_label(&labels, date, today);
                         ui.ctx().accesskit_node_builder(day_id, |node| {
                             node.set_role(egui::accesskit::Role::GridCell);
@@ -1271,9 +1340,10 @@ impl<'a> Calendar<'a> {
                         });
                         let text = date.day().to_string();
                         paint_day_cell(
-                            painter,
-                            rect,
+                            &cells,
+                            rect.translate(offset),
                             theme,
+                            style,
                             DayCell {
                                 text: &text,
                                 selected,
@@ -1282,8 +1352,14 @@ impl<'a> Calendar<'a> {
                                 disabled: !selectable,
                                 hovered: cell_response.hovered(),
                                 focused: focused && focus_visible,
+                                press: if selectable {
+                                    crate::motion_controls::press_amount(&cell_response, theme)
+                                } else {
+                                    0.0
+                                },
                             },
                             (cell * 0.44).clamp(9.0, 18.0),
+                            selected_amount,
                         );
                         if selectable && cell_response.hovered() {
                             ui.output_mut(|output| {
@@ -1343,37 +1419,65 @@ struct DayCell<'a> {
     disabled: bool,
     hovered: bool,
     focused: bool,
+    press: f32,
 }
 
 fn paint_day_cell(
     painter: &egui::Painter,
     rect: Rect,
     theme: &Theme,
+    style: CalendarStyle,
     cell: DayCell<'_>,
     font_size: f32,
+    selected_amount: f32,
 ) {
-    let radius = egui::CornerRadius::same(6);
+    let rect = rect.scale_from_center(crate::motion::press_scale(cell.press));
+    let radius = style.radius;
+    let surface = rect.shrink(1.0);
+    let paint_fill = |color| {
+        painter.add(crate::motion::press_shape(
+            egui::epaint::RectShape::filled(surface, radius, color),
+            cell.press,
+        ));
+    };
     let (fill, text_color) = if cell.selected {
-        (theme.primary, theme.primary_foreground)
+        let amount = selected_amount.clamp(0.0, 1.0);
+        let text = egui::Rgba::from(theme.foreground) * (1.0 - amount)
+            + egui::Rgba::from(style.selected_text) * amount;
+        (style.selected_fill, egui::Color32::from(text))
     } else if cell.disabled {
         (egui::Color32::TRANSPARENT, theme.muted_foreground)
     } else if cell.hovered {
-        (theme.secondary, theme.secondary_foreground)
+        (style.hover_fill, theme.secondary_foreground)
     } else if cell.adjacent {
         (egui::Color32::TRANSPARENT, theme.muted_foreground)
     } else {
         (egui::Color32::TRANSPARENT, theme.foreground)
     };
+    if !cell.selected && selected_amount > 0.0 {
+        let fading = egui::Color32::from(
+            egui::Rgba::from(style.selected_fill) * selected_amount.clamp(0.0, 1.0),
+        );
+        paint_fill(fading);
+    }
     if fill != egui::Color32::TRANSPARENT {
-        painter.rect_filled(rect.shrink(1.0), radius, fill);
+        let fill = if cell.selected {
+            egui::Color32::from(egui::Rgba::from(fill) * selected_amount.clamp(0.0, 1.0))
+        } else {
+            fill
+        };
+        paint_fill(fill);
     }
     if cell.focused {
-        painter.rect_stroke(
-            rect.shrink(1.0),
-            radius,
-            Stroke::new(2.0, theme.foreground),
-            StrokeKind::Inside,
-        );
+        painter.add(crate::motion::press_shape(
+            egui::epaint::RectShape::stroke(
+                surface,
+                radius,
+                Stroke::new(2.0, style.focus),
+                StrokeKind::Inside,
+            ),
+            cell.press,
+        ));
     }
     let text_rect = painter.text(
         rect.center(),
@@ -1446,13 +1550,15 @@ fn show_calendar_picker(
                 let mut open_years = false;
                 ui.horizontal(|ui| {
                     let heading_text = (picker.year)(year);
-                    let heading = ui.heading(&heading_text);
+                    let heading = ui.label(egui::RichText::new(&heading_text).size(16.0).strong());
                     ui.ctx().accesskit_node_builder(heading.id, |node| {
                         node.set_role(egui::accesskit::Role::Heading);
                         node.set_level(2);
                         node.set_label(heading_text.clone());
                     });
-                    let choose = ui.add(egui::Button::new("v").small().min_size(Vec2::splat(24.0)));
+                    let choose = crate::button::press_native(ui, theme, |ui| {
+                        ui.add(egui::Button::new("v").small().min_size(Vec2::splat(24.0)))
+                    });
                     ui.ctx().accesskit_node_builder(choose.id, |node| {
                         node.set_label(picker.choose_year);
                         node.clear_toggled();
@@ -1469,6 +1575,7 @@ fn show_calendar_picker(
                         let visible = state.visible_month();
                         if navigation_button(
                             ui,
+                            theme,
                             ">>",
                             picker.next_year,
                             config.enabled && config.shifted_month(visible, 12).is_some(),
@@ -1477,6 +1584,7 @@ fn show_calendar_picker(
                         }
                         if navigation_button(
                             ui,
+                            theme,
                             "<<",
                             picker.previous_year,
                             config.enabled && config.shifted_month(visible, -12).is_some(),
@@ -1583,7 +1691,7 @@ fn show_calendar_picker(
                 let mut page_delta = 0i32;
                 ui.horizontal(|ui| {
                     let heading_text = (picker.years_heading)(page, page + 11);
-                    let heading = ui.heading(&heading_text);
+                    let heading = ui.label(egui::RichText::new(&heading_text).size(16.0).strong());
                     ui.ctx().accesskit_node_builder(heading.id, |node| {
                         node.set_role(egui::accesskit::Role::Heading);
                         node.set_level(2);
@@ -1592,6 +1700,7 @@ fn show_calendar_picker(
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         if navigation_button(
                             ui,
+                            theme,
                             ">>",
                             picker.next_years,
                             page + 12 <= config.max_date.year(),
@@ -1600,6 +1709,7 @@ fn show_calendar_picker(
                         }
                         if navigation_button(
                             ui,
+                            theme,
                             "<<",
                             picker.previous_years,
                             page - 12 >= config.min_date.year(),
@@ -1694,13 +1804,72 @@ fn show_calendar_picker(
     (response, changed)
 }
 
-fn navigation_button(ui: &mut Ui, visible: &str, accessible: &str, enabled: bool) -> bool {
-    let response = ui.add_enabled(
-        enabled,
-        egui::Button::new(visible)
-            .small()
-            .min_size(Vec2::splat(24.0)),
-    );
+fn navigation_button(
+    ui: &mut Ui,
+    theme: &Theme,
+    visible: &str,
+    accessible: &str,
+    enabled: bool,
+) -> bool {
+    let response = crate::button::press_native(ui, theme, |ui| {
+        ui.add_enabled(
+            enabled,
+            egui::Button::new("")
+                .frame_when_inactive(false)
+                .corner_radius(255)
+                .min_size(Vec2::splat(24.0)),
+        )
+    });
+    let color = if enabled {
+        ui.visuals().text_color()
+    } else {
+        ui.visuals().weak_text_color()
+    };
+    if visible == "v" {
+        let center = response.rect.center();
+        let stroke = Stroke::new(1.6, color);
+        ui.painter().line_segment(
+            [
+                center + egui::vec2(-4.0, -2.0),
+                center + egui::vec2(0.0, 2.0),
+            ],
+            stroke,
+        );
+        ui.painter().line_segment(
+            [
+                center + egui::vec2(0.0, 2.0),
+                center + egui::vec2(4.0, -2.0),
+            ],
+            stroke,
+        );
+        ui.ctx().accesskit_node_builder(response.id, |node| {
+            node.set_label(accessible);
+            node.clear_toggled();
+        });
+        return response.clicked();
+    }
+    let direction = if visible.starts_with('<') { -1.0 } else { 1.0 };
+    let count = visible.len().min(2);
+    let center = response.rect.center();
+    for index in 0..count {
+        let offset = (index as f32 - (count - 1) as f32 / 2.0) * 5.0;
+        let x = center.x + offset;
+        let stroke = Stroke::new(1.6, color);
+        ui.painter().line_segment(
+            [
+                egui::pos2(x - direction * 2.0, center.y - 4.0),
+                egui::pos2(x + direction * 2.0, center.y),
+            ],
+            stroke,
+        );
+        ui.painter().line_segment(
+            [
+                egui::pos2(x + direction * 2.0, center.y),
+                egui::pos2(x - direction * 2.0, center.y + 4.0),
+            ],
+            stroke,
+        );
+    }
     ui.ctx().accesskit_node_builder(response.id, |node| {
         node.set_label(accessible);
         node.clear_toggled();

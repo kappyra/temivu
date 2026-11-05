@@ -1,6 +1,3 @@
-//! An experimental, incomplete egui port of selected Forui design concepts.
-//! See the project coverage matrix for parity and verification status.
-
 #![forbid(unsafe_code)]
 #![doc = include_str!("../README.md")]
 
@@ -28,6 +25,7 @@ pub mod label;
 pub mod line_calendar;
 pub mod localization;
 pub mod motion;
+pub mod motion_controls;
 pub mod multi_select;
 pub mod otp_field;
 pub mod pagination;
@@ -57,6 +55,7 @@ pub mod toast;
 pub mod toaster;
 pub mod tokens;
 pub mod tooltip;
+pub mod video_player;
 
 pub use accordion::{AccordionItem, AccordionState};
 pub use alert::{Alert, AlertStyle, AlertVariant};
@@ -65,11 +64,12 @@ pub use autocomplete::{
 };
 pub use avatar::Avatar;
 pub use badge::{Badge, BadgeStyle, BadgeVariant};
-pub use bottom_navigation::{NavigationItem, bottom_navigation};
+pub use bottom_navigation::{FloatingNavigation, NavigationItem, bottom_navigation};
 pub use breadcrumb::{Breadcrumb, BreadcrumbItem};
 pub use button::{Button, ButtonSize, ButtonVariant, InputMode};
 pub use calendar::{
-    Calendar, CalendarLabels, CalendarResponse, CalendarState, Date, DateError, Weekday, month_name,
+    Calendar, CalendarLabels, CalendarResponse, CalendarState, CalendarStyle, Date, DateError,
+    Weekday, month_name,
 };
 pub use card::{Card, CardStyle};
 pub use checkbox::Checkbox;
@@ -92,6 +92,10 @@ pub use line_calendar::{
 };
 pub use localization::Messages;
 pub use motion::{animate_bool, animate_f32};
+pub use motion_controls::{
+    Direction, ViewMode, direction_pad, layout_toggle, navigation_arrows, quantity_stepper,
+    search_box, toggle_button,
+};
 pub use multi_select::MultiSelect;
 pub use otp_field::{OtpField, OtpFieldResponse, OtpLabels};
 pub use pagination::{
@@ -113,7 +117,7 @@ pub use select_tile_group::{SelectTile, SelectTileGroup, SelectTileGroupResponse
 pub use sheet::Sheet;
 pub use sidebar::{Sidebar, SidebarGroup, SidebarItem, SidebarResponse, SidebarState};
 pub use slider::{Slider, SliderMark};
-pub use switch::Switch;
+pub use switch::{Switch, SwitchStyle};
 pub use tabs::Tabs;
 pub use text_field::{TextField, TextFieldOutput, Validator};
 pub use theme::{Easing, FontWeight, MotionSettings, TextStyleToken, Theme, Typography};
@@ -125,3 +129,18 @@ pub use time_picker::{
 pub use toast::{Toast, ToastState, ToastVariant};
 pub use toaster::{ToastEntry, Toaster, ToasterResponse, ToasterState};
 pub use tokens::{Breakpoints, FieldSizes, Sizes, ViewportClass};
+pub use tooltip::link_preview;
+pub use video_player::{
+    VideoAction, VideoPlayer, VideoPlayerState, VideoStatus, Volume, volume_control,
+};
+
+mod surface;
+
+pub mod page_transition;
+pub use page_transition::PageTransition;
+pub mod navigation_menu;
+pub use navigation_menu::{MenuPresentation, NavigationMenu};
+
+pub mod liquid;
+
+mod liquid_combo;

@@ -10,7 +10,7 @@
 //! ported. Screen-reader verification and upstream visual parity remain open;
 //! see `COVERAGE.md` for the current limitations.
 use crate::Theme;
-use egui::{EventFilter, Id, Key, Response, RichText, ScrollArea, Sense, Stroke, Ui, UiBuilder};
+use egui::{EventFilter, Id, Key, Response, RichText, ScrollArea, Sense, Ui, UiBuilder};
 
 /// The preferred expanded width of a [`Sidebar`], in points. Forui's sidebar
 /// style uses a fixed 256-point width.
@@ -281,32 +281,36 @@ impl<'a> Sidebar<'a> {
         let mut collapsed_changed = false;
         let scope = ui.scope_builder(UiBuilder::new().id(id).sense(Sense::hover()), |ui| {
             ui.set_width(width);
-            ui.vertical(|ui| {
-                ui.spacing_mut().item_spacing.y = 2.0;
-                collapsed_changed = header(ui, title, theme, state, collapsed, enabled);
-                ui.add_space(2.0);
-                ui.separator();
-                ScrollArea::vertical()
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        for group in groups {
-                            draw_group(
-                                ui,
-                                id,
-                                theme,
-                                state,
-                                collapsed,
-                                enabled,
-                                group,
-                                selected,
-                                &mut activated,
-                                &mut toggled,
-                                &mut entries,
-                            );
-                        }
-                        keyboard_navigation(ui, state, &entries, &mut toggled);
-                    });
-            });
+            egui::Frame::new()
+                .fill(theme.muted)
+                .corner_radius(20)
+                .inner_margin(5)
+                .show(ui, |ui| {
+                    ui.set_width((width - 10.0).max(1.0));
+                    ui.spacing_mut().item_spacing.y = 4.0;
+                    collapsed_changed = header(ui, title, theme, state, collapsed, enabled);
+                    ui.add_space(4.0);
+                    ScrollArea::vertical()
+                        .auto_shrink([false, false])
+                        .show(ui, |ui| {
+                            for group in groups {
+                                draw_group(
+                                    ui,
+                                    id,
+                                    theme,
+                                    state,
+                                    collapsed,
+                                    enabled,
+                                    group,
+                                    selected,
+                                    &mut activated,
+                                    &mut toggled,
+                                    &mut entries,
+                                );
+                            }
+                            keyboard_navigation(ui, state, &entries, &mut toggled);
+                        });
+                });
         });
         let response = scope.response;
         ui.ctx().accesskit_node_builder(id, |node| {
@@ -336,7 +340,7 @@ fn header(
     collapsed: bool,
     enabled: bool,
 ) -> bool {
-    let toggle = if collapsed { "»" } else { "«" };
+    let toggle = if collapsed { "+" } else { "−" };
     let toggle_label = if collapsed {
         "Expand sidebar"
     } else {
@@ -358,10 +362,11 @@ fn header(
             }
         },
         |ui| {
-            ui.add_enabled(
-                enabled,
-                egui::Button::new(toggle).min_size(egui::vec2(28.0, 28.0)),
-            )
+            crate::Button::new(toggle, theme)
+                .variant(crate::ButtonVariant::Outline)
+                .size(crate::ButtonSize::ExtraSmall)
+                .enabled(enabled)
+                .show(ui)
         },
     );
     ui.ctx().accesskit_node_builder(toggle_response.id, |node| {
@@ -452,27 +457,32 @@ fn draw_item(
     let item_is_selected = *selected == Some(item.id);
     let item_enabled = enabled && item.enabled;
 
-    let text =
-        RichText::new(item_text(item, collapsed, has_children, expanded)).color(if item_enabled {
-            theme.foreground
+    let text = item_text(item, collapsed, has_children, expanded);
+    let response = crate::Item::new(&text, theme)
+        .id(sidebar_id.with(("sidebar-item", item.id)))
+        .enabled(item_enabled)
+        .selected(item_is_selected)
+        .show(ui);
+    let reveal = crate::motion::spring_bool(
+        ui.ctx(),
+        response.id.with("sidebar-indicator"),
+        item_is_selected,
+        theme,
+    )
+    .clamp(0.0, 1.0);
+    if reveal > 0.001 {
+        let edge = if ui.layout().prefer_right_to_left() {
+            response.rect.right() - 5.0
         } else {
-            theme.muted_foreground
-        });
-    let min_height = theme.sizes.item.max(32.0);
-    let mut button = egui::Button::new(text)
-        .truncate()
-        .min_size(egui::vec2(ui.available_width(), min_height))
-        .frame_when_inactive(item_is_selected)
-        .selected(item_is_selected);
-    if item_is_selected {
-        button = button.fill(theme.secondary);
+            response.rect.left() + 5.0
+        };
+        let mark = egui::Rect::from_center_size(
+            egui::pos2(edge, response.rect.center().y),
+            egui::vec2(3.0, 17.0 * reveal),
+        );
+        ui.painter()
+            .rect_filled(mark, 2, theme.primary.gamma_multiply(reveal));
     }
-    let response = ui
-        .scope_builder(
-            UiBuilder::new().id(sidebar_id.with(("sidebar-item", item.id))),
-            |ui| ui.add_enabled(item_enabled, button),
-        )
-        .inner;
     ui.ctx().accesskit_node_builder(response.id, |node| {
         node.set_role(egui::accesskit::Role::TreeItem);
         node.set_label(item.label);
@@ -494,12 +504,6 @@ fn draw_item(
                 },
             );
         });
-        ui.painter().rect_stroke(
-            response.rect.expand(1.0),
-            6,
-            Stroke::new(2.0, theme.foreground),
-            egui::StrokeKind::Outside,
-        );
     }
     entries.push(ItemEntry {
         row_id: response.id,

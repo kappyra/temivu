@@ -77,7 +77,9 @@ impl<'a> Breadcrumb<'a> {
                     .size(self.theme.typography.body.size)
                     .color(color);
                 let response: Response = if item.interactive {
-                    let response = ui.add(egui::Button::new(text).frame(false));
+                    let response = crate::button::press_native(ui, self.theme, |ui| {
+                        ui.add(egui::Button::new(text).frame(false))
+                    });
                     ui.ctx().accesskit_node_builder(response.id, |node| {
                         node.set_role(egui::accesskit::Role::Link);
                         if item.current {

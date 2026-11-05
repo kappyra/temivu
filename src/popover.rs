@@ -1,5 +1,5 @@
-//! Experimental anchored popover. Nested overlays, motion and full parity remain open.
-use egui::{Id, InnerResponse, Key, Popup, PopupCloseBehavior, Response, Ui};
+//! Spring-driven anchored popover; nested-overlay and full upstream parity remain unverified.
+use egui::{Id, InnerResponse, Key, Response, Ui};
 
 /// A caller-controlled, non-modal anchored popover.
 ///
@@ -23,6 +23,11 @@ pub struct Popover<'a> {
     label: &'a str,
     open: &'a mut bool,
     focus_on_open: bool,
+    match_compact_trigger: bool,
+    width: Option<f32>,
+    frame: Option<egui::Frame>,
+    liquid: Option<crate::liquid::LiquidStyle>,
+    theme: Option<&'a crate::Theme>,
 }
 
 impl<'a> Popover<'a> {
@@ -32,11 +37,38 @@ impl<'a> Popover<'a> {
             label,
             open,
             focus_on_open: false,
+            match_compact_trigger: false,
+            width: None,
+            frame: None,
+            liquid: None,
+            theme: None,
         }
     }
     /// Focus the returned content response when the popup opens with anchor focus.
     pub fn focus_on_open(mut self, focus: bool) -> Self {
         self.focus_on_open = focus;
+        self
+    }
+    pub(crate) fn match_compact_trigger(mut self) -> Self {
+        self.match_compact_trigger = true;
+        self
+    }
+    /// Preferred surface width, capped to the viewport when shown.
+    pub fn width(mut self, width: f32) -> Self {
+        self.width = width.is_finite().then_some(width.max(1.0));
+        self
+    }
+    /// Reuse egui's frame options for padding, border, corners and shadow.
+    pub fn frame(mut self, frame: egui::Frame) -> Self {
+        self.frame = Some(frame);
+        self
+    }
+    pub fn liquid(mut self, motion: crate::liquid::LiquidStyle) -> Self {
+        self.liquid = Some(motion);
+        self
+    }
+    pub fn theme(mut self, theme: &'a crate::Theme) -> Self {
+        self.theme = Some(theme);
         self
     }
     pub fn show(
@@ -54,11 +86,29 @@ impl<'a> Popover<'a> {
         let escape = ctx.input(|input| input.key_pressed(Key::Escape));
         let keyboard_activate =
             ctx.input(|input| input.key_pressed(Key::Enter) || input.key_pressed(Key::Space));
-        let result = Popup::from_response(anchor)
-            .id(self.id)
-            .open_bool(self.open)
-            .close_behavior(PopupCloseBehavior::CloseOnClickOutside)
-            .show(content);
+        let theme = self
+            .theme
+            .cloned()
+            .unwrap_or_else(|| crate::surface::context_theme(ctx));
+        let frame = self
+            .frame
+            .unwrap_or_else(|| crate::surface::popup_frame(&theme, 12));
+        let result = crate::liquid::popup(
+            anchor,
+            self.id,
+            self.open,
+            crate::liquid::PopupSurface {
+                match_compact_trigger: self.match_compact_trigger,
+                width: self.width,
+                frame,
+                motion: self
+                    .liquid
+                    .unwrap_or_else(|| crate::liquid::LiquidStyle::context_default(ctx)),
+                close_behavior: egui::PopupCloseBehavior::CloseOnClickOutside,
+            },
+            &theme,
+            content,
+        );
         let focused_in_popup = result.as_ref().and_then(|popup| {
             focused_before.filter(|id| {
                 ctx.read_response(*id)

@@ -59,7 +59,14 @@ fn outside_click_dismisses_without_refocusing_anchor() {
     harness.get_by_label("Options").click();
     harness.run();
     assert!(harness.state().0);
-    harness.get_by_label("Other").click();
+    // The new detached surface overlaps the lower edge of this tiny fixture's
+    // button. Click its visible top-left corner, which is genuinely outside.
+    let outside = harness.get_by_label("Other").rect().left_top() + egui::vec2(2.0, 2.0);
+    harness.hover_at(outside);
+    harness.step();
+    harness.drag_at(outside);
+    harness.step();
+    harness.drop_at(outside);
     harness.run();
     assert!(!harness.state().0);
     assert!(!harness.get_by_label("Options").is_focused());

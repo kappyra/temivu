@@ -233,35 +233,51 @@ impl<'a> Item<'a> {
             );
             let active = enabled
                 && (self.selected || response.hovered() || response.is_pointer_button_down_on());
-            let fill = if active {
-                appearance.active_fill
-            } else {
-                appearance.idle_fill
-            };
-            let title_color = if active {
+            let amount = crate::motion::spring_bool(
+                ui.ctx(),
+                response.id.with("item-selection"),
+                active,
+                theme,
+            )
+            .clamp(0.0, 1.0);
+            let press = crate::motion_controls::press_amount(&response, theme);
+            let visual = container.scale_from_center(1.0 - 0.028 * press);
+            let radius = appearance.corner_radius as u8;
+            let fill = egui::Color32::from(
+                egui::Rgba::from(appearance.idle_fill) * (1.0 - amount)
+                    + egui::Rgba::from(appearance.active_fill) * amount,
+            );
+            let title_color = if amount > 0.5 {
                 active_title_color
             } else {
                 title_color
             };
-            let subtitle_color = if active {
+            let subtitle_color = if amount > 0.5 {
                 active_subtitle_color
             } else {
                 subtitle_color
             };
-            ui.painter().rect(
-                container,
-                appearance.corner_radius,
-                fill,
-                appearance.stroke,
-                StrokeKind::Inside,
-            );
-            if response.has_focus() {
-                ui.painter().rect_stroke(
-                    container,
-                    appearance.corner_radius,
-                    Stroke::new(2.0, theme.primary),
+            ui.painter().add(crate::motion::press_shape(
+                egui::epaint::RectShape::new(
+                    visual,
+                    radius,
+                    fill,
+                    appearance.stroke,
                     StrokeKind::Inside,
-                );
+                ),
+                press,
+            ));
+            crate::motion::remember_anchor(&response, visual);
+            if response.has_focus() {
+                ui.painter().add(crate::motion::press_shape(
+                    egui::epaint::RectShape::stroke(
+                        visual,
+                        radius,
+                        Stroke::new(2.0, theme.primary),
+                        StrokeKind::Inside,
+                    ),
+                    press,
+                ));
             }
             let mut y = rect.center().y - text_height / 2.0;
             let x = container.left() + appearance.content_padding.x;

@@ -44,6 +44,7 @@ pub struct Alert<'a> {
     live: bool,
     theme: &'a Theme,
     touch: bool,
+    radius: u8,
 }
 impl<'a> Alert<'a> {
     pub fn new(title: &'a str, theme: &'a Theme) -> Self {
@@ -54,7 +55,8 @@ impl<'a> Alert<'a> {
             style: AlertStyle::from_theme(theme, AlertVariant::Primary),
             live: true,
             theme,
-            touch: false,
+            touch: theme.touch,
+            radius: 12,
         }
     }
     pub fn subtitle(mut self, subtitle: &'a str) -> Self {
@@ -63,6 +65,11 @@ impl<'a> Alert<'a> {
     }
     pub fn icon(mut self, icon: &'a str) -> Self {
         self.icon = icon;
+        self
+    }
+    /// Override the alert surface corner radius.
+    pub fn radius(mut self, radius: u8) -> Self {
+        self.radius = radius;
         self
     }
     pub fn style(mut self, style: AlertStyle) -> Self {
@@ -82,7 +89,7 @@ impl<'a> Alert<'a> {
         let result = Frame::new()
             .fill(self.style.fill)
             .stroke(Stroke::new(1.0, self.style.border))
-            .corner_radius(10)
+            .corner_radius(self.radius)
             .inner_margin(self.style.padding)
             .show(ui, |ui| {
                 // Forui `FAlertStyle`: icon is body.md sized (16 desktop / 18
@@ -97,11 +104,33 @@ impl<'a> Alert<'a> {
                 };
                 ui.horizontal_top(|ui| {
                     ui.spacing_mut().item_spacing.x = 0.0;
-                    ui.label(
-                        RichText::new(self.icon)
-                            .size(icon_size)
-                            .color(self.style.icon),
-                    );
+                    if self.icon == "ⓘ" {
+                        let (rect, _) = ui.allocate_exact_size(
+                            egui::Vec2::splat(icon_size),
+                            egui::Sense::hover(),
+                        );
+                        let stroke = Stroke::new(1.5, self.style.icon);
+                        ui.painter()
+                            .circle_stroke(rect.center(), icon_size * 0.42, stroke);
+                        ui.painter().circle_filled(
+                            rect.center() - egui::vec2(0.0, icon_size * 0.16),
+                            1.0,
+                            self.style.icon,
+                        );
+                        ui.painter().line_segment(
+                            [
+                                rect.center() + egui::vec2(0.0, 0.0),
+                                rect.center() + egui::vec2(0.0, icon_size * 0.23),
+                            ],
+                            stroke,
+                        );
+                    } else {
+                        ui.label(
+                            RichText::new(self.icon)
+                                .size(icon_size)
+                                .color(self.style.icon),
+                        );
+                    }
                     ui.add_space(10.0);
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 2.0;

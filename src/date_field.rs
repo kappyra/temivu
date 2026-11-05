@@ -227,6 +227,7 @@ pub struct DateField<'a> {
     max_date: Date,
     today: Option<Date>,
     initial_month: Option<Date>,
+    liquid: Option<crate::liquid::LiquidStyle>,
     enabled: bool,
     id: Option<Id>,
 }
@@ -248,6 +249,7 @@ impl<'a> DateField<'a> {
             max_date: Calendar::default_max_date(),
             today: None,
             initial_month: None,
+            liquid: None,
             enabled: true,
             id: None,
         }
@@ -310,6 +312,12 @@ impl<'a> DateField<'a> {
         self
     }
 
+    /// Override the context's popup animation preset.
+    pub fn liquid(mut self, motion: crate::liquid::LiquidStyle) -> Self {
+        self.liquid = Some(motion);
+        self
+    }
+
     /// Disable the field and its button.
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
@@ -347,6 +355,7 @@ impl<'a> DateField<'a> {
             today,
             initial_month,
             enabled,
+            liquid,
             ..
         } = self;
         let hint = hint.unwrap_or(messages.date_field_hint);
@@ -387,15 +396,44 @@ impl<'a> DateField<'a> {
         let response = field_label.show(ui, |ui| {
             ui.horizontal(|ui| {
                 let available = ui.available_width();
-                let edit_width = (available - button_size.x - spacing).max(96.0);
+                let edit_width = (available - button_size.x - spacing).max(0.0);
                 let edit = ui.add_enabled(
                     enabled,
                     egui::TextEdit::singleline(&mut state.text)
                         .hint_text(hint)
                         .id(edit_id)
+                        .margin(egui::Margin::symmetric(10, 8))
                         .min_size(Vec2::new(edit_width, height)),
                 );
-                let button = ui.add_enabled(enabled, egui::Button::new("📅").min_size(button_size));
+                let button = crate::button::press_native(ui, theme, |ui| {
+                    ui.add_enabled(
+                        enabled,
+                        egui::Button::new("")
+                            .fill(theme.card)
+                            .stroke(egui::Stroke::new(1.0, theme.border))
+                            .min_size(button_size)
+                            .corner_radius(255),
+                    )
+                });
+                if ui.is_rect_visible(button.rect) {
+                    let icon =
+                        egui::Rect::from_center_size(button.rect.center(), Vec2::splat(16.0));
+                    let color = if enabled {
+                        theme.foreground
+                    } else {
+                        theme.muted_foreground
+                    };
+                    let stroke = egui::Stroke::new(1.5, color);
+                    ui.painter()
+                        .rect_stroke(icon.shrink(1.0), 3, stroke, egui::StrokeKind::Inside);
+                    ui.painter().line_segment(
+                        [
+                            egui::pos2(icon.left() + 2.0, icon.top() + 5.0),
+                            egui::pos2(icon.right() - 2.0, icon.top() + 5.0),
+                        ],
+                        stroke,
+                    );
+                }
                 ui.ctx().accesskit_node_builder(button.id, |node| {
                     node.set_label(labels.calendar_button);
                 });
@@ -406,7 +444,7 @@ impl<'a> DateField<'a> {
                 if !enabled {
                     state.open = false;
                 }
-                if state.open && enabled {
+                if enabled {
                     let mut calendar_state = ui
                         .data(|data| data.get_temp::<CalendarState>(calendar_key))
                         .unwrap_or_else(|| {
@@ -422,7 +460,13 @@ impl<'a> DateField<'a> {
                     }
                     let mut popover_open = state.open;
                     Popover::new(popover_id, labels.calendar_button, &mut popover_open)
+                        .theme(theme)
+                        .liquid(liquid.unwrap_or_else(|| {
+                            crate::liquid::LiquidStyle::context_default(ui.ctx())
+                        }))
                         .focus_on_open(true)
+                        .width((theme.sizes.calendar.max(40.0) * 7.0 + 32.0).min(340.0))
+                        .frame(crate::surface::popup_frame(theme, 16))
                         .show(&button, |ui| {
                             let mut calendar = Calendar::new(&mut calendar_state, theme)
                                 .bounds(min_date, max_date)

@@ -5,6 +5,20 @@ use egui_kittest::{
 use temivu::{Switch, Theme};
 
 #[test]
+fn touch_theme_gives_switch_a_larger_hit_target() {
+    let mut harness = Harness::builder().build_ui_state(
+        |ui, value| {
+            Switch::new(value, &Theme::mint_light().touch())
+                .label("Touch switch")
+                .show(ui);
+        },
+        false,
+    );
+    harness.run();
+    assert!(harness.get_by_label("Touch switch").rect().height() >= 44.0);
+}
+
+#[test]
 fn pointer_and_keyboard_change_the_caller_owned_value() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, value| {
@@ -167,12 +181,14 @@ fn unbroken_long_label_does_not_push_switch_offscreen() {
 }
 
 #[test]
-fn switch_track_and_thumb_follow_forui_cupertino_geometry() {
-    for (theme, track_fill) in [
-        (Theme::light(), Theme::light().secondary),
-        (Theme::light(), Theme::light().primary),
-    ] {
-        let checked = track_fill == theme.primary;
+fn capsule_thumb_is_round_and_moves_between_both_ends() {
+    for checked in [false, true] {
+        let theme = Theme::light();
+        let track_fill = if checked {
+            theme.primary
+        } else {
+            theme.secondary
+        };
         let mut harness = Harness::builder().build_ui(move |ui| {
             let mut value = checked;
             Switch::new(&mut value, &theme).show(ui);
@@ -193,10 +209,50 @@ fn switch_track_and_thumb_follow_forui_cupertino_geometry() {
             .shapes
             .iter()
             .find_map(|shape| match &shape.shape {
-                egui::Shape::Circle(circle) if circle.radius == 13.5 => Some(circle.center),
+                egui::Shape::Circle(circle) if circle.radius == 11.5 => Some(circle.center),
                 _ => None,
             })
-            .expect("27 point thumb");
+            .expect("round resting thumb");
         assert!(track.contains(thumb));
+        assert_eq!(thumb.x > track.center().x, checked);
+    }
+}
+
+#[test]
+fn capsule_thumb_stretches_while_rail_keeps_a_round_thumb() {
+    for style in [temivu::SwitchStyle::Capsule, temivu::SwitchStyle::Rail] {
+        let theme = Theme::light();
+        let mut harness = Harness::builder().build_ui_state(
+            move |ui, value| {
+                Switch::new(value, &theme).style(style).show(ui);
+            },
+            false,
+        );
+        harness
+            .ctx
+            .all_styles_mut(|style| style.animation_time = 0.2);
+        harness.input_mut().time = Some(0.0);
+        harness.step();
+        *harness.state_mut() = true;
+        harness.input_mut().time = Some(1.0);
+        harness.step();
+        let stretched = (1..=9).any(|frame| {
+            harness.input_mut().time = Some(1.0 + f64::from(frame) * 0.02);
+            harness.step();
+            harness.output().shapes.iter().any(|shape| {
+                matches!(
+                    &shape.shape, egui::Shape::Rect(rect)
+                        if rect.fill == Theme::light().card && rect.rect.width() > 28.0
+                            && (rect.rect.height() - 23.0).abs() < 0.1
+                )
+            })
+        });
+        assert_eq!(stretched, style == temivu::SwitchStyle::Capsule);
+        if style == temivu::SwitchStyle::Rail {
+            assert!(harness.output().shapes.iter().any(|shape| matches!(
+                &shape.shape, egui::Shape::Circle(circle)
+                    if circle.fill == Theme::light().card && circle.radius == 13.0
+            )));
+        }
     }
 }

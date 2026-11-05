@@ -2,7 +2,29 @@ use egui_kittest::{
     Harness,
     kittest::{NodeT, Queryable},
 };
-use temivu::{Calendar, CalendarLabels, CalendarState, Date, Dialog, Theme};
+use temivu::{Calendar, CalendarLabels, CalendarState, CalendarStyle, Date, Dialog, Theme};
+
+#[test]
+fn calendar_supports_custom_selection_color_and_touch_size() {
+    let selected = date(2024, 7, 15);
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(500.0, 600.0))
+        .build_ui_state(
+            |ui, state: &mut CalendarState| {
+                let theme = Theme::mint_light().touch();
+                let mut style = CalendarStyle::from_theme(&theme);
+                style.selected_fill = egui::Color32::from_rgb(30, 60, 120);
+                style.radius = 12;
+                Calendar::new(state, &theme).style(style).show(ui);
+            },
+            CalendarState::new(selected, Some(selected)),
+        );
+    harness.run();
+    let cell =
+        harness.get_by_role_and_label(egui::accesskit::Role::GridCell, "Monday, July 15, 2024");
+    assert!(cell.rect().width() >= 44.0);
+    assert!(harness.output().shapes.iter().any(|shape| matches!(&shape.shape, egui::Shape::Rect(rect) if rect.fill == egui::Color32::from_rgb(30, 60, 120))));
+}
 
 fn date(year: i32, month: u8, day: u8) -> Date {
     Date::new(year, month, day).expect("test date is valid")
@@ -14,7 +36,10 @@ fn build(state: CalendarState, today: Date) -> Harness<'static, CalendarState> {
         .build_ui_state(
             move |ui, state: &mut CalendarState| {
                 let theme = Theme::light();
-                Calendar::new(state, &theme).today(today).show(ui);
+                Calendar::new(state, &theme)
+                    .year_navigation(true)
+                    .today(today)
+                    .show(ui);
             },
             state,
         )
@@ -557,7 +582,10 @@ fn picker_focuses_the_selected_month_and_exposes_selected_state() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, state: &mut CalendarState| {
             let theme = Theme::light();
-            Calendar::new(state, &theme).today(today).show(ui);
+            Calendar::new(state, &theme)
+                .year_navigation(true)
+                .today(today)
+                .show(ui);
         },
         CalendarState::new(today, None),
     );
@@ -585,7 +613,10 @@ fn opening_the_year_view_shows_the_page_with_the_visible_year() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, state: &mut CalendarState| {
             let theme = Theme::light();
-            Calendar::new(state, &theme).today(today).show(ui);
+            Calendar::new(state, &theme)
+                .year_navigation(true)
+                .today(today)
+                .show(ui);
         },
         CalendarState::new(today, None),
     );

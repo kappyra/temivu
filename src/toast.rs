@@ -192,9 +192,19 @@ impl<'a> Toast<'a> {
                                 );
                             }
                         });
-                        let dismiss = ui.add(
-                            egui::Button::new(self.dismiss_label).min_size(egui::Vec2::splat(32.0)),
-                        );
+                        let dismiss = crate::button::press_native(ui, self.theme, |ui| {
+                            ui.add(
+                                egui::Button::new(self.dismiss_label)
+                                    .fill(self.theme.card)
+                                    .stroke(Stroke::new(1.0, self.theme.border))
+                                    .corner_radius(255)
+                                    .min_size(egui::Vec2::splat(if self.theme.touch {
+                                        44.0
+                                    } else {
+                                        32.0
+                                    })),
+                            )
+                        });
                         if let Some(label) = self.dismiss_accessible_label {
                             ui.ctx().accesskit_node_builder(dismiss.id, |node| {
                                 node.set_label(label);
@@ -220,6 +230,7 @@ impl<'a> Toast<'a> {
             ui.ctx().request_repaint_after(delay);
         }
         if !self.state.visible {
+            crate::motion::reset(ui.ctx(), motion_id);
             response.mark_changed();
             ui.ctx().request_repaint();
         }

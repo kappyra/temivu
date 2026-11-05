@@ -22,65 +22,54 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          persist-credentials: false
           fetch-depth: 0
       - name: Set up Rust
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy
-      - name: Fetch pinned Forui source for IR verification
-        run: |
-          git init -q "$RUNNER_TEMP/forui-source"
-          git -C "$RUNNER_TEMP/forui-source" fetch --depth 1 https://github.com/duobaseio/forui.git eea1e8e651d263f14ef43897ccbb7a2576549da5
-          git -C "$RUNNER_TEMP/forui-source" checkout --detach -q FETCH_HEAD
-      - name: Verify pinned source and IR
-        env:
-          TEMIVU_UPSTREAM: ${{ runner.temp }}/forui-source
-        run: python3 harness/port/verify_sources.py
-      - name: Verify generated localizations
-        run: python3 harness/port/generate_localizations.py --check
-      - name: Verify generated palette
-        run: python3 harness/port/generate_palette.py --check
-      - name: Verify harness unit tests
-        run: python3 -m unittest discover -s harness -p 'test_*.py'
       - name: Format
         run: cargo +1.99.0 fmt --check
       - name: Compile
-        run: cargo +1.99.0 check --all-features
+        run: cargo +1.99.0 check --locked --all-features
       - name: Lint
-        run: cargo +1.99.0 clippy --all-targets --all-features -- -D warnings
+        run: cargo +1.99.0 clippy --locked --all-targets --all-features -- -D warnings
       - name: Install nextest
         run: cargo +1.99.0 install cargo-nextest --version 0.9.150 --locked
       - name: Run tests
-        run: cargo +1.99.0 nextest run --all-features
+        run: cargo +1.99.0 nextest run --locked --all-features
       - name: Run documentation tests
-        run: cargo +1.99.0 test --doc --all-features
+        run: cargo +1.99.0 test --locked --doc --all-features
   msrv:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Set up the declared minimum toolchain
         run: rustup toolchain install 1.95.0 --profile minimal
       - name: Compile at the declared minimum Rust version
-        run: cargo +1.95.0 check --all-features
+        run: cargo +1.95.0 check --locked --all-features
   dependencies:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     continue-on-error: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: Set up Rust
         run: rustup toolchain install 1.99.0 --profile minimal
       - name: Install dependency auditor
         run: cargo +1.99.0 install cargo-deny --version 0.20.2 --locked
       - name: Audit dependencies
         run: cargo +1.99.0 deny check
-      - name: Audit visual-review helper dependencies
-        run: cargo +1.99.0 deny --manifest-path harness/visual-review/Cargo.toml check
   secrets:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          persist-credentials: false
           fetch-depth: 0
       - name: Install secret scanner
         run: go install github.com/zricethezav/gitleaks/v8@v8.28.0

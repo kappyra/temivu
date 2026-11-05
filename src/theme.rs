@@ -191,6 +191,10 @@ pub enum Easing {
     EaseOut,
     /// Accelerating then decelerating quadratic curve.
     EaseInOut,
+    /// A soft, fast start that settles gradually without overshooting.
+    Emphasized,
+    /// A critically damped spring response, normalized to settle at one.
+    Spring,
 }
 
 impl Easing {
@@ -213,6 +217,11 @@ impl Easing {
                 } else {
                     1.0 - 2.0 * (1.0 - t) * (1.0 - t)
                 }
+            }
+            Self::Emphasized => 1.0 - (1.0 - t).powi(4),
+            Self::Spring => {
+                let response = 1.0 - (1.0 + 8.0 * t) * (-8.0 * t).exp();
+                response / (1.0 - 9.0 * (-8.0_f32).exp())
             }
         }
     }
@@ -310,6 +319,23 @@ pub struct Theme {
 }
 
 impl Theme {
+    /// Install the bundled Inter font ahead of egui's default proportional
+    /// fallbacks. Call once during setup; this replaces the context's current
+    /// font definitions. The font is distributed under the SIL Open Font License.
+    pub fn install_inter(ctx: &egui::Context) {
+        let mut fonts = egui::FontDefinitions::default();
+        fonts.font_data.insert(
+            "temivu-inter".to_owned(),
+            egui::FontData::from_static(include_bytes!("../third_party/inter/Inter.ttf")).into(),
+        );
+        fonts
+            .families
+            .entry(egui::FontFamily::Proportional)
+            .or_default()
+            .insert(0, "temivu-inter".to_owned());
+        ctx.set_fonts(fonts);
+    }
+
     /// Forui's neutral light palette with the desktop token scale.
     pub fn light() -> Self {
         crate::generated_palette::light()
@@ -318,6 +344,52 @@ impl Theme {
     /// Forui's neutral dark palette with the desktop token scale.
     pub fn dark() -> Self {
         crate::generated_palette::dark()
+    }
+
+    /// A calm light palette with a mint accent and semantic surfaces.
+    ///
+    /// The Forui-derived [`Self::light`] palette remains available unchanged.
+    pub fn mint_light() -> Self {
+        let mut theme = Self::light();
+        theme.background = Color32::from_rgb(247, 248, 250);
+        theme.card = Color32::WHITE;
+        theme.foreground = Color32::from_rgb(38, 50, 56);
+        theme.primary = Color32::from_rgb(109, 221, 181);
+        theme.primary_foreground = Color32::from_rgb(16, 46, 34);
+        theme.secondary = Color32::from_rgb(236, 243, 240);
+        theme.secondary_foreground = theme.foreground;
+        theme.muted = Color32::from_rgb(238, 240, 243);
+        theme.muted_foreground = Color32::from_rgb(70, 84, 94);
+        theme.border = Color32::from_rgb(221, 226, 231);
+        theme.destructive = Color32::from_rgb(180, 35, 53);
+        theme.destructive_foreground = Color32::WHITE;
+        theme.error = theme.destructive;
+        theme.error_foreground = Color32::WHITE;
+        theme.typography = Typography::desktop(theme.foreground, theme.muted_foreground);
+        theme.motion.easing = Easing::Spring;
+        theme
+    }
+
+    /// A dark companion to [`Self::mint_light`] with the same mint accent.
+    pub fn mint_dark() -> Self {
+        let mut theme = Self::dark();
+        theme.background = Color32::from_rgb(32, 39, 46);
+        theme.card = Color32::from_rgb(43, 52, 61);
+        theme.foreground = Color32::from_rgb(241, 245, 247);
+        theme.primary = Color32::from_rgb(109, 221, 181);
+        theme.primary_foreground = Color32::from_rgb(16, 46, 34);
+        theme.secondary = Color32::from_rgb(53, 65, 75);
+        theme.secondary_foreground = theme.foreground;
+        theme.muted = theme.secondary;
+        theme.muted_foreground = Color32::from_rgb(207, 220, 226);
+        theme.border = Color32::from_rgb(74, 88, 100);
+        theme.destructive = Color32::from_rgb(255, 154, 167);
+        theme.destructive_foreground = Color32::from_rgb(32, 39, 46);
+        theme.error = theme.destructive;
+        theme.error_foreground = theme.destructive_foreground;
+        theme.typography = Typography::desktop(theme.foreground, theme.muted_foreground);
+        theme.motion.easing = Easing::Spring;
+        theme
     }
 
     /// Return this theme with Forui's touch token scale: larger control heights
@@ -614,17 +686,77 @@ impl Theme {
         } else {
             egui::Visuals::light()
         };
+        // A palette change must not rebuild the font atlas. egui's default
+        // dark/light transfer functions differ and invalidate all rasterized fonts.
+        visuals.text_options = ctx.global_style().visuals.text_options;
         visuals.panel_fill = self.background;
         visuals.window_fill = self.card;
         visuals.override_text_color = Some(self.foreground);
         visuals.selection.bg_fill = self.primary;
         visuals.selection.stroke.color = self.primary_foreground;
+        visuals.extreme_bg_color = self.card;
+        visuals.faint_bg_color = self.muted;
+        visuals.menu_corner_radius = 32.into();
+        visuals.popup_shadow = egui::epaint::Shadow {
+            offset: [0, 6],
+            blur: 20,
+            spread: 0,
+            color: Color32::from_black_alpha(if self.dark { 70 } else { 22 }),
+        };
+        visuals.widgets.open = visuals.widgets.inactive;
+        visuals.widgets.open.bg_fill = self.card;
+        visuals.widgets.open.weak_bg_fill = self.card;
+        visuals.widgets.open.bg_stroke = egui::Stroke::new(1.5, self.foreground);
+        visuals.widgets.noninteractive.bg_fill = self.card;
+        visuals.widgets.noninteractive.bg_stroke = egui::Stroke::new(1.0, self.border);
+        visuals.widgets.inactive.bg_fill = self.card;
+        visuals.widgets.inactive.weak_bg_fill = self.card;
+        visuals.widgets.inactive.bg_stroke = egui::Stroke::new(1.0, self.border);
+        visuals.widgets.hovered.bg_fill = self.secondary;
+        visuals.widgets.hovered.weak_bg_fill = self.secondary;
+        visuals.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, self.muted_foreground);
+        visuals.widgets.active.bg_fill = self.muted;
+        visuals.widgets.active.weak_bg_fill = self.muted;
+        visuals.widgets.active.bg_stroke = egui::Stroke::new(1.0, self.primary);
+        for widget in [
+            &mut visuals.widgets.noninteractive,
+            &mut visuals.widgets.inactive,
+            &mut visuals.widgets.hovered,
+            &mut visuals.widgets.active,
+            &mut visuals.widgets.open,
+        ] {
+            widget.fg_stroke.color = self.foreground;
+            widget.corner_radius = 16.into();
+        }
         // Write both stored theme styles so an operating-system theme change
         // cannot silently replace the explicit Temivu palette with egui's.
         ctx.set_visuals_of(egui::Theme::Light, visuals.clone());
         ctx.set_visuals_of(egui::Theme::Dark, visuals);
         let typography = self.typography;
-        ctx.all_styles_mut(|style| typography.apply(style));
+        ctx.all_styles_mut(|style| {
+            typography.apply(style);
+            style.spacing.menu_margin = egui::Margin::same(10);
+            style.spacing.scroll = egui::style::ScrollStyle {
+                floating: true,
+                bar_width: 9.0,
+                floating_width: 4.0,
+                floating_allocated_width: 5.0,
+                bar_inner_margin: 3.0,
+                handle_min_length: 34.0,
+                foreground_color: true,
+                dormant_background_opacity: 0.0,
+                active_background_opacity: 0.06,
+                interact_background_opacity: 0.09,
+                dormant_handle_opacity: 0.28,
+                active_handle_opacity: 0.54,
+                interact_handle_opacity: 0.82,
+                fade: egui::style::ScrollFadeStyle {
+                    strength: 0.0,
+                    size: 0.0,
+                },
+                ..egui::style::ScrollStyle::floating()
+            };
+        });
     }
 }
 

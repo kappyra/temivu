@@ -5,6 +5,18 @@ use egui_kittest::{
 use temivu::{Checkbox, Theme};
 
 #[test]
+fn touch_theme_expands_checkbox_hit_target() {
+    let mut harness = Harness::builder().build_ui_state(
+        |ui, value| {
+            Checkbox::new(value, &Theme::mint_light().touch(), "Touch checkbox").show(ui);
+        },
+        false,
+    );
+    harness.run();
+    assert!(harness.get_by_label("Touch checkbox").rect().height() >= 44.0);
+}
+
+#[test]
 fn pointer_toggles_and_disabled_ignores_input() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, values: &mut [bool; 2]| {
@@ -59,10 +71,10 @@ fn keyboard_space_toggles_checkbox() {
 }
 
 #[test]
-fn checkbox_uses_forui_box_size_radius_and_border() {
+fn checkbox_has_a_rounded_box_and_visible_border() {
     for (theme, touch, expected) in [
-        (Theme::light(), false, 16.0),
-        (Theme::light().touch(), true, 20.0),
+        (Theme::light(), false, 20.0),
+        (Theme::light().touch(), true, 22.0),
     ] {
         let fill = theme.card;
         let mut harness = Harness::builder().build_ui(move |ui| {
@@ -80,7 +92,7 @@ fn checkbox_uses_forui_box_size_radius_and_border() {
                 egui::Shape::Rect(rect)
                     if rect.fill == fill
                         && rect.stroke.width > 0.0
-                        && rect.corner_radius.nw == 4 =>
+                        && rect.corner_radius.nw == 6 =>
                 {
                     Some(rect.rect)
                 }

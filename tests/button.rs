@@ -43,6 +43,15 @@ fn sizes_match_upstream_tokens() {
 }
 
 #[test]
+fn touch_theme_uses_touch_button_size_by_default() {
+    let mut harness = Harness::builder().build_ui(|ui| {
+        Button::new("Touch action", &Theme::mint_light().touch()).show(ui);
+    });
+    harness.run();
+    assert!(harness.get_by_label("Touch action").rect().height() >= 44.0);
+}
+
+#[test]
 fn keyboard_focus_and_enter_activate_button() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, clicked| {
@@ -191,4 +200,56 @@ fn icon_button_remains_clickable_in_a_narrow_parent() {
         "the icon button should fit the narrow parent by truncating its single text job, got {}",
         rect.width()
     );
+}
+
+#[test]
+fn button_deforms_while_held_without_shrinking_the_hit_area() {
+    let theme = Theme::light();
+    let mut harness = Harness::builder().build_ui(|ui| {
+        Button::new("Spring", &theme).show(ui);
+    });
+    harness
+        .ctx
+        .all_styles_mut(|style| style.animation_time = 0.2);
+    let size = |harness: &Harness<'_, ()>| {
+        harness
+            .output()
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Rect(rect) if rect.fill.a() == 255 && rect.corner_radius.nw > 0 => {
+                    Some((rect.rect.width(), f32::from(rect.corner_radius.nw)))
+                }
+                egui::Shape::Path(path) if path.fill.a() == 255 => {
+                    let bounds = egui::Rect::from_points(&path.points);
+                    let left_at_top = path
+                        .points
+                        .iter()
+                        .filter(|point| point.y == bounds.top())
+                        .map(|point| point.x)
+                        .fold(f32::INFINITY, f32::min);
+                    Some((bounds.width(), left_at_top - bounds.left()))
+                }
+                _ => None,
+            })
+            .unwrap()
+    };
+    let before = size(&harness);
+    let hit = harness.get_by_label("Spring").rect();
+    let center = hit.center();
+    harness.hover_at(center);
+    harness.input_mut().time = Some(2.0);
+    harness.step();
+    harness.drag_at(center);
+    harness.input_mut().time = Some(2.01);
+    harness.step();
+    harness.input_mut().time = Some(2.12);
+    harness.step();
+    let pressed = size(&harness);
+    harness.input_mut().time = Some(2.121);
+    harness.step();
+    let next = size(&harness);
+    assert!((next.1 - pressed.1).abs() > 0.0 && (next.1 - pressed.1).abs() < 1.0);
+    assert!(pressed.0 < before.0 - 1.0 && pressed.1 < before.1 - 2.0);
+    assert_eq!(harness.get_by_label("Spring").rect(), hit);
 }

@@ -186,7 +186,7 @@ fn item_size(theme: &Theme) -> f32 {
 }
 
 /// Forui item decoration: transparent idle, `secondary` on hover/press and
-/// `primary` when selected, with the md radius and no border.
+/// `primary` when selected, with a spring-driven selection marker.
 fn pagination_visuals(ui: &mut Ui, theme: &Theme) {
     ui.spacing_mut().button_padding = egui::vec2(8.0, 0.0);
     ui.spacing_mut().item_spacing.x = 4.0;
@@ -197,7 +197,7 @@ fn pagination_visuals(ui: &mut Ui, theme: &Theme) {
         &mut widgets.active,
         &mut widgets.noninteractive,
     ] {
-        visual.corner_radius = 10.into();
+        visual.corner_radius = 255.into();
         visual.bg_stroke = Stroke::NONE;
     }
     widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
@@ -243,24 +243,28 @@ fn draw_pagination(
     let max_width = ui.available_width().max(32.0);
     let height = item_size(theme);
     let body_size = theme.typography.body.size;
+    let page_at_start = state.page;
     // Allocate each whole control before drawing it so a scope cannot overflow its row.
     ui.horizontal_wrapped(|ui| {
         pagination_visuals(ui, theme);
+        ui.spacing_mut().item_spacing.y = 6.0;
         let width = button_width(ui, theme, previous_label, max_width);
         let previous = button_slot(ui, theme, width, |ui| {
             ui.scope_builder(egui::UiBuilder::new().id(id.with("previous")), |ui| {
-                ui.add_enabled(
-                    state.page > 0,
-                    egui::Button::new(
-                        RichText::new(previous_label)
-                            .size(body_size)
-                            .color(theme.foreground),
+                crate::button::press_native(ui, theme, |ui| {
+                    ui.add_enabled(
+                        state.page > 0,
+                        egui::Button::new(
+                            RichText::new(previous_label)
+                                .size(body_size)
+                                .color(theme.foreground),
+                        )
+                        .frame_when_inactive(false)
+                        .truncate()
+                        .corner_radius(255)
+                        .min_size(egui::vec2(width, height)),
                     )
-                    .frame_when_inactive(false)
-                    .truncate()
-                    .corner_radius(10)
-                    .min_size(egui::vec2(width, height)),
-                )
+                })
             })
             .inner
         });
@@ -269,6 +273,8 @@ fn draw_pagination(
         if previous.clicked() {
             state.previous();
         }
+        let mut active = None;
+        let mut row_bounds = egui::Rect::NOTHING;
         for item in state.items() {
             match item {
                 PageItem::Ellipsis => {
@@ -297,14 +303,14 @@ fn draw_pagination(
                         .selected(selected)
                         .frame_when_inactive(selected)
                         .truncate()
-                        .corner_radius(10)
+                        .corner_radius(255)
                         .min_size(egui::vec2(width, height));
                     if selected {
                         button = button.fill(theme.primary);
                     }
                     let response = button_slot(ui, theme, width, |ui| {
                         ui.scope_builder(egui::UiBuilder::new().id(id.with(("page", page))), |ui| {
-                            ui.add(button)
+                            crate::button::press_native(ui, theme, |ui| ui.add(button))
                         })
                         .inner
                     });
@@ -316,27 +322,95 @@ fn draw_pagination(
                             |messages| messages.page_label(page + 1),
                         ));
                     });
+                    let rect = response.rect;
+                    if (row_bounds.center().y - rect.center().y).abs() < height * 0.5 {
+                        row_bounds = row_bounds.union(rect);
+                    } else {
+                        row_bounds = rect;
+                    }
+                    if selected {
+                        active = Some((rect, row_bounds));
+                    } else if let Some((selected_rect, bounds)) = &mut active
+                        && (selected_rect.center().y - rect.center().y).abs() < height * 0.5
+                    {
+                        *bounds = row_bounds;
+                    }
+                    if response.has_focus() {
+                        ui.painter().rect_stroke(
+                            response.rect.shrink(1.0),
+                            10,
+                            Stroke::new(2.0, theme.foreground),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
                     if response.clicked() {
                         state.page = page;
                     }
                 }
             }
         }
+        if let Some((rect, bounds)) = active {
+            let origin = previous.rect.min;
+            let row = rect.bottom() - origin.y;
+            let target = rect.center().x - origin.x;
+            let row_key = id.with("indicator-row");
+            let x_key = id.with("indicator-x");
+            let same_row = ui
+                .ctx()
+                .data(|data| data.get_temp::<f32>(row_key))
+                .is_some_and(|last| (row - last).abs() < 0.5);
+            if !same_row {
+                crate::motion::reset(ui.ctx(), x_key);
+            }
+            ui.ctx().data_mut(|data| data.insert_temp(row_key, row));
+            let x = origin.x + crate::motion::spring_f32(ui.ctx(), x_key, target, target, theme);
+            let lift = 1.0 - ((x - rect.center().x).abs() / height).min(1.0);
+            let radius = (height * 0.35).min(bounds.width() * 0.5);
+            let baseline = rect.bottom() + 2.0;
+            ui.painter().rect_filled(
+                egui::Rect::from_min_max(
+                    egui::pos2(bounds.left(), baseline - 1.5),
+                    egui::pos2(bounds.right(), baseline + 1.5),
+                ),
+                2,
+                theme.muted_foreground.gamma_multiply(0.4),
+            );
+            let center = x.clamp(
+                bounds.left() + radius,
+                (bounds.right() - radius).max(bounds.left() + radius),
+            );
+            let mound = egui::Rect::from_min_max(
+                egui::pos2(center - radius, baseline - 5.0 - lift * 4.0),
+                egui::pos2(center + radius, baseline + 1.5),
+            );
+            ui.painter().rect_filled(
+                mound,
+                egui::CornerRadius {
+                    nw: 9,
+                    ne: 9,
+                    sw: 2,
+                    se: 2,
+                },
+                theme.primary,
+            );
+        }
         let width = button_width(ui, theme, next_label, max_width);
         let next = button_slot(ui, theme, width, |ui| {
             ui.scope_builder(egui::UiBuilder::new().id(id.with("next")), |ui| {
-                ui.add_enabled(
-                    state.page + 1 < state.pages,
-                    egui::Button::new(
-                        RichText::new(next_label)
-                            .size(body_size)
-                            .color(theme.foreground),
+                crate::button::press_native(ui, theme, |ui| {
+                    ui.add_enabled(
+                        state.page + 1 < state.pages,
+                        egui::Button::new(
+                            RichText::new(next_label)
+                                .size(body_size)
+                                .color(theme.foreground),
+                        )
+                        .frame_when_inactive(false)
+                        .truncate()
+                        .corner_radius(255)
+                        .min_size(egui::vec2(width, height)),
                     )
-                    .frame_when_inactive(false)
-                    .truncate()
-                    .corner_radius(10)
-                    .min_size(egui::vec2(width, height)),
-                )
+                })
             })
             .inner
         });
@@ -346,4 +420,8 @@ fn draw_pagination(
             state.next();
         }
     });
+    ui.add_space(4.0);
+    if page_at_start != state.page {
+        ui.ctx().request_repaint();
+    }
 }

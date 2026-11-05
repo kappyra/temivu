@@ -30,17 +30,24 @@ impl CardStyle {
 /// Decorates arbitrary immediate-mode content without imposing padding.
 pub struct Card {
     style: CardStyle,
+    inner_padding: Option<Margin>,
 }
 
 impl Card {
     pub fn new(theme: &Theme) -> Self {
         Self {
             style: CardStyle::from_theme(theme),
+            inner_padding: None,
         }
     }
 
     pub fn style(mut self, style: CardStyle) -> Self {
         self.style = style;
+        self
+    }
+    /// Opt in to padding inside the card surface.
+    pub fn inner_padding(mut self, padding: Margin) -> Self {
+        self.inner_padding = Some(padding);
         self
     }
 
@@ -54,6 +61,7 @@ impl Card {
             .fill(self.style.fill)
             .stroke(self.style.border)
             .corner_radius(self.style.corner_radius)
+            .inner_margin(self.inner_padding.unwrap_or(Margin::ZERO))
             .show(ui, |ui| content(ui, self.style))
     }
 }

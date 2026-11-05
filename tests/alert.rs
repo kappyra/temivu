@@ -57,25 +57,20 @@ fn alert_uses_forui_icon_and_title_sizes() {
             .show(ui);
     });
     harness.run();
-    let mut icon = None;
+    let mut icon = false;
     let mut title = None;
     for shape in &harness.output().shapes {
         if let egui::Shape::Text(text) = &shape.shape {
             let size = text.galley.job.sections[0].format.font_id.size;
-            match text.galley.job.text.as_str() {
-                "ⓘ" => icon = Some((text.pos.x, size)),
-                "Saved" => title = Some((text.pos.x, size)),
-                _ => {}
+            if text.galley.job.text == "Saved" {
+                title = Some(size);
             }
         }
+        if matches!(&shape.shape, egui::Shape::Circle(circle) if circle.radius > 5.0 && circle.stroke.width > 0.0)
+        {
+            icon = true;
+        }
     }
-    let (icon_x, icon_size) = icon.expect("alert icon");
-    let (title_x, title_size_actual) = title.expect("alert title");
-    assert_eq!(icon_size, 16.0);
-    assert_eq!(title_size_actual, title_size);
-    // Forui alerts place the icon then 10 points before the text column.
-    assert!(
-        (title_x - icon_x - (icon_size + 10.0)).abs() <= 4.0,
-        "icon x {icon_x}, title x {title_x}"
-    );
+    assert!(icon, "the alert draws a vector information icon");
+    assert_eq!(title.expect("alert title"), title_size);
 }

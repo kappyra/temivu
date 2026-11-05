@@ -79,6 +79,7 @@ pub struct PopoverMenu<'a> {
     label: &'a str,
     open: &'a mut bool,
     width: f32,
+    theme: Option<&'a crate::Theme>,
 }
 
 impl<'a> PopoverMenu<'a> {
@@ -88,6 +89,7 @@ impl<'a> PopoverMenu<'a> {
             label,
             open,
             width: 200.0,
+            theme: None,
         }
     }
 
@@ -95,6 +97,11 @@ impl<'a> PopoverMenu<'a> {
     /// range is 150 to 250. There is no intrinsic sizing yet.
     pub fn width(mut self, width: f32) -> Self {
         self.width = width;
+        self
+    }
+
+    pub fn theme(mut self, theme: &'a crate::Theme) -> Self {
+        self.theme = Some(theme);
         self
     }
 
@@ -111,15 +118,22 @@ impl<'a> PopoverMenu<'a> {
             label,
             open,
             width,
+            theme,
         } = self;
         let mut items = MenuItems::new();
-        let shown = Popover::new(id, label, open)
+        let popup = Popover::new(id, label, open)
             .focus_on_open(true)
-            .show(anchor, |ui| {
-                ui.set_width(width.max(1.0));
-                content(ui, &mut items);
-                items.first_enabled.take().unwrap_or_else(|| ui.response())
-            })?;
+            .match_compact_trigger();
+        let popup = if let Some(theme) = theme {
+            popup.theme(theme)
+        } else {
+            popup
+        };
+        let shown = popup.show(anchor, |ui| {
+            ui.set_width(width.max(1.0));
+            content(ui, &mut items);
+            items.first_enabled.take().unwrap_or_else(|| ui.response())
+        })?;
         let popup = shown.response;
         anchor.ctx.accesskit_node_builder(popup.id, |node| {
             node.set_role(egui::accesskit::Role::Menu);

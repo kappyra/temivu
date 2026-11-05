@@ -105,11 +105,13 @@ impl<'a> AccordionItem<'a> {
     pub fn show(self, ui: &mut Ui, content: impl FnOnce(&mut Ui)) -> Response {
         let id = self.state.id.with(self.index);
         ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
-            let mut response = ui.add(
-                egui::Button::new(RichText::new(self.title).color(self.theme.foreground))
-                    .frame(false)
-                    .min_size(egui::vec2(ui.available_width(), 48.0)),
-            );
+            let mut response = crate::button::press_native(ui, self.theme, |ui| {
+                ui.add(
+                    egui::Button::new(RichText::new(self.title).color(self.theme.foreground))
+                        .frame(false)
+                        .min_size(egui::vec2(ui.available_width(), 48.0)),
+                )
+            });
             if response.clicked() && self.state.toggle(self.index) {
                 response.mark_changed();
             }

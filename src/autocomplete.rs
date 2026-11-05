@@ -65,6 +65,7 @@ impl<'a> AutocompleteOption<'a> {
 
     /// Disable the suggestion: it stays listed and announced, but keyboard
     /// navigation skips it and pressing it has no effect.
+    /// Disable the field and its suggestion list.
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -122,6 +123,7 @@ pub struct Autocomplete<'a> {
     sizes: Sizes,
     enabled: bool,
     max_popup_height: f32,
+    liquid: Option<crate::liquid::LiquidStyle>,
 }
 
 impl<'a> Autocomplete<'a> {
@@ -144,6 +146,7 @@ impl<'a> Autocomplete<'a> {
             sizes: Sizes::desktop(),
             enabled: true,
             max_popup_height: 240.0,
+            liquid: None,
         }
     }
 
@@ -181,7 +184,12 @@ impl<'a> Autocomplete<'a> {
         self
     }
 
-    /// Disable the field and its suggestion list.
+    /// Override the context's popup animation preset.
+    pub fn liquid(mut self, motion: crate::liquid::LiquidStyle) -> Self {
+        self.liquid = Some(motion);
+        self
+    }
+
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -214,6 +222,7 @@ impl<'a> Autocomplete<'a> {
             messages,
             sizes,
             enabled,
+            liquid,
             max_popup_height,
             ..
         } = self;
@@ -292,6 +301,7 @@ impl<'a> Autocomplete<'a> {
             vertical_arrows: true,
         };
         let edit = egui::TextEdit::singleline(query)
+            .margin(egui::Margin::symmetric(10, 8))
             .hint_text(hint)
             .id(field_id)
             .event_filter(event_filter)
@@ -314,21 +324,26 @@ impl<'a> Autocomplete<'a> {
         // Keep the list drawn for one frame after the field loses focus so a
         // pointer press on a suggestion can still be delivered to it.
         let mut open = enabled && dismissed.is_none() && (field_focused || previous_open);
-        let row_height = sizes.item.max(8.0);
+        let row_height = sizes.item.max(44.0);
         let width = field_response.rect.width().max(1.0);
         let mut popup_open = open;
         let mut clicked_option = None;
-        if open {
-            let popup = egui::Popup::from_response(&field_response)
-                .id(popup_id)
-                .open_bool(&mut popup_open)
-                // Outside clicks are handled by the field-focus check below;
-                // egui's own click-close would race the first opening pass.
-                .close_behavior(egui::PopupCloseBehavior::IgnoreClicks)
-                .width(width);
-            let field_for_popup = field_response.clone();
-            let popup_response = popup.show(|ui| {
-                ui.set_width(width);
+        let field_for_popup = field_response.clone();
+        let popup_response = crate::liquid::popup(
+            &field_response,
+            popup_id,
+            &mut popup_open,
+            crate::liquid::PopupSurface {
+                match_compact_trigger: false,
+                width: Some(width),
+                frame: crate::surface::popup_frame(theme, 12),
+                motion: liquid
+                    .unwrap_or_else(|| crate::liquid::LiquidStyle::context_default(ui.ctx())),
+                // Focus handling below owns dismissal for editable suggestions.
+                close_behavior: egui::PopupCloseBehavior::IgnoreClicks,
+            },
+            theme,
+            |ui| {
                 let mut matched = 0usize;
                 let row_width = ui.available_width().max(1.0);
                 egui::ScrollArea::vertical()
@@ -358,7 +373,7 @@ impl<'a> Autocomplete<'a> {
                             if is_highlighted || (option.enabled && row.hovered()) {
                                 ui.painter().rect_filled(
                                     row_rect.shrink2(Vec2::new(2.0, 0.0)),
-                                    3.0,
+                                    16.0,
                                     theme.muted,
                                 );
                             }
@@ -368,8 +383,8 @@ impl<'a> Autocomplete<'a> {
                                 theme.muted_foreground
                             };
                             ui.painter().text(
-                                row_rect.center(),
-                                Align2::CENTER_CENTER,
+                                egui::pos2(row_rect.left() + 12.0, row_rect.center().y),
+                                Align2::LEFT_CENTER,
                                 option.label,
                                 FontId::proportional(theme.typography.body.size.max(8.0)),
                                 color,
@@ -404,7 +419,9 @@ impl<'a> Autocomplete<'a> {
                             });
                         }
                     });
-            });
+            },
+        );
+        if open {
             if !popup_open {
                 dismissed = Some(DismissReason::Outside);
                 open = false;

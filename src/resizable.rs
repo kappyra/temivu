@@ -119,10 +119,15 @@ impl<'a> Resizable<'a> {
         second: impl FnOnce(&mut Ui),
     ) -> ResizableResponse {
         let mut rect = ui.available_rect_before_wrap();
-        // Panes must be finite; clamp to the visible area inside scroll areas.
+        // Use the clip only as a fallback for unbounded layouts. A caller's
+        // finite pane size must stay stable as it scrolls past the clip.
         let clip = ui.clip_rect();
-        rect.max.x = rect.max.x.min(clip.max.x);
-        rect.max.y = rect.max.y.min(clip.max.y);
+        if !rect.max.x.is_finite() {
+            rect.max.x = clip.max.x.max(rect.min.x);
+        }
+        if !rect.max.y.is_finite() {
+            rect.max.y = clip.max.y.max(rect.min.y);
+        }
         let total = match self.axis {
             ResizableAxis::Horizontal => rect.width(),
             ResizableAxis::Vertical => rect.height(),

@@ -16,6 +16,7 @@ pub struct MultiSelect<'a> {
     options: &'a [SelectOption<'a>],
     selected: &'a mut Vec<Id>,
     enabled: bool,
+    liquid: Option<crate::liquid::LiquidStyle>,
     searchable: bool,
     search_hint: &'a str,
     no_results: &'a str,
@@ -37,6 +38,7 @@ impl<'a> MultiSelect<'a> {
             options,
             selected,
             enabled: true,
+            liquid: None,
             searchable: false,
             search_hint: "Search",
             no_results: "No results",
@@ -44,6 +46,11 @@ impl<'a> MultiSelect<'a> {
         }
     }
 
+    /// Configure popup motion and trigger separation without replacing egui input.
+    pub fn liquid(mut self, motion: crate::liquid::LiquidStyle) -> Self {
+        self.liquid = Some(motion);
+        self
+    }
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -116,27 +123,25 @@ impl<'a> MultiSelect<'a> {
         let focused_before = ui.ctx().memory(|memory| memory.focused());
         let escape = ui.input(|input| input.key_pressed(egui::Key::Escape));
         let mut focused_popup: Option<egui::Id> = None;
-        let width = ui.available_width().clamp(48.0, 240.0);
+        let width = ui.available_width().clamp(0.0, 360.0);
         let search_key = self.id.with("temivu-multi-select-search");
         let mut was_open = false;
         let mut widget_id = None;
         let output = ui
             .add_enabled_ui(self.enabled, |ui| {
+                ui.spacing_mut().button_padding = egui::vec2(12.0, 9.0);
                 let id = ui.make_persistent_id(egui::IdSalt::new(self.id));
                 widget_id = Some(id);
                 was_open = ComboBox::is_open(ui.ctx(), id);
-                let min_height = ui.spacing().interact_size.y.max(32.0);
+                let min_height = ui.spacing().interact_size.y.max(40.0);
                 ui.spacing_mut().interact_size.y = min_height;
                 if !can_change && was_open {
                     // egui 0.36 derives this popup ID from the combo widget ID.
                     egui::Popup::close_id(ui.ctx(), id.with("popup"));
                 }
                 let just_opened = !was_open;
-                ComboBox::from_id_salt(self.id)
-                    .selected_text(summary.clone())
-                    .width(width)
-                    .truncate()
-                    .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+                crate::liquid_combo::LiquidCombo::new(id, &summary, width)
+                    .liquid(self.liquid)
                     .show_ui(ui, |ui| {
                         let mut query = if self.searchable {
                             ui.ctx().data(|data| {
@@ -149,6 +154,7 @@ impl<'a> MultiSelect<'a> {
                         if self.searchable {
                             let search = ui.add(
                                 egui::TextEdit::singleline(&mut query)
+                                    .margin(egui::Margin::symmetric(8, 6))
                                     .hint_text(self.search_hint)
                                     .desired_width(f32::INFINITY),
                             );
@@ -189,7 +195,7 @@ impl<'a> MultiSelect<'a> {
                                             can_change && option.enabled,
                                             egui::Button::selectable(selected, option.label)
                                                 .wrap()
-                                                .min_size(egui::vec2(0.0, 32.0)),
+                                                .min_size(egui::vec2(ui.available_width(), 44.0)),
                                         )
                                     },
                                 )

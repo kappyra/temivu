@@ -76,6 +76,7 @@ impl BadgeStyle {
 pub struct Badge<'a> {
     text: &'a str,
     style: BadgeStyle,
+    radius: u8,
 }
 
 impl<'a> Badge<'a> {
@@ -83,6 +84,7 @@ impl<'a> Badge<'a> {
         Self {
             text,
             style: BadgeStyle::from_theme(theme, BadgeVariant::Primary, false),
+            radius: 255,
         }
     }
 
@@ -91,10 +93,16 @@ impl<'a> Badge<'a> {
         self.style = style;
         self
     }
+    /// Override the pill corner radius.
+    pub fn radius(mut self, radius: u8) -> Self {
+        self.radius = radius;
+        self
+    }
 
     pub fn show(self, ui: &mut Ui) -> Response {
         self.style
             .frame()
+            .corner_radius(self.radius)
             .inner_margin(self.style.padding)
             .show(ui, |ui| {
                 ui.add(Label::new(

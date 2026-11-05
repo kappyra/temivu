@@ -1,7 +1,6 @@
-//! Forui radio control port. Group coordination and animation are not yet
-//! implemented; each caller owns its boolean value across frames.
+//! A standalone radio control with spring selection feedback.
 use crate::Theme;
-use egui::{FontId, Response, RichText, Stroke, TextStyle, Ui};
+use egui::{FontId, Response, Stroke, Ui, WidgetInfo, WidgetType, vec2};
 
 pub struct Radio<'a> {
     value: &'a mut bool,
@@ -19,7 +18,7 @@ impl<'a> Radio<'a> {
             theme,
             label,
             enabled: true,
-            touch: false,
+            touch: theme.touch,
             error: false,
         }
     }
@@ -53,40 +52,86 @@ impl<'a> Radio<'a> {
         } else {
             self.theme.muted_foreground
         };
+        let enabled = self.enabled && ui.is_enabled();
+        let text = ui.painter().layout(
+            self.label.to_owned(),
+            FontId::proportional(self.theme.typography.body.size),
+            self.theme.foreground,
+            (ui.available_width() - size - 32.0).max(1.0),
+        );
+        let desired = vec2(
+            size + text.size().x + 32.0,
+            (text.size().y + 14.0).max(44.0),
+        );
         let mut response = ui
-            .scope(|ui| {
-                ui.spacing_mut().icon_width = size;
-                ui.spacing_mut().icon_width_inner = indicator_size;
-                ui.spacing_mut().icon_spacing = 8.0;
-                ui.style_mut().text_styles.insert(
-                    TextStyle::Body,
-                    FontId::proportional(self.theme.typography.body.size),
-                );
-                let widgets = &mut ui.visuals_mut().widgets;
-                for visual in [
-                    &mut widgets.inactive,
-                    &mut widgets.hovered,
-                    &mut widgets.active,
-                    &mut widgets.noninteractive,
-                ] {
-                    visual.bg_fill = self.theme.card;
-                    visual.bg_stroke = Stroke::new(1.0, border);
-                    visual.fg_stroke.color = indicator;
-                }
-                let text = RichText::new(self.label).color(self.theme.foreground);
-                ui.add_enabled(self.enabled, egui::RadioButton::new(*self.value, text))
+            .add_enabled_ui(self.enabled, |ui| {
+                crate::motion_controls::button_response(ui, desired)
             })
             .inner;
         if response.clicked() {
             *self.value = !*self.value;
             response.mark_changed();
         }
+        response.widget_info(|| {
+            WidgetInfo::selected(WidgetType::RadioButton, enabled, *self.value, self.label)
+        });
+        let active = crate::motion::spring_bool(
+            ui.ctx(),
+            response.id.with("radio-selected"),
+            *self.value,
+            self.theme,
+        );
+        let press = crate::motion_controls::press_amount(&response, self.theme).clamp(0.0, 1.0);
+        let mix = |from, to, amount: f32| {
+            let t = amount.clamp(0.0, 1.0);
+            egui::Color32::from(egui::Rgba::from(from) * (1.0 - t) + egui::Rgba::from(to) * t)
+        };
+        let dim = |color| {
+            if enabled {
+                color
+            } else {
+                self.theme.disable(color)
+            }
+        };
+        let rect = response.rect;
+        let painter = ui.painter().with_clip_rect(rect.intersect(ui.clip_rect()));
+        let fill = mix(self.theme.card, self.theme.secondary, active);
+        painter.rect(
+            rect,
+            16,
+            dim(fill),
+            Stroke::new(1.0, dim(self.theme.border)),
+            egui::StrokeKind::Inside,
+        );
+        let center = egui::pos2(rect.left() + 12.0 + size / 2.0, rect.center().y);
+        painter.circle(
+            center,
+            size / 2.0,
+            dim(self.theme.card),
+            Stroke::new(1.0, dim(mix(border, indicator, active))),
+        );
+        if active > 0.0 {
+            painter.circle_filled(
+                center,
+                indicator_size / 2.0 * active.clamp(0.0, 1.12) * (1.0 - press * 0.12),
+                dim(indicator),
+            );
+        }
+        let text_height = text.size().y;
+        painter.galley(
+            egui::pos2(
+                center.x + size / 2.0 + 8.0,
+                rect.center().y - text_height / 2.0,
+            ),
+            text,
+            dim(self.theme.foreground),
+        );
         if response.has_focus() {
             ui.painter().rect_stroke(
-                response.rect.expand(2.0),
-                4,
-                Stroke::new(2.0, self.theme.foreground),
-                egui::StrokeKind::Outside,
+                rect,
+                16,
+                Stroke::new(2.0, self.theme.primary),
+                egui::StrokeKind::Inside,
             );
         }
         response

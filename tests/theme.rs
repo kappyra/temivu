@@ -4,6 +4,34 @@ use temivu::{
 };
 
 #[test]
+fn spring_motion_is_bounded_and_settles() {
+    let mut previous = 0.0;
+    for step in 0..=100 {
+        let value = Easing::Spring.apply(step as f32 / 100.0);
+        assert!((0.0..=1.0 + f32::EPSILON).contains(&value));
+        assert!(value + f32::EPSILON >= previous);
+        previous = value;
+    }
+    assert!((previous - 1.0).abs() < 0.0001);
+}
+
+#[test]
+fn mint_palettes_keep_text_readable_and_support_touch() {
+    for theme in [Theme::mint_light(), Theme::mint_dark()] {
+        for (foreground, background) in [
+            (theme.foreground, theme.background),
+            (theme.foreground, theme.card),
+            (theme.muted_foreground, theme.background),
+            (theme.primary_foreground, theme.primary),
+        ] {
+            assert!(Theme::contrast_ratio(foreground, background) >= 4.5);
+        }
+        assert_eq!(theme.typography.body.color, theme.foreground);
+        assert_eq!(theme.clone().touch().sizes.field.md, 44.0);
+    }
+}
+
+#[test]
 fn generated_neutral_palettes_keep_argb_tokens_and_transparency() {
     let light = Theme::light();
     let dark = Theme::dark();
@@ -351,4 +379,23 @@ fn touch_and_high_contrast_compose() {
             .caption
             .size
     );
+}
+
+#[test]
+fn palette_switch_preserves_font_rasterization_options() {
+    let ctx = egui::Context::default();
+    let options = ctx.global_style().visuals.text_options;
+    for theme in [
+        Theme::light(),
+        Theme::dark(),
+        Theme::mint_light(),
+        Theme::mint_dark(),
+    ] {
+        theme.apply(&ctx);
+        assert_eq!(
+            ctx.global_style().visuals.text_options,
+            options,
+            "palette changes must not invalidate the font atlas"
+        );
+    }
 }

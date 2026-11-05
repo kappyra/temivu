@@ -30,12 +30,71 @@ fn navigate(harness: &mut Harness<'static, showcase::Showcase>, page: &str) {
 }
 
 #[test]
+fn navigation_remains_usable_in_a_narrow_viewport() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(390.0, 844.0))
+        .build_ui_state(
+            |ui, app: &mut showcase::Showcase| {
+                let mut frame = eframe::Frame::_new_kittest();
+                app.ui(ui, &mut frame);
+            },
+            showcase::Showcase::default(),
+        );
+    harness.run_steps(3);
+    let controls = harness.get_by_label("Controls");
+    let rect = controls.rect();
+    assert!(rect.left() >= 0.0 && rect.right() <= 390.0);
+    controls.click();
+    harness.run_steps(3);
+    harness.get_by_label("Controls and inputs");
+    for label in ["Name", "Email"] {
+        let field = harness.get_by_role_and_label(egui::accesskit::Role::TextInput, label);
+        assert!(
+            field.rect().right() <= 390.0,
+            "{label} extends outside the narrow viewport: {:?}",
+            field.rect()
+        );
+    }
+    let navigation = ["Overview", "Controls", "Overlays", "Data", "Localization"]
+        .map(|label| harness.get_by_label(label).rect());
+    for rect in navigation {
+        assert!(rect.right() <= 390.0);
+        assert_eq!(
+            rect.center().y,
+            navigation[0].center().y,
+            "compact navigation must fit on one row"
+        );
+    }
+}
+
+#[test]
 fn showcase_pages_theme_and_controls_work() {
     let mut harness = harness();
-    harness.get_by_label("An experimental Forui-inspired component library for egui.");
+    harness.get_by_label("Thoughtful components for beautiful, accessible interfaces.");
+    let heading_color = |harness: &Harness<'_, showcase::Showcase>| {
+        harness
+            .output()
+            .shapes
+            .iter()
+            .find_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.job.text == "Welcome to Temivu" => Some(
+                    text.override_text_color
+                        .unwrap_or(text.galley.job.sections[0].format.color),
+                ),
+                _ => None,
+            })
+    };
+    assert_eq!(
+        heading_color(&harness),
+        Some(temivu::Theme::light().foreground)
+    );
     harness.get_by_label("Dark theme").click();
     harness.run_steps(3);
     assert!(harness.ctx.style_of(harness.ctx.theme()).visuals.dark_mode);
+    assert_eq!(
+        heading_color(&harness),
+        Some(temivu::Theme::dark().foreground)
+    );
     harness.get_by_label("High contrast").click();
     harness.run_steps(3);
     assert_eq!(
@@ -439,11 +498,257 @@ fn showcase_data_and_localization_work() {
 fn a_non_animated_page_stops_requesting_repaints() {
     let mut harness = harness();
     navigate(&mut harness, "Controls");
-    // The overview contains an indeterminate circular progress indicator that
-    // asks for another frame; the controls page must settle instead.
-    harness.step();
+    // Allow the floating navigation's spring to settle after changing tabs.
+    harness.run_steps(8);
     assert!(
         !harness.ctx.has_requested_repaint(),
-        "the controls page should not keep requesting repaints when idle"
+        "the controls page should not keep requesting repaints when idle: {:?}",
+        harness.ctx.repaint_causes()
     );
+}
+
+#[test]
+fn upload_preview_runs_to_completion_and_resets() {
+    let mut harness = harness();
+    harness.get_by_label("Start upload").click();
+    harness.step();
+    let started = harness.ctx.input(|input| input.time);
+    harness.input_mut().time = Some(started + 1.5);
+    harness.step();
+    let midway = harness
+        .get_by_label("Upload progress")
+        .accesskit_node()
+        .numeric_value()
+        .unwrap();
+    assert!((45.0..55.0).contains(&midway));
+    harness.input_mut().time = Some(started + 3.1);
+    harness.run_steps(3);
+    assert_eq!(
+        harness
+            .get_by_label("Upload progress")
+            .accesskit_node()
+            .numeric_value(),
+        Some(100.0)
+    );
+    harness.get_by_label("Reset").click();
+    harness.run_steps(3);
+    assert_eq!(
+        harness
+            .get_by_label("Upload progress")
+            .accesskit_node()
+            .numeric_value(),
+        Some(0.0)
+    );
+}
+
+#[test]
+#[ignore = "manual CPU timing probe; not a wall-clock test gate"]
+fn theme_switch_timing_probe() {
+    let mut harness = harness();
+    let mut times = Vec::new();
+    for index in 0..30 {
+        harness.get_by_label("Dark theme").click();
+        let start = std::time::Instant::now();
+        harness.run_steps(3);
+        if index >= 4 {
+            times.push(start.elapsed().as_secs_f64() * 1_000.0);
+        }
+    }
+    times.sort_by(f64::total_cmp);
+    eprintln!(
+        "theme switch (3 headless frames): median {:.3} ms, max {:.3} ms",
+        times[times.len() / 2],
+        times.last().unwrap()
+    );
+}
+
+#[test]
+fn bloom_and_droplet_can_be_selected_and_previewed() {
+    use temivu::liquid::{LiquidStyle, SurfaceTransition};
+    let mut harness = harness();
+    navigate(&mut harness, "Controls");
+    for (label, transition) in [
+        ("Droplet", SurfaceTransition::Droplet),
+        ("Bloom", SurfaceTransition::Bloom),
+    ] {
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, label)
+            .click();
+        harness.run_steps(3);
+        assert_eq!(
+            LiquidStyle::context_default(&harness.ctx).transition,
+            transition
+        );
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Preview")
+            .click();
+        harness.run_steps(3);
+        harness.get_by_label("One surface, two ways to move.");
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Button, "Done")
+            .click();
+        harness.run_steps(3);
+        assert!(
+            harness
+                .query_by_label("One surface, two ways to move.")
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn motion_gallery_exposes_examples_and_loading_on_a_narrow_page() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(390.0, 3000.0))
+        .build_ui_state(
+            |ui, app: &mut showcase::Showcase| {
+                app.ui(ui, &mut eframe::Frame::_new_kittest());
+            },
+            showcase::Showcase::default(),
+        );
+    harness.run_steps(3);
+    navigate(&mut harness, "Controls");
+    harness.get_by_label("Motion examples").click();
+    harness.run_steps(3);
+    harness.get_by_label("Motion gallery");
+    for label in [
+        "Media",
+        "Surfaces",
+        "Records",
+        "Foundations",
+        "Circular loading",
+        "Segments",
+        "Quantity",
+        "Layout",
+        "Follow",
+        "Pagination",
+        "History",
+        "Switch",
+        "Action menu",
+        "Category",
+        "Link preview",
+        "Search",
+        "Direction pad",
+    ] {
+        assert!(
+            harness
+                .get_all_by_label(label)
+                .any(|node| node.rect().right() <= 390.0),
+            "{label}"
+        );
+    }
+    harness.get_by_label("Increase quantity").click();
+    harness.run_steps(5);
+    assert!(harness.get_by_label("Decrease quantity").rect().right() <= 390.0);
+}
+
+#[test]
+fn circular_loading_demo_fills_to_completion() {
+    let mut harness = harness();
+    navigate(&mut harness, "Controls");
+    harness.get_by_label("Motion examples").click();
+    harness.run_steps(3);
+    assert_eq!(
+        harness
+            .get_by_label("Circular progress")
+            .accesskit_node()
+            .numeric_value(),
+        None
+    );
+    harness.get_by_label("Start loading").click();
+    harness.run_steps(14);
+    assert_eq!(
+        harness
+            .get_by_label("Circular progress")
+            .accesskit_node()
+            .numeric_value(),
+        Some(100.0)
+    );
+    assert!(
+        !harness
+            .get_by_label("Start loading")
+            .accesskit_node()
+            .is_disabled()
+    );
+}
+
+#[test]
+fn widgets_open_from_the_header_and_filter_by_name() {
+    let mut harness = harness();
+    harness.get_by_label("Widgets").click();
+    harness.run_steps(3);
+    harness.get_by_label("Motion gallery");
+    harness.get_by_label("13 of 13 examples");
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::TextInput, "Find a widget")
+        .focus();
+    harness.run_steps(2);
+    harness.event(egui::Event::Text("direction".to_owned()));
+    harness.run_steps(3);
+    harness.get_by_label("1 of 13 examples");
+    harness.get_by_label("Direction pad");
+    assert!(harness.query_by_label("Quantity").is_none());
+}
+
+#[test]
+fn catalog_searches_across_media_and_the_reused_sections() {
+    let mut harness = harness();
+    harness.get_by_label("Widgets").click();
+    harness.run_steps(3);
+    harness.get_by_label("Media").click();
+    harness.run_steps(3);
+    harness.get_by_label("Video player");
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::TextInput, "Find a widget")
+        .focus();
+    harness.run_steps(2);
+    harness.event(egui::Event::Text("resizable".to_owned()));
+    harness.run_steps(3);
+    harness.get_by_label("Navigation sidebar");
+    assert!(harness.query_by_label("Video player").is_none());
+}
+
+#[test]
+fn widgets_zoom_from_the_trigger_and_return_to_the_origin_page() {
+    let mut app = harness();
+    let trigger = app.get_by_label("Widgets").rect();
+    app.get_by_label("Widgets").click();
+    app.run_steps(2);
+    let now = app.ctx.input(|input| input.time);
+    app.input_mut().time = Some(now + 0.10);
+    app.step();
+    let surface = |app: &Harness<'_, showcase::Showcase>| {
+        app.output()
+            .shapes
+            .iter()
+            .find_map(|entry| match &entry.shape {
+                egui::Shape::Path(path) if path.fill == temivu::Theme::light().background => {
+                    let bounds = egui::Rect::from_points(&path.points);
+                    (bounds.width() > trigger.width() && bounds.width() < 870.0).then_some(bounds)
+                }
+                _ => None,
+            })
+    };
+    let growing = surface(&app).expect("intermediate rounded page");
+    assert!(growing.center().x < trigger.center().x && growing.center().x > 450.0);
+    app.get_by_label("Motion gallery");
+    assert!(app.query_by_label("Welcome to Temivu").is_none());
+
+    app.input_mut().time = Some(now + 1.0);
+    app.step();
+    assert!(
+        surface(&app).is_none(),
+        "settled page uses its normal layout"
+    );
+    app.get_by_label("Back").click();
+    app.run_steps(2);
+    let now = app.ctx.input(|input| input.time);
+    app.input_mut().time = Some(now + 0.13);
+    app.step();
+    assert!(
+        surface(&app).is_some(),
+        "outgoing gallery is replayed during the return"
+    );
+    app.get_by_label("Welcome to Temivu");
+    assert!(app.query_by_label("Motion gallery").is_none());
 }

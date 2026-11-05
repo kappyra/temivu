@@ -1,19 +1,6 @@
-//! Preliminary modal bottom sheet. Drag gestures, entrance animation, sides
-//! other than the bottom and full parity remain open.
-use crate::Theme;
-use egui::{Context, Id, Key, Modifiers, Ui, Vec2};
-
-#[derive(Clone, Default)]
-struct PreviousFocus(Option<Id>);
-
-/// Restore the focus remembered before the sheet opened, once, after it closed.
-fn restore_focus(ctx: &Context, key: Id) {
-    if let Some(PreviousFocus(Some(id))) =
-        ctx.data_mut(|data| data.remove_temp::<PreviousFocus>(key))
-    {
-        ctx.memory_mut(|memory| memory.request_focus(id));
-    }
-}
+//! Modal bottom sheet with a spring slide.
+use crate::{Button, ButtonVariant, Dialog, Theme};
+use egui::{Context, Id, Ui, Vec2};
 
 /// A caller-owned modal sheet anchored to the bottom of the window.
 ///
@@ -83,21 +70,8 @@ impl<'a> Sheet<'a> {
         open: &mut bool,
         content: impl FnOnce(&mut Ui) -> R,
     ) -> Option<R> {
-        let focus_key = self.id.with("temivu-sheet-previous-focus");
-        if !*open {
-            restore_focus(ctx, focus_key);
-            return None;
-        }
-        let newly_opened = ctx
-            .data(|data| data.get_temp::<PreviousFocus>(focus_key))
-            .is_none();
-        if newly_opened {
-            let previous = ctx.memory(|memory| memory.focused());
-            ctx.data_mut(|data| data.insert_temp(focus_key, PreviousFocus(previous)));
-        }
-
         const MARGIN: f32 = 8.0;
-        const PADDING: f32 = 16.0;
+        const PADDING: f32 = 22.0;
         const STROKE: f32 = 1.0;
         let available = ctx.content_rect().width();
         let sheet_width = (available - 2.0 * MARGIN)
@@ -109,66 +83,50 @@ impl<'a> Sheet<'a> {
             .fill(self.theme.card)
             .stroke(egui::Stroke::new(STROKE, self.theme.border))
             .corner_radius(egui::CornerRadius {
-                nw: 12,
-                ne: 12,
+                nw: 28,
+                ne: 28,
                 sw: 0,
                 se: 0,
             })
             .inner_margin(egui::Margin::symmetric(PADDING as i8, PADDING as i8));
-        let area = egui::Modal::default_area(self.id)
-            .sense(egui::Sense::focusable_noninteractive())
-            .anchor(egui::Align2::CENTER_BOTTOM, Vec2::ZERO);
-
-        let mut dismiss_clicked = false;
-        let shown = egui::Modal::new(self.id)
-            .area(area)
+        let area =
+            egui::Modal::default_area(self.id).anchor(egui::Align2::CENTER_BOTTOM, Vec2::ZERO);
+        Dialog::new(self.id, self.title)
+            .theme(self.theme)
+            .barrier_dismissible(self.barrier_dismissible)
             .frame(frame)
-            .backdrop_color(self.theme.barrier)
-            .show(ctx, |ui| {
+            .area(area)
+            .slide_from_bottom()
+            .show(ctx, open, |ui| {
                 ui.set_width(content_width);
+                let handle = egui::Rect::from_center_size(
+                    egui::pos2(ui.max_rect().center().x, ui.cursor().min.y + 2.0),
+                    egui::vec2(34.0, 4.0),
+                );
+                ui.painter().rect_filled(
+                    handle,
+                    2,
+                    self.theme.muted_foreground.gamma_multiply(0.45),
+                );
+                ui.add_space(10.0);
                 egui::Sides::new().show(
                     ui,
                     |ui| {
-                        ui.label(
-                            egui::RichText::new(self.title)
-                                .size(18.0)
-                                .strong()
-                                .color(self.theme.foreground),
-                        );
+                        ui.label(egui::RichText::new(self.title).size(20.0).strong());
                     },
                     |ui| {
-                        if self.dismiss_button && ui.button("Close").clicked() {
-                            dismiss_clicked = true;
+                        if self.dismiss_button
+                            && Button::new("Close", self.theme)
+                                .variant(ButtonVariant::Ghost)
+                                .show(ui)
+                                .clicked()
+                        {
+                            ui.close();
                         }
                     },
                 );
-                ui.add_space(8.0);
+                ui.add_space(12.0);
                 content(ui)
-            });
-        let inner = shown.inner;
-
-        ctx.accesskit_node_builder(shown.response.id, |node| {
-            node.set_role(egui::accesskit::Role::Dialog);
-            node.set_label(self.title);
-            node.set_modal();
-        });
-        if newly_opened {
-            shown.response.request_focus();
-        }
-
-        // Escape applies only to the topmost modal and must not preempt popups.
-        let escape = shown.is_top_modal
-            && !shown.any_popup_open
-            && ctx.input_mut(|input| input.consume_key(Modifiers::NONE, Key::Escape));
-        if dismiss_clicked
-            || shown.response.should_close()
-            || escape
-            || (self.barrier_dismissible && shown.backdrop_response.clicked())
-        {
-            *open = false;
-            // The sheet still owns focus in this frame. Restore after it disappears.
-            ctx.request_repaint();
-        }
-        Some(inner)
+            })
     }
 }

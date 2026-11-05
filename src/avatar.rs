@@ -7,20 +7,22 @@ use egui::{
 
 /// A square avatar with circular clipping and optional initials or a loaded texture.
 pub struct Avatar<'a> {
-    theme: &'a Theme,
     size: f32,
     label: &'a str,
     fallback: Option<&'a str>,
     image: Option<(TextureId, Vec2)>,
+    background: Color32,
+    foreground: Color32,
 }
 impl<'a> Avatar<'a> {
-    pub fn new(theme: &'a Theme) -> Self {
+    pub fn new(theme: &Theme) -> Self {
         Self {
-            theme,
             size: 40.0,
             label: "Avatar",
             fallback: None,
             image: None,
+            background: theme.muted,
+            foreground: theme.muted_foreground,
         }
     }
     pub fn label(mut self, label: &'a str) -> Self {
@@ -29,6 +31,12 @@ impl<'a> Avatar<'a> {
     }
     pub fn fallback(mut self, initials: &'a str) -> Self {
         self.fallback = Some(initials);
+        self
+    }
+    /// Set the fallback surface and text colors.
+    pub fn colors(mut self, background: Color32, foreground: Color32) -> Self {
+        self.background = background;
+        self.foreground = foreground;
         self
     }
     pub fn size(mut self, size: f32) -> Result<Self, &'static str> {
@@ -62,7 +70,7 @@ impl<'a> Avatar<'a> {
         }
         let painter = ui.painter();
         let radius = self.size / 2.0;
-        painter.circle_filled(rect.center(), radius, self.theme.muted);
+        painter.circle_filled(rect.center(), radius, self.background);
         if let Some((texture, dimensions)) = self.image {
             let aspect = dimensions.x / dimensions.y;
             let uv_size = if aspect > 1.0 {
@@ -96,7 +104,7 @@ impl<'a> Avatar<'a> {
             let galley = painter.layout_no_wrap(
                 initials.to_owned(),
                 FontId::proportional(base),
-                self.theme.muted_foreground,
+                self.foreground,
             );
             let factor = (self.size * 0.75 / galley.size().x.max(1.0)).min(1.0);
             painter.text(
@@ -104,12 +112,12 @@ impl<'a> Avatar<'a> {
                 Align2::CENTER_CENTER,
                 initials,
                 FontId::proportional(base * factor),
-                self.theme.muted_foreground,
+                self.foreground,
             );
         } else {
             // A neutral user silhouette; not the upstream Lucide asset.
             let center = rect.center();
-            let color = self.theme.muted_foreground;
+            let color = self.foreground;
             painter.circle_stroke(
                 center - Vec2::new(0.0, radius * 0.23),
                 radius * 0.22,
