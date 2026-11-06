@@ -976,13 +976,10 @@ fn overlays(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
 }
 
 fn show_toast_stack(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
-    if !state.toaster.is_empty() {
+    if state.toaster.needs_render() {
         let narrow = ui.ctx().content_rect().width() < 640.0;
         let (anchor, offset) = if narrow {
-            (
-                egui::Align2::CENTER_BOTTOM,
-                egui::vec2(0.0, -FloatingNavigation::BOTTOM_CLEARANCE),
-            )
+            (egui::Align2::CENTER_TOP, egui::vec2(0.0, 66.0))
         } else {
             (
                 egui::Align2::RIGHT_BOTTOM,
@@ -1084,7 +1081,7 @@ fn overlay_sheet(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
         ui,
         theme,
         "Bottom sheet",
-        "Adjust filters in a surface that slides up.",
+        "Review and apply filters in a responsive panel.",
         |ui| {
             let trigger = ui
                 .horizontal(|ui| {
@@ -1102,11 +1099,9 @@ fn overlay_sheet(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
             } else {
                 "Showing all items"
             });
-            Sheet::new(Id::new("demo-sheet"), "Filters", theme).show(
-                ui.ctx(),
-                &mut state.sheet_open,
-                |ui| {
-                    ui.label(egui::RichText::new("Sheet content").color(theme.muted_foreground));
+            Sheet::new(Id::new("demo-sheet"), "Filters", theme)
+                .description("Choose which items are shown in the collection.")
+                .show(ui.ctx(), &mut state.sheet_open, |ui| {
                     Switch::new(&mut state.draft_filter, theme)
                         .label("Only available items")
                         .show(ui);
@@ -1115,8 +1110,7 @@ fn overlay_sheet(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
                         state.applied_filter = state.draft_filter;
                         ui.close();
                     }
-                },
-            );
+                });
         },
     );
 }
@@ -1292,11 +1286,10 @@ fn overlay_notifications(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme
                 }
             });
             if let Some(toast) = &mut state.toast {
-                ui.add_space(8.0);
-                Toast::new(toast, theme, "Notification", "Dismiss")
-                    .description("This notification closes when dismissed.")
+                Toast::new(toast, theme, "Changes saved", "Dismiss")
+                    .description("Your preferences are up to date.")
                     .show(ui);
-                if !toast.is_visible() {
+                if !toast.needs_render() {
                     state.toast = None;
                 }
             }

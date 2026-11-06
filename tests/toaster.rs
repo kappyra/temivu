@@ -220,3 +220,33 @@ fn toast_entries_can_render_a_decorative_icon() {
         "the approximate icon glyph should be hidden from assistive technology"
     );
 }
+
+#[test]
+fn dismissed_card_keeps_paint_until_the_queue_finishes_its_exit() {
+    let id = egui::Id::new("exit");
+    let mut state = ToasterState::default();
+    state.push(ToastEntry::new(id, "Saved").timeout(None));
+    let mut harness = Harness::builder().build_ui_state(view, state);
+    harness.run();
+    harness
+        .ctx
+        .all_styles_mut(|style| style.animation_time = 0.2);
+    harness.input_mut().time = Some(0.0);
+    harness.step();
+
+    harness.state_mut().dismiss(id);
+    assert!(harness.state().is_empty());
+    assert!(harness.state().needs_render());
+    harness.input_mut().time = Some(0.02);
+    harness.step();
+    assert!(
+        harness
+            .query_by_role(egui::accesskit::Role::Alert)
+            .is_none()
+    );
+    assert!(harness.state().needs_render());
+
+    harness.input_mut().time = Some(1.0);
+    harness.step();
+    assert!(!harness.state().needs_render());
+}

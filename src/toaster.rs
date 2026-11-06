@@ -1,13 +1,5 @@
-//! Preliminary toast queue overlay (Forui `FToaster` parity is incomplete:
-//! expand/collapse behaviour, swipe/tap dismissal, exit animations and per-entry
-//! custom styling remain open). Toasts are anchored bottom-end on desktop and
-//! top-centre on touch, matching the upstream `FToasterStyle` defaults.
-//! See `docs/TOASTER.md`.
-//!
-//! [`ToasterState`] owns a caller-managed queue of [`ToastEntry`] values.
-//! [`Toaster`] renders the first `limit` entries as a stacked overlay in a
-//! foreground area anchored to the top-right corner; entries that expire by
-//! themselves through [`crate::ToastState`]'s timer are pruned after rendering.
+//! Caller-owned queue for responsive notification cards.
+//! Visible entries are limited, and closing cards release their space smoothly.
 use crate::{Theme, Toast, ToastState, ToastVariant};
 use egui::{Align2, Area, Id, Order, Response, Ui, Vec2};
 use std::time::Duration;
@@ -103,25 +95,44 @@ impl ToasterState {
 
     /// Dismiss a queued toast by ID; unknown IDs are ignored.
     pub fn dismiss(&mut self, id: Id) {
-        if let Some(index) = self.entries.iter().position(|queued| queued.entry.id == id) {
-            self.entries.remove(index);
+        if let Some(queued) = self.entries.iter_mut().find(|queued| queued.entry.id == id) {
+            queued.state.dismiss();
         }
+        self.prune();
     }
 
     pub fn clear(&mut self) {
-        self.entries.clear();
+        for queued in &mut self.entries {
+            queued.state.dismiss();
+        }
+        self.prune();
     }
 
     pub fn len(&self) -> usize {
-        self.entries.len()
+        self.entries
+            .iter()
+            .filter(|queued| queued.state.is_visible())
+            .count()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        !self.entries.iter().any(|queued| queued.state.is_visible())
+    }
+
+    /// Whether there are visible cards, queued cards, or exit animations to render.
+    /// Use this instead of `is_empty` to skip rendering an idle overlay.
+    pub fn needs_render(&self) -> bool {
+        !self.entries.is_empty()
     }
 
     pub fn contains(&self, id: Id) -> bool {
-        self.entries.iter().any(|queued| queued.entry.id == id)
+        self.entries
+            .iter()
+            .any(|queued| queued.entry.id == id && queued.state.is_visible())
+    }
+
+    fn prune(&mut self) {
+        self.entries.retain(|queued| queued.state.needs_render());
     }
 
     /// Render the visible queue as a foreground overlay with the upstream
@@ -129,7 +140,7 @@ impl ToasterState {
     /// expired toasts.
     pub fn show(&mut self, ui: &mut Ui, theme: &Theme, dismiss_label: &str) -> ToasterResponse {
         let id = ui.make_persistent_id("temivu-toaster");
-        let anchor = default_anchor(theme);
+        let anchor = default_anchor(ui, theme);
         self.show_with(ui, theme, dismiss_label, id, anchor, default_offset(anchor))
     }
 
@@ -144,45 +155,56 @@ impl ToasterState {
         anchor: Align2,
         offset: Vec2,
     ) -> ToasterResponse {
-        let limit = self.limit.min(self.entries.len());
+        let viewport = ui.ctx().content_rect();
+        let width = (viewport.width() - 2.0 * offset.x.abs().max(12.0)).clamp(0.0, 392.0);
+        let height =
+            (viewport.height() - offset.y.abs() - 16.0).clamp(0.0, viewport.height() * 0.62);
         let area = Area::new(id)
             .order(Order::Foreground)
             .anchor(anchor, offset)
-            .interactable(true)
+            .constrain_to(viewport)
+            .fade_in(false)
             .show(ui.ctx(), |ui| {
-                ui.set_max_width(360.0);
-                ui.vertical(|ui| {
-                    ui.spacing_mut().item_spacing.y = 8.0;
-                    let mut rendered = 0usize;
-                    for queued in self.entries.iter_mut().take(limit) {
-                        let QueuedToast { entry, state } = queued;
-                        let shown = ui
-                            .push_id(entry.id, |ui| {
-                                let mut toast =
-                                    Toast::new(state, theme, &entry.title, dismiss_label)
-                                        .variant(entry.variant);
-                                if let Some(description) = &entry.description {
-                                    toast = toast.description(description);
-                                }
-                                if let Some(icon) = &entry.icon {
-                                    toast = toast.icon(icon);
-                                }
-                                let accessible = format!("{dismiss_label}: {}", entry.title);
-                                toast
-                                    .dismiss_accessible_label(&accessible)
-                                    .show(ui)
-                                    .is_some()
-                            })
-                            .inner;
-                        if shown {
-                            rendered += 1;
+                if self.entries.is_empty() {
+                    return 0;
+                }
+                ui.set_width(width);
+                egui::ScrollArea::vertical()
+                    .max_height(height)
+                    .auto_shrink([false, true])
+                    .show(ui, |ui| {
+                        ui.spacing_mut().item_spacing.y = 8.0;
+                        let mut rendered = 0;
+                        for queued in &mut self.entries {
+                            let QueuedToast { entry, state } = queued;
+                            if state.is_visible() && rendered >= self.limit {
+                                continue;
+                            }
+                            let shown = ui
+                                .push_id(entry.id, |ui| {
+                                    let mut toast =
+                                        Toast::new(state, theme, &entry.title, dismiss_label)
+                                            .variant(entry.variant);
+                                    if let Some(description) = &entry.description {
+                                        toast = toast.description(description);
+                                    }
+                                    if let Some(icon) = &entry.icon {
+                                        toast = toast.icon(icon);
+                                    }
+                                    let accessible = format!("{dismiss_label}: {}", entry.title);
+                                    toast
+                                        .dismiss_accessible_label(&accessible)
+                                        .show(ui)
+                                        .is_some()
+                                })
+                                .inner;
+                            rendered += usize::from(shown && state.is_visible());
                         }
-                    }
-                    rendered
-                })
-                .inner
+                        rendered
+                    })
+                    .inner
             });
-        self.entries.retain(|queued| queued.state.is_visible());
+        self.prune();
         ToasterResponse {
             response: area.response,
             visible: area.inner,
@@ -190,9 +212,8 @@ impl ToasterState {
     }
 }
 
-/// The default anchor: upstream uses bottom-end on desktop and top-centre on touch.
-fn default_anchor(theme: &Theme) -> Align2 {
-    if theme.touch {
+fn default_anchor(ui: &Ui, theme: &Theme) -> Align2 {
+    if theme.touch || ui.ctx().content_rect().width() < 600.0 {
         Align2::CENTER_TOP
     } else {
         Align2::RIGHT_BOTTOM
@@ -258,7 +279,9 @@ impl<'a> Toaster<'a> {
         let id = self
             .id
             .unwrap_or_else(|| ui.make_persistent_id("temivu-toaster"));
-        let anchor = self.anchor.unwrap_or_else(|| default_anchor(self.theme));
+        let anchor = self
+            .anchor
+            .unwrap_or_else(|| default_anchor(ui, self.theme));
         self.state.show_with(
             ui,
             self.theme,

@@ -40,6 +40,42 @@ pub fn spring_f32(ctx: &Context, id: Id, initial: f32, target: f32, theme: &Them
     spring_f32_with_damping(ctx, id, initial, target, 0.72, theme)
 }
 
+/// Animate a layout size using the same clock and damping on both axes.
+/// The first frame uses the requested size. Keep the ID stable as the size
+/// changes and clamp the result to the parent constraints before laying it out.
+pub fn spring_size(ctx: &Context, id: Id, target: egui::Vec2, theme: &Theme) -> egui::Vec2 {
+    let axis = |id, target: f32| {
+        let target = if target.is_finite() {
+            target.max(0.0)
+        } else {
+            0.0
+        };
+        spring_f32_with_damping(ctx, id, target, target, 0.86, theme).max(0.0)
+    };
+    egui::vec2(
+        axis(id.with("width"), target.x),
+        axis(id.with("height"), target.y),
+    )
+}
+
+/// Scale paint around a fixed point. With egui's `Ui::with_visual_transform`
+/// this leaves layout and hit areas stable, even while the paint scales.
+pub fn scale_around(pivot: egui::Pos2, scale: f32) -> egui::emath::TSTransform {
+    let scale = if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    };
+    egui::emath::TSTransform {
+        scaling: scale,
+        translation: pivot.to_vec2() * (1.0 - scale),
+    }
+}
+
+pub(crate) fn surface_reveal(ctx: &Context, id: Id, open: bool, theme: &Theme) -> f32 {
+    spring_f32_with_damping(ctx, id, 0.0, if open { 1.0 } else { 0.0 }, 0.86, theme).clamp(0.0, 1.0)
+}
+
 pub(crate) fn spring_f32_with_damping(
     ctx: &Context,
     id: Id,
@@ -309,6 +345,64 @@ pub(crate) fn remember_anchor(response: &egui::Response, rect: egui::Rect) {
     response
         .ctx
         .data_mut(|data| data.insert_temp(response.id.with("temivu-visual-anchor"), rect));
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct AnchorMaterial {
+    pub fill: egui::Color32,
+    pub border: egui::Color32,
+}
+
+impl AnchorMaterial {
+    pub fn from_shape(shape: &egui::Shape, bounds: egui::Rect) -> Option<Self> {
+        let egui::Shape::Rect(rect) = shape else {
+            return None;
+        };
+        let delta = (rect.rect.size() - bounds.size()).abs();
+        (rect.rect.center().distance(bounds.center()) < 0.5
+            && delta.max_elem() < 5.0
+            && rect.fill.a() > 0
+            && rect.brush.is_none())
+        .then_some(Self {
+            fill: rect.fill,
+            border: rect.stroke.color,
+        })
+    }
+}
+
+pub(crate) fn remember_anchor_material(
+    response: &egui::Response,
+    material: Option<AnchorMaterial>,
+) {
+    let key = response.id.with("temivu-anchor-material");
+    let pass = response.ctx.cumulative_pass_nr();
+    response
+        .ctx
+        .data_mut(|data| data.insert_temp(key, (pass, material)));
+}
+
+pub(crate) fn anchor_material(response: &egui::Response) -> Option<AnchorMaterial> {
+    let ctx = &response.ctx;
+    let pass = ctx.cumulative_pass_nr();
+    let painted = ctx.data(|data| {
+        data.get_temp::<(u64, Option<AnchorMaterial>)>(response.id.with("temivu-anchor-material"))
+    });
+    if let Some((painted_pass, material)) = painted
+        && painted_pass == pass
+    {
+        return material;
+    }
+
+    // Ordinary egui buttons may also anchor a Temivu popup. Look only
+    // at recent rectangles that match the trigger, never at text.
+    ctx.graphics(|graphics| {
+        let entries = graphics.get(response.layer_id)?.all_entries();
+        let skip = entries.len().saturating_sub(32);
+        entries
+            .skip(skip)
+            .filter_map(|entry| AnchorMaterial::from_shape(&entry.shape, response.rect))
+            .last()
+    })
 }
 
 pub(crate) fn anchor_rect(response: &egui::Response) -> egui::Rect {

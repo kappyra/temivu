@@ -15,6 +15,7 @@ pub struct Gallery {
     history: u8,
     notifications: bool,
     rail_switch: bool,
+    expanded: bool,
     load_started: Option<f64>,
     load_completed: bool,
     menu: bool,
@@ -30,11 +31,16 @@ type Example = (&'static str, &'static str, Draw);
 
 impl Gallery {
     pub fn show(&mut self, ui: &mut Ui, theme: &Theme, filter: &str) -> bool {
-        let examples: [Example; 13] = [
+        let examples: [Example; 14] = [
             (
                 "Circular loading",
                 "Watch the spinner or start a timed load.",
                 Self::loading,
+            ),
+            (
+                "Spring resize",
+                "Expand a panel and reverse it while it is moving.",
+                Self::resize,
             ),
             (
                 "Switch",
@@ -133,6 +139,43 @@ impl Gallery {
             ui.add_space(12.0);
         }
         true
+    }
+
+    fn resize(&mut self, ui: &mut Ui, theme: &Theme) {
+        let action = if self.expanded {
+            "Shrink panel"
+        } else {
+            "Grow panel"
+        };
+        if Button::new(action, theme)
+            .variant(ButtonVariant::Outline)
+            .show(ui)
+            .clicked()
+        {
+            self.expanded = !self.expanded;
+        }
+        let target = if self.expanded {
+            egui::vec2(200.0, 70.0)
+        } else {
+            egui::vec2(96.0, 32.0)
+        };
+        let size = temivu::motion::spring_size(
+            ui.ctx(),
+            ui.make_persistent_id("resize-preview"),
+            target,
+            theme,
+        );
+        let (rect, _) = ui.allocate_exact_size(
+            egui::vec2(size.x.min(ui.available_width()), size.y),
+            egui::Sense::hover(),
+        );
+        ui.painter().rect(
+            rect,
+            16,
+            theme.muted,
+            egui::Stroke::new(1.0, theme.border),
+            egui::StrokeKind::Inside,
+        );
     }
 
     fn segments(&mut self, ui: &mut Ui, theme: &Theme) {

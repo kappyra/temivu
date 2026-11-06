@@ -1,19 +1,21 @@
-# Sheet (experimental)
+# Bottom sheet
 
-A caller-owned modal bottom sheet. It blocks pointer and keyboard access to the rest of the UI, moves focus into the sheet when it opens and restores the previous focus after a normal dismissal.
+Use a bottom sheet for a focused task such as choosing filters. The sheet is a modal with a spring-driven entrance and exit. It follows a downward drag on its handle and springs back when released early.
 
 ```rust
 use temivu::{Sheet, Theme};
 
-fn example(ui: &mut egui::Ui, theme: &Theme, open: &mut bool) {
-Sheet::new(egui::Id::new("filters-sheet"), "Filters", theme).show(ui.ctx(), open, |ui| {
-    if ui.button("Apply filters").clicked() {
-        ui.close();
-    }
-});
+fn filters(ui: &mut egui::Ui, theme: &Theme, open: &mut bool) {
+    Sheet::new(egui::Id::new("filters"), "Filters", theme)
+        .description("Choose which items are shown.")
+        .show(ui.ctx(), open, |ui| {
+            if ui.button("Apply filters").clicked() {
+                ui.close();
+            }
+        });
 }
 ```
 
-`open` is updated by Escape, the header's `Close` button, a backdrop click when `barrier_dismissible` is enabled (the default), and `ui.close()` calls inside the content. Only the topmost sheet handles Escape, and an open popup takes precedence. The sheet requests focus on opening and restores the previously focused widget after it disappears; call `show` every frame, including while closed, so focus can be restored. Pass a stable `egui::Id`.
+On compact windows and touch layouts the sheet is bottom-aligned with narrow side insets. Wide windows get a centered, floating panel. The default maximum width is 560 points. Long content scrolls within the sheet while the title and dismiss control remain visible.
 
-The sheet is clamped to the window with an 8-point outer margin and a 16-point padding; `max_width` defaults to 560 points. Its height follows the content, so callers should provide a scroll area for long content. Drag-to-dismiss, entrance and exit animation, other sides, safe areas, keyboard insets, route semantics, localization, screen-reader verification and upstream visual parity remain open. See `COVERAGE.md` for current limitations.
+The close button, downward drag, Escape, a backdrop click when enabled, and `ui.close()` dismiss the sheet. Use a stable ID and call `show` every frame so the exit can finish and previous keyboard focus can be restored. Reduced motion skips the automatic transition.

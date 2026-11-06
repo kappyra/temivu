@@ -394,3 +394,41 @@ fn spring_pose_is_independent_of_frame_spacing() {
     let regular: Vec<_> = (0..=12).map(|frame| frame as f64 / 60.0).collect();
     assert!((sample(&regular) - sample(&[0.0, 0.013, 0.057, 0.14, 0.2])).abs() < 0.0001);
 }
+
+#[test]
+fn size_spring_synchronizes_axes_and_reverses_without_jumping() {
+    use egui::vec2;
+    use temivu::motion::spring_size;
+
+    let mut harness = Harness::builder().build_ui_state(
+        |ui, state: &mut (egui::Vec2, egui::Vec2, bool)| {
+            let mut theme = Theme::light();
+            theme.motion.reduced_motion = state.2;
+            state.1 = spring_size(ui.ctx(), animation_id(), state.0, &theme);
+        },
+        (vec2(100.0, 50.0), egui::Vec2::ZERO, false),
+    );
+    enable_animations(&harness);
+    for (time, target) in [(0.0, vec2(100.0, 50.0)), (0.02, vec2(200.0, 100.0))] {
+        harness.state_mut().0 = target;
+        harness.input_mut().time = Some(time);
+        harness.step();
+        assert_eq!(harness.state().1, vec2(100.0, 50.0));
+    }
+    harness.input_mut().time = Some(0.06);
+    harness.step();
+    let growing = harness.state().1;
+    assert!(growing.x > 100.0 && growing.x < 200.0);
+    assert!((growing.x - 2.0 * growing.y).abs() < 0.001);
+
+    harness.state_mut().0 = vec2(80.0, 40.0);
+    harness.input_mut().time = Some(0.06);
+    harness.step();
+    assert_eq!(harness.state().1, growing);
+    harness.input_mut().time = Some(0.2);
+    harness.step();
+    assert!(harness.state().1.x < growing.x);
+    harness.state_mut().2 = true;
+    harness.step();
+    assert_eq!(harness.state().1, vec2(80.0, 40.0));
+}

@@ -187,3 +187,42 @@ fn width_is_clamped_on_a_narrow_window() {
     assert!(width > 100.0, "the sheet should keep a usable width");
     harness.get_by_label("Apply filters");
 }
+
+#[test]
+fn compact_sheet_keeps_its_header_visible_and_dismisses_by_grip() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(340.0, 300.0))
+        .build_ui_state(
+            |ui, open| {
+                Sheet::new(egui::Id::new("compact-sheet"), "Filters", &Theme::light())
+                    .description("Choose which items are shown.")
+                    .show(ui.ctx(), open, |ui| {
+                        for index in 0..30 {
+                            ui.label(format!("Filter {index}"));
+                        }
+                    });
+            },
+            true,
+        );
+    harness.run();
+    harness.run_steps(3);
+    let sheet = harness
+        .get_by_role_and_label(egui::accesskit::Role::Dialog, "Filters")
+        .rect();
+    let close = harness.get_by_label("Close").rect();
+    assert!(
+        sheet.top() >= 0.0 && sheet.bottom() <= 300.5,
+        "sheet={sheet:?}, close={close:?}"
+    );
+    assert!(sheet.height() < 300.0 && close.height() >= 44.0);
+    let grip = egui::pos2(sheet.center().x, sheet.top() + 23.0);
+    let destination = grip + egui::vec2(0.0, 85.0);
+    harness.event(egui::Event::PointerMoved(grip));
+    harness.drag_at(grip);
+    harness.event(egui::Event::PointerMoved(destination));
+    harness.run_steps(3);
+    assert!(*harness.state());
+    harness.drop_at(destination);
+    harness.run();
+    assert!(!harness.state());
+}

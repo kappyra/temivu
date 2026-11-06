@@ -1,8 +1,13 @@
-//! Preliminary single-toast lifecycle with a reduced-motion-aware fade-in.
-//! Overlay queues, gestures, exit animation and parity remain open.
-use crate::Theme;
-use egui::{Frame, Margin, Response, RichText, Stroke, Ui, WidgetInfo, WidgetType};
+//! Responsive notification card with a paint-only exit.
+use crate::{Theme, liquid::fade_shape, motion};
+use egui::{Id, Rect, Response, RichText, Ui, WidgetInfo, WidgetType, vec2};
 use std::time::Duration;
+
+#[derive(Clone, Debug)]
+struct ToastSnapshot {
+    rect: Rect,
+    shapes: Vec<egui::epaint::ClippedShape>,
+}
 
 /// Caller-owned visibility and expiry. The clock begins when the toast is first shown
 /// and restarts after pointer hover or keyboard focus on its dismiss control.
@@ -11,6 +16,7 @@ pub struct ToastState {
     visible: bool,
     timeout: Option<Duration>,
     started_at: Option<f64>,
+    snapshot: Option<ToastSnapshot>,
 }
 
 impl Default for ToastState {
@@ -26,6 +32,7 @@ impl ToastState {
             visible: true,
             timeout,
             started_at: None,
+            snapshot: None,
         }
     }
     pub fn is_visible(&self) -> bool {
@@ -37,6 +44,11 @@ impl ToastState {
     pub fn restart(&mut self) {
         self.visible = true;
         self.started_at = None;
+    }
+
+    /// Whether the card or its closing animation still needs to be rendered.
+    pub fn needs_render(&self) -> bool {
+        self.visible || self.snapshot.is_some()
     }
 
     // Returns the next timer wakeup; bounds the duration passed to egui.
@@ -123,114 +135,161 @@ impl<'a> Toast<'a> {
         self
     }
     /// Show the toast and return its response while it is visible.
-    ///
-    /// The toast fades in through the reduced-motion-aware helper in
-    /// [`crate::motion`]: it snaps when animations are disabled, and requests a
-    /// repaint only while the fade is in progress.
-    pub fn show(self, ui: &mut Ui) -> Option<Response> {
-        let now = ui.input(|input| input.time);
+    /// Keep calling this after dismissal to finish the paint-only exit.
+    pub fn show(mut self, ui: &mut Ui) -> Option<Response> {
         let motion_id = ui.make_persistent_id("temivu-toast-reveal");
-        if !self.state.visible {
-            // Reset so a restarted toast fades in again instead of appearing.
-            crate::motion::reset(ui.ctx(), motion_id);
-            return None;
-        }
         if self.state.timeout == Some(Duration::ZERO) {
             self.state.dismiss();
-            crate::motion::reset(ui.ctx(), motion_id);
+        }
+        if !self.state.visible {
+            self.paint_exit(ui, motion_id);
             return None;
         }
-        let reveal = crate::motion::animate_f32(ui.ctx(), motion_id, 0.0, 1.0, self.theme);
-        let scope = ui.scope(|ui| {
-            if reveal < 1.0 {
-                ui.multiply_opacity(reveal.max(0.0));
+
+        let reveal = motion::surface_reveal(ui.ctx(), motion_id, true, self.theme);
+        let animate = self.theme.motion.animations_enabled(ui.ctx()) && !ui.is_sizing_pass();
+        let layer = ui.layer_id();
+        let start = animate.then(|| {
+            ui.ctx()
+                .graphics(|graphics| graphics.get(layer).map_or(0, |list| list.next_idx().0))
+        });
+        let mut child = ui.new_child(egui::UiBuilder::new().id_salt(motion_id));
+        let compact = self.theme.touch || ui.ctx().content_rect().width() < 600.0;
+        let width = ui.available_width().min(392.0);
+        child.set_max_width(width);
+        let mut frame = crate::surface::popup_frame(self.theme, if compact { 14 } else { 16 })
+            .corner_radius(22);
+        frame.shadow.offset = [0, 4];
+        frame.shadow.blur = 14;
+        let colors = match self.variant {
+            ToastVariant::Primary => (self.theme.foreground, self.theme.muted_foreground),
+            ToastVariant::Destructive => {
+                let destructive =
+                    self.theme
+                        .readable_on(self.theme.destructive, self.theme.card, 4.5);
+                (destructive, destructive)
             }
-            let padding = if self.theme.touch {
-                Margin::symmetric(16, 14)
-            } else {
-                Margin::symmetric(16, 12)
-            };
-            let body_size = self.theme.typography.body.size;
-            let (title_color, description_color) = match self.variant {
-                ToastVariant::Primary => (self.theme.foreground, self.theme.muted_foreground),
-                ToastVariant::Destructive => {
-                    let destructive =
-                        self.theme
-                            .readable_on(self.theme.destructive, self.theme.card, 4.5);
-                    (destructive, destructive)
-                }
-            };
-            Frame::new()
-                .fill(self.theme.card)
-                .stroke(Stroke::new(1.0, self.theme.border))
-                .corner_radius(10)
-                .inner_margin(padding)
-                .show(ui, |ui| {
-                    // Forui `FToastStyle`: titleSpacing 2 (desktop) / 4 (touch).
-                    ui.spacing_mut().item_spacing.y = if self.theme.touch { 4.0 } else { 2.0 };
-                    ui.horizontal_wrapped(|ui| {
-                        if let Some(icon) = self.icon {
-                            let glyph = ui.add(
-                                egui::Label::new(
-                                    RichText::new(icon).size(body_size).color(title_color),
-                                )
-                                .selectable(false),
-                            );
-                            // The glyph approximates a decorative vector icon; hide its
-                            // own text node so assistive technology does not announce it.
-                            ui.ctx().accesskit_node_builder(glyph.id, |node| {
-                                node.set_hidden();
-                            });
-                        }
-                        ui.vertical(|ui| {
-                            ui.label(RichText::new(self.title).size(body_size).color(title_color));
-                            if let Some(description) = self.description {
-                                ui.label(
-                                    RichText::new(description)
-                                        .size(body_size)
-                                        .color(description_color),
-                                );
-                            }
-                        });
-                        let dismiss = crate::button::press_native(ui, self.theme, |ui| {
+        };
+        let card = frame.show(&mut child, |ui| {
+            ui.set_width((width - frame.total_margin().sum().x).max(0.0));
+            ui.spacing_mut().item_spacing.x = 10.0;
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                let size = if compact { 44.0 } else { 34.0 };
+                let dismiss = ui
+                    .add_enabled_ui(reveal >= 0.97, |ui| {
+                        crate::button::press_native(ui, self.theme, |ui| {
                             ui.add(
-                                egui::Button::new(self.dismiss_label)
-                                    .fill(self.theme.card)
-                                    .stroke(Stroke::new(1.0, self.theme.border))
-                                    .corner_radius(255)
-                                    .min_size(egui::Vec2::splat(if self.theme.touch {
-                                        44.0
-                                    } else {
-                                        32.0
-                                    })),
+                                egui::Button::new(
+                                    RichText::new("×").size(21.0).color(self.theme.foreground),
+                                )
+                                .fill(self.theme.muted)
+                                .stroke(egui::Stroke::NONE)
+                                .corner_radius(255)
+                                .min_size(vec2(size, size)),
                             )
-                        });
-                        if let Some(label) = self.dismiss_accessible_label {
-                            ui.ctx().accesskit_node_builder(dismiss.id, |node| {
-                                node.set_label(label);
-                            });
-                        }
-                        if dismiss.clicked() {
-                            self.state.dismiss();
-                        }
-                        dismiss.has_focus()
+                        })
                     })
                     .inner
-                })
+                    .on_hover_text(self.dismiss_label);
+                let accessible = self.dismiss_accessible_label.unwrap_or(self.dismiss_label);
+                ui.ctx()
+                    .accesskit_node_builder(dismiss.id, |node| node.set_label(accessible));
+
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
+                    if ui.available_width() >= 114.0 {
+                        let (rect, _) =
+                            ui.allocate_exact_size(vec2(30.0, 30.0), egui::Sense::hover());
+                        ui.painter()
+                            .circle_filled(rect.center(), 15.0, self.theme.muted);
+                        let icon = self.icon.unwrap_or(match self.variant {
+                            ToastVariant::Primary => "i",
+                            ToastVariant::Destructive => "!",
+                        });
+                        let glyph = ui.put(
+                            rect,
+                            egui::Label::new(RichText::new(icon).strong().color(colors.0))
+                                .selectable(false)
+                                .truncate(),
+                        );
+                        ui.ctx()
+                            .accesskit_node_builder(glyph.id, |node| node.set_hidden());
+                    } else if let Some(icon) = self.icon {
+                        // Preserve explicit decorative icons even in very narrow cards.
+                        let glyph = ui.add(
+                            egui::Label::new(RichText::new(icon).color(colors.0)).selectable(false),
+                        );
+                        ui.ctx()
+                            .accesskit_node_builder(glyph.id, |node| node.set_hidden());
+                    }
+                    ui.vertical(|ui| {
+                        ui.set_width(ui.available_width());
+                        ui.spacing_mut().item_spacing.y = 3.0;
+                        ui.add(
+                            egui::Label::new(
+                                RichText::new(self.title)
+                                    .size(self.theme.typography.body.size)
+                                    .strong()
+                                    .color(colors.0),
+                            )
+                            .wrap(),
+                        );
+                        if let Some(description) = self.description {
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(description)
+                                        .size(self.theme.typography.body.size)
+                                        .color(colors.1),
+                                )
+                                .wrap(),
+                            );
+                        }
+                    });
+                });
+                dismiss
+            })
+            .inner
         });
-        let frame = scope.inner;
-        let mut response = frame.response;
-        let hovered = ui.input(|input| {
-            input
-                .pointer
-                .hover_pos()
-                .is_some_and(|pos| response.rect.contains(pos))
-        });
-        if let Some(delay) = self.state.tick(now, hovered || frame.inner) {
+
+        let mut response = card.response;
+        let layout = toast_layout(ui, response.rect, reveal);
+        if let Some(start) = start {
+            let clip = ui.clip_rect();
+            let snapshot = self.state.snapshot.get_or_insert_with(|| ToastSnapshot {
+                rect: response.rect,
+                shapes: Vec::new(),
+            });
+            snapshot.rect = response.rect;
+            snapshot.shapes.clear();
+            ui.ctx().graphics(|graphics| {
+                if let Some(list) = graphics.get(layer) {
+                    snapshot
+                        .shapes
+                        .extend(list.all_entries().skip(start).cloned());
+                }
+            });
+            if reveal < 1.0 {
+                ui.ctx().graphics_mut(|graphics| {
+                    let list = graphics.entry(layer);
+                    for index in start..list.next_idx().0 {
+                        list.mutate_shape(egui::layers::ShapeIdx(index), |entry| {
+                            pose_toast(entry, response.rect, layout, clip, reveal);
+                        });
+                    }
+                });
+            }
+        } else {
+            self.state.snapshot = None;
+        }
+
+        if card.inner.clicked() {
+            self.state.dismiss();
+        }
+        let now = ui.input(|input| input.time);
+        let hovered = ui.rect_contains_pointer(layout);
+        if let Some(delay) = self.state.tick(now, hovered || card.inner.has_focus()) {
             ui.ctx().request_repaint_after(delay);
         }
         if !self.state.visible {
-            crate::motion::reset(ui.ctx(), motion_id);
             response.mark_changed();
             ui.ctx().request_repaint();
         }
@@ -246,6 +305,55 @@ impl<'a> Toast<'a> {
         });
         Some(response)
     }
+
+    fn paint_exit(&mut self, ui: &mut Ui, id: Id) {
+        let Some(snapshot) = &self.state.snapshot else {
+            motion::reset(ui.ctx(), id);
+            return;
+        };
+        let reveal = motion::surface_reveal(ui.ctx(), id, false, self.theme);
+        if reveal <= 0.001 {
+            self.state.snapshot = None;
+            motion::reset(ui.ctx(), id);
+            return;
+        }
+        let rect = Rect::from_min_size(ui.available_rect_before_wrap().min, snapshot.rect.size());
+        let layout = toast_layout(ui, rect, reveal);
+        for entry in snapshot.shapes.iter() {
+            let mut entry = entry.clone();
+            pose_toast(&mut entry, snapshot.rect, layout, ui.clip_rect(), reveal);
+            ui.painter()
+                .with_clip_rect(entry.clip_rect)
+                .add(entry.shape);
+        }
+    }
+}
+
+fn toast_layout(ui: &mut Ui, rect: Rect, reveal: f32) -> Rect {
+    let mut layout = rect;
+    if ui.layout().is_vertical() {
+        layout.max.y = layout.min.y + rect.height() * reveal;
+    }
+    ui.advance_cursor_after_rect(layout);
+    layout
+}
+
+fn pose_toast(
+    entry: &mut egui::epaint::ClippedShape,
+    rect: Rect,
+    layout: Rect,
+    clip: Rect,
+    reveal: f32,
+) {
+    let transform = egui::emath::TSTransform::from_translation(
+        layout.center_bottom() - rect.center_bottom() + vec2(0.0, 8.0 * (1.0 - reveal)),
+    ) * motion::scale_around(rect.center_bottom(), egui::lerp(0.92..=1.0, reveal));
+    entry.shape.transform(transform);
+    entry.clip_rect = transform
+        .mul_rect(entry.clip_rect)
+        .intersect(layout.expand(12.0))
+        .intersect(clip);
+    fade_shape(&mut entry.shape, reveal);
 }
 
 #[cfg(test)]

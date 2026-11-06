@@ -64,3 +64,21 @@ In the showcase's **Controls** page, select **Bloom** or **Droplet**, then press
 Popup width is viewport-bounded; egui chooses an available side of the trigger. Calendar width includes its padding and the drawer has bounded width and scrolling. The development profile optimizes egui/epaint for responsive layout/tessellation; test executables strip debug symbols to avoid temporary-space exhaustion. No new renderer dependency or unsafe code is added.
 
 Tests cover above/below mirrored Droplet geometry, finite/bounded meshes, source/final bounds, retained text size, inherited defaults and explicit overrides, mode selection/preview, closing callbacks, selection/focus and idle spring timing. These are functional and geometry checks, not a guarantee of native display FPS, exact Apple parity or mobile/browser deployment performance. `--mobile` is a desktop viewport preview. `--no-vsync` remains an explicit workaround for presentation stalls observed in this unfocused X11 session; normal vsync is the default.
+
+## Resize content with a spring
+
+Use `motion::spring_size` for a panel, image or custom widget that changes its layout size. Pass the same ID on every frame. Both dimensions use the same spring profile and follow the theme's reduced-motion setting.
+
+```rust
+use temivu::{Theme, motion};
+
+fn preview(ui: &mut egui::Ui, theme: &Theme, expanded: bool) {
+    let target = if expanded { egui::vec2(280.0, 140.0) } else { egui::vec2(160.0, 80.0) };
+    let size = motion::spring_size(ui.ctx(), ui.make_persistent_id("preview"), target, theme);
+    let size = size.min(ui.available_size());
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    ui.painter().rect_filled(rect, 20, theme.muted);
+}
+```
+
+For paint-only effects such as a press or reveal, use `motion::scale_around` with `Ui::with_visual_transform` to scale around a pivot while keeping the layout and hit area stable.

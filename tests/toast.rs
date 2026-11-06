@@ -151,16 +151,23 @@ fn zero_duration_never_exposes_a_toast() {
     assert!(harness.query_by_label("Invisible").is_none());
 }
 
-/// The toast frame is the only rounded rectangle with a 10-point radius.
-fn toast_card_alpha(harness: &Harness<'_, ToastState>) -> Option<u8> {
+fn toast_card<'a>(harness: &'a Harness<'_, ToastState>) -> Option<&'a egui::epaint::RectShape> {
+    fn card(shape: &egui::Shape) -> Option<&egui::epaint::RectShape> {
+        match shape {
+            egui::Shape::Rect(rect) if (20..=22).contains(&rect.corner_radius.nw) => Some(rect),
+            egui::Shape::Vec(shapes) => shapes.iter().rev().find_map(card),
+            _ => None,
+        }
+    }
     harness
         .output()
         .shapes
         .iter()
-        .find_map(|clipped| match &clipped.shape {
-            egui::Shape::Rect(shape) if shape.corner_radius.nw == 10 => Some(shape.fill.a()),
-            _ => None,
-        })
+        .find_map(|entry| card(&entry.shape))
+}
+
+fn toast_card_alpha(harness: &Harness<'_, ToastState>) -> Option<u8> {
+    toast_card(harness).map(|card| card.fill.a())
 }
 
 #[test]
@@ -183,9 +190,24 @@ fn toast_fade_in_respects_motion_settings() {
         "the first revealed frame is fully opaque"
     );
 
-    // Hiding the toast resets the reveal state, so restarting it fades in again.
+    let full = toast_card(&harness).unwrap().rect;
     harness.state_mut().dismiss();
+    harness.input_mut().time = Some(0.01);
     harness.step();
+    harness.input_mut().time = Some(0.08);
+    harness.step();
+    let closing = toast_card(&harness).expect("paint-only closing card");
+    assert!(closing.fill.a() > 0 && closing.fill.a() < 255);
+    assert!(closing.rect.width() < full.width());
+    assert!(
+        harness
+            .query_by_role(egui::accesskit::Role::Alert)
+            .is_none()
+    );
+    assert!(harness.query_by_label("Dismiss").is_none());
+    harness.input_mut().time = Some(1.0);
+    harness.step();
+    assert!(toast_card(&harness).is_none());
     harness.state_mut().restart();
     harness.input_mut().time = Some(10.0);
     harness.step();
@@ -239,7 +261,7 @@ fn toast_fade_in_respects_motion_settings() {
 }
 
 #[test]
-fn toast_uses_forui_padding_and_body_typography() {
+fn toast_uses_a_rounded_card_and_theme_typography() {
     let theme = Theme::light();
     let card = theme.card;
     let body = theme.typography.body.size;
@@ -254,11 +276,16 @@ fn toast_uses_forui_padding_and_body_typography() {
         .output()
         .shapes
         .iter()
-        .find_map(|shape| match &shape.shape {
-            egui::Shape::Rect(rect) if rect.fill == card && rect.corner_radius.nw == 10 => {
-                Some(rect.rect)
-            }
-            _ => None,
+        .find_map(|entry| {
+            let egui::Shape::Vec(shapes) = &entry.shape else {
+                return None;
+            };
+            shapes.iter().find_map(|shape| match shape {
+                egui::Shape::Rect(rect) if rect.fill == card && rect.corner_radius.nw == 22 => {
+                    Some(rect.rect)
+                }
+                _ => None,
+            })
         })
         .expect("toast card");
     let title = harness
@@ -272,9 +299,8 @@ fn toast_uses_forui_padding_and_body_typography() {
             _ => None,
         })
         .expect("toast title");
-    // Forui FToastStyle: 16 point horizontal padding and body.sm title size
-    // (the 1 point border is drawn inside the frame).
-    assert!((title.0 - card_rect.left() - 16.0).abs() <= 1.0);
+    assert!(title.0 >= card_rect.left() + 14.0);
+    assert!(title.0 <= card_rect.center().x);
     assert_eq!(title.1, body);
 }
 

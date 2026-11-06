@@ -27,6 +27,7 @@ pub struct Dialog<'a> {
     frame: Option<Frame>,
     area: Option<egui::Area>,
     source: Option<egui::Rect>,
+    source_material: Option<crate::motion::AnchorMaterial>,
     travel: OverlayTravel,
     liquid: Option<crate::liquid::LiquidStyle>,
 }
@@ -43,6 +44,7 @@ impl<'a> Dialog<'a> {
             frame: None,
             area: None,
             source: None,
+            source_material: None,
             travel: OverlayTravel::Source,
             liquid: None,
         }
@@ -87,11 +89,14 @@ impl<'a> Dialog<'a> {
     /// Match the entrance/exit to a trigger rectangle.
     pub fn source(mut self, source: egui::Rect) -> Self {
         self.source = Some(source);
+        self.source_material = None;
         self
     }
     /// Match the transition to the source control's painted bounds.
-    pub fn source_response(self, response: &egui::Response) -> Self {
-        self.source(crate::motion::anchor_rect(response))
+    pub fn source_response(mut self, response: &egui::Response) -> Self {
+        self.source = Some(crate::motion::anchor_rect(response));
+        self.source_material = crate::motion::anchor_material(response);
+        self
     }
 
     /// Reuse egui's positioning API, for example to place a navigation drawer.
@@ -153,11 +158,11 @@ impl<'a> Dialog<'a> {
         } else {
             self.travel
         };
-        let transition = crate::liquid::OverlayPass::begin(
+        let mut transition = crate::liquid::OverlayPass::begin(
             ctx,
             area.layer(),
             *open,
-            source,
+            (source, self.source_material),
             travel,
             motion,
             &theme,

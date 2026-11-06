@@ -222,9 +222,7 @@ impl<'a> Button<'a> {
             .corner_radius(radius)
             .min_size(Vec2::splat(height));
         let center = previous.map_or(egui::Pos2::ZERO, |(rect, _)| rect.center());
-        let transform = egui::emath::TSTransform::from_translation(center.to_vec2())
-            * egui::emath::TSTransform::from_scaling(crate::motion::press_scale(press))
-            * egui::emath::TSTransform::from_translation(-center.to_vec2());
+        let transform = crate::motion::scale_around(center, crate::motion::press_scale(press));
         let response = ui
             .with_visual_transform(transform, |ui| {
                 ui.spacing_mut().interact_size.y = height;
@@ -253,6 +251,13 @@ impl<'a> Button<'a> {
             .data_mut(|data| data.insert_temp(press_key, (response.rect, response.id)));
         let painted = transform.mul_rect(response.rect);
         crate::motion::remember_anchor(&response, painted);
+        crate::motion::remember_anchor_material(
+            &response,
+            (surface.a() > 0).then_some(crate::motion::AnchorMaterial {
+                fill: surface,
+                border,
+            }),
+        );
         if self.icon.is_some() {
             // Keep the accessible name identical to the visible label text.
             ui.ctx().accesskit_node_builder(response.id, |node| {
@@ -302,15 +307,23 @@ pub(crate) fn press_native(
     let ctx = ui.ctx().clone();
     let start = paint_start(&ctx, layer);
     let response = draw(ui);
+    let material = ctx.graphics(|graphics| {
+        graphics
+            .get(layer)?
+            .all_entries()
+            .skip(start.0)
+            .find_map(|entry| {
+                crate::motion::AnchorMaterial::from_shape(&entry.shape, response.rect)
+            })
+    });
+    crate::motion::remember_anchor_material(&response, material);
     let press = crate::motion_controls::press_amount(&response, theme);
     if press.abs() < 0.001 {
         crate::motion::remember_anchor(&response, response.rect);
         return response;
     }
-    let scale = crate::motion::press_scale(press);
-    let center = response.rect.center().to_vec2();
-    let transform = egui::emath::TSTransform::from_translation(center * (1.0 - scale))
-        * egui::emath::TSTransform::from_scaling(scale);
+    let transform =
+        crate::motion::scale_around(response.rect.center(), crate::motion::press_scale(press));
     deform_paint(&ctx, layer, start, press);
     ctx.graphics_mut(|graphics| {
         let list = graphics.entry(layer);

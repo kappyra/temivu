@@ -159,6 +159,81 @@ fn droplet_overpaints_the_trigger_edge_at_the_join() {
 }
 
 #[test]
+fn droplet_join_tracks_the_trigger_and_panel_colors_in_both_directions() {
+    use egui::{Color32, Shape};
+
+    let ctx = egui::Context::default();
+    let mut theme = Theme::light();
+    let trigger = Color32::from_rgb(122, 68, 48);
+    let panel = Color32::from_rgb(220, 236, 252);
+    theme.primary = trigger;
+    theme.apply(&ctx);
+    let render = |time, mut open| {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                time: Some(time),
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(500.0, 500.0),
+                )),
+                ..Default::default()
+            },
+            |ui| {
+                let anchor = temivu::Button::new("Open settings", &theme).show(ui);
+                Popover::new(egui::Id::new("color-morph"), "Settings", &mut open)
+                    .theme(&theme)
+                    .frame(
+                        egui::Frame::new()
+                            .fill(panel)
+                            .corner_radius(20)
+                            .inner_margin(12),
+                    )
+                    .liquid(LiquidStyle::droplet())
+                    .width(200.0)
+                    .show(&anchor, |ui| ui.label("Popup content"));
+            },
+        );
+        output.textures_delta.clear();
+        output
+    };
+
+    let joined_colors = |output: egui::FullOutput| {
+        output.shapes.iter().any(|entry| {
+            let Shape::Vec(shapes) = &entry.shape else {
+                return false;
+            };
+            shapes.iter().any(|shape| {
+                let Shape::Mesh(mesh) = shape else {
+                    return false;
+                };
+                let mut source = false;
+                let mut middle = false;
+                let mut destination = false;
+                for vertex in &mesh.vertices {
+                    let c = vertex.color;
+                    source |= c == trigger;
+                    destination |= c == panel;
+                    middle |= c.a() == 255 && c.b() > trigger.b() && c.b() < panel.b();
+                }
+                source && middle && destination
+            })
+        })
+    };
+
+    render(0.0, false);
+    let open = (1..=50).fold(false, |found, i| {
+        joined_colors(render(f64::from(i) / 120.0, true)) || found
+    });
+    assert!(open, "opening must blend the button and popup in one mesh");
+
+    render(1.0, true);
+    let close = (1..=50).fold(false, |found, i| {
+        joined_colors(render(1.0 + f64::from(i) / 120.0, false)) || found
+    });
+    assert!(close, "closing must blend back into the trigger");
+}
+
+#[test]
 fn compact_command_menu_replaces_the_trigger_with_one_moving_outline() {
     let ctx = egui::Context::default();
     let theme = Theme::light();

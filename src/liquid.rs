@@ -1,7 +1,7 @@
 //! Source-connected opening/closing motion for ordinary themed surfaces.
 //! Default popups expand as one bubble; Droplet merging is an explicit alternative.
 //! Material, input and layout remain owned by the host and egui.
-use crate::Theme;
+use crate::{Theme, motion::AnchorMaterial};
 use egui::{
     Color32, Frame, Id, InnerResponse, LayerId, Order, Pos2, Rect, Response, Shape, Ui, Vec2,
 };
@@ -300,11 +300,23 @@ pub(crate) fn popup<R>(
         && (0.0..=64.0).contains(&source.height())
         && source.width() > 0.0
         && source.width() <= 1.55 * source.height();
+    let source_material =
+        (motion.transition == SurfaceTransition::Droplet && amount > 0.001 && amount < 0.96)
+            .then(|| crate::motion::anchor_material(anchor))
+            .flatten();
     let surface_shape = |target| {
         if matched {
-            matched_menu_shape(source, target, amount, frame)
+            matched_menu_shape(source, target, amount, frame, source_material)
         } else {
-            surface_shape(source, painted_source, target, amount, frame, motion)
+            surface_shape(
+                source,
+                painted_source,
+                target,
+                amount,
+                frame,
+                motion,
+                source_material,
+            )
         }
     };
     let content_pose = |target| {
@@ -491,7 +503,13 @@ fn matched_menu_radii(
 
 // A compact command menu takes the place of the icon button. The same
 // silhouette grows out of it and collapses back without a second outline.
-fn matched_menu_shape(source: Rect, target: Rect, amount: f32, frame: Frame) -> Shape {
+fn matched_menu_shape(
+    source: Rect,
+    target: Rect,
+    amount: f32,
+    frame: Frame,
+    source_material: Option<AnchorMaterial>,
+) -> Shape {
     if amount <= 0.001 {
         return Shape::Noop;
     }
@@ -504,11 +522,15 @@ fn matched_menu_shape(source: Rect, target: Rect, amount: f32, frame: Frame) -> 
     shadow.color = shadow
         .color
         .gamma_multiply(smoothstep((amount - 0.07) / 0.67));
+    let material = surface_material(frame);
+    let material = source_material.map_or(material, |source| {
+        mix_material(source, material, smoothstep((amount - 0.12) / 0.38))
+    });
     let panel = crate::motion::rounded_shape(
         body,
         radii,
-        frame.fill,
-        frame.stroke,
+        material.fill,
+        egui::Stroke::new(frame.stroke.width, material.border),
         egui::StrokeKind::Inside,
     );
     let mut shape = Shape::Vec(vec![shadow.as_shape(body, radii).into(), panel]);
@@ -542,6 +564,7 @@ fn surface_shape(
     amount: f32,
     frame: Frame,
     motion: LiquidStyle,
+    source_material: Option<AnchorMaterial>,
 ) -> Shape {
     if (amount - 1.0).abs() < 0.001 {
         return frame.paint(target.shrink(frame.stroke.width) - frame.inner_margin);
@@ -605,6 +628,7 @@ fn surface_shape(
     let envelope = source.union(target).expand(blend_radius * 0.25 + 6.0);
     let side = envelope.size().max_elem();
     let bounds = Rect::from_min_size(envelope.min, Vec2::splat(side));
+    let material = surface_material(frame);
     let mut outline = Contour {
         mesh: egui::Mesh::default(),
         edge_mesh: egui::Mesh::default(),
@@ -614,8 +638,11 @@ fn surface_shape(
         ),
         panel: RoundedField::new(body, radii),
         smoothing,
-        fill: frame.fill,
-        border: stroke.color,
+        material,
+        // Keep the real trigger color at the join until the neck detaches.
+        // The colored band recedes with the smoothing range.
+        source_material: source_material.filter(|source| *source != material),
+        color_reach: (painted_source.height() * 0.55).min(smoothing).max(0.001),
         stroke_width: stroke.width,
     };
     outline.tile(bounds, (side / 128.0).max(3.2));
@@ -683,12 +710,39 @@ struct Contour {
     anchor: RoundedField,
     panel: RoundedField,
     smoothing: f32,
-    fill: Color32,
-    border: Color32,
+    material: AnchorMaterial,
+    source_material: Option<AnchorMaterial>,
+    color_reach: f32,
     stroke_width: f32,
 }
 
+fn surface_material(frame: Frame) -> AnchorMaterial {
+    AnchorMaterial {
+        fill: frame.fill,
+        border: frame.stroke.color,
+    }
+}
+
+fn mix_material(a: AnchorMaterial, b: AnchorMaterial, t: f32) -> AnchorMaterial {
+    AnchorMaterial {
+        fill: a.fill.lerp_to_gamma(b.fill, t),
+        border: a.border.lerp_to_gamma(b.border, t),
+    }
+}
+
 impl Contour {
+    fn material_at(&self, anchor_distance: f32) -> AnchorMaterial {
+        self.source_material
+            .filter(|_| anchor_distance < self.color_reach)
+            .map_or(self.material, |source| {
+                mix_material(
+                    source,
+                    self.material,
+                    smoothstep(anchor_distance / self.color_reach),
+                )
+            })
+    }
+
     fn distances(&self, point: Pos2) -> (f32, f32) {
         let anchor = self.anchor.distance(point);
         let panel = self.panel.distance(point);
@@ -723,8 +777,13 @@ impl Contour {
         if value > reach {
             return;
         }
-        if value < -reach && anchor - reach >= 1.5 {
-            self.mesh.add_colored_rect(rect, self.fill);
+        let flat_distance = if self.source_material.is_some() {
+            self.color_reach.max(1.5)
+        } else {
+            1.5
+        };
+        if value < -reach && anchor - reach >= flat_distance {
+            self.mesh.add_colored_rect(rect, self.material.fill);
             return;
         }
         let step_here = if anchor.abs() < reach + 3.0 && panel - anchor < self.smoothing {
@@ -766,14 +825,17 @@ impl Contour {
     }
 
     fn triangle(&mut self, p: [Pos2; 3], d: [(f32, f32); 3]) {
-        let mut crossings = [(Pos2::ZERO, 0.0); 2];
+        let mut crossings = [(Pos2::ZERO, 0.0, 0.0); 2];
         let mut count = 0;
         let base = self.mesh.vertices.len() as u32;
         for a in 0..3 {
             let b = (a + 1) % 3;
             let (value, anchor) = d[a];
             if value <= 0.0 {
-                let color = self.fill.gamma_multiply(Self::coverage(value, anchor));
+                let color = self
+                    .material_at(anchor)
+                    .fill
+                    .gamma_multiply(Self::coverage(value, anchor));
                 self.mesh.colored_vertex(p[a], color);
             }
             if (value <= 0.0) != (d[b].0 <= 0.0) {
@@ -781,8 +843,9 @@ impl Contour {
                 let q = p[a].lerp(p[b], t);
                 let anchor = egui::lerp(anchor..=d[b].1, t);
                 let alpha = Self::coverage(0.0, anchor);
-                self.mesh.colored_vertex(q, self.fill.gamma_multiply(alpha));
-                crossings[count] = (q, alpha);
+                self.mesh
+                    .colored_vertex(q, self.material_at(anchor).fill.gamma_multiply(alpha));
+                crossings[count] = (q, alpha, anchor);
                 count += 1;
             }
         }
@@ -791,7 +854,7 @@ impl Contour {
             self.mesh.add_triangle(base, i, i + 1);
         }
         if count == 2 {
-            let [(a, alpha_a), (b, alpha_b)] = crossings;
+            let [(a, alpha_a, anchor_a), (b, alpha_b, anchor_b)] = crossings;
             if alpha_a == 0.0 && alpha_b == 0.0 {
                 return;
             }
@@ -799,13 +862,17 @@ impl Contour {
             // so their antialiasing fringes meet without gaps on curves.
             let normal_a = self.normal(a);
             let normal_b = self.normal(b);
-            let edge = if self.stroke_width > 0.0 {
-                self.border
-            } else {
-                self.fill
+            let edge = |anchor, alpha| {
+                let material = self.material_at(anchor);
+                let color = if self.stroke_width > 0.0 {
+                    material.border
+                } else {
+                    material.fill
+                };
+                color.gamma_multiply(alpha)
             };
-            let color_a = edge.gamma_multiply(alpha_a);
-            let color_b = edge.gamma_multiply(alpha_b);
+            let color_a = edge(anchor_a, alpha_a);
+            let color_b = edge(anchor_b, alpha_b);
             if self.stroke_width > 0.0 {
                 self.quad([
                     (a, color_a),
@@ -854,8 +921,10 @@ pub(crate) struct OverlayPass {
     layer: LayerId,
     amount: f32,
     source: Rect,
+    source_material: Option<AnchorMaterial>,
     travel: OverlayTravel,
     motion: LiquidStyle,
+    drag: f32,
 }
 
 impl OverlayPass {
@@ -863,20 +932,32 @@ impl OverlayPass {
         ctx: &egui::Context,
         layer: LayerId,
         open: bool,
-        source: Rect,
+        source: (Rect, Option<AnchorMaterial>),
         travel: OverlayTravel,
         motion: LiquidStyle,
         theme: &Theme,
     ) -> Self {
         let id = layer.id;
-        let amount = surface_progress(ctx, id.with("overlay-progress"), open, motion, theme);
+        let (source, source_material) = source;
+        let progress = id.with("overlay-progress");
+        let amount = if matches!(travel, OverlayTravel::Bottom) {
+            crate::motion::surface_reveal(ctx, progress, open, theme)
+        } else {
+            surface_progress(ctx, progress, open, motion, theme)
+        };
         Self {
             id,
             layer,
             amount,
             source,
+            source_material,
             travel,
             motion,
+            drag: if matches!(travel, OverlayTravel::Bottom) {
+                crate::sheet::drag_offset(ctx, id)
+            } else {
+                0.0
+            },
         }
     }
 
@@ -894,7 +975,18 @@ impl OverlayPass {
             OverlayTravel::Left => egui::vec2(clip.left() - rect.right() - 8.0, 0.0),
             OverlayTravel::Bottom => egui::vec2(0.0, clip.bottom() - rect.top() + 8.0),
         };
-        egui::emath::TSTransform::from_translation(offset * (1.0 - self.phase()))
+        let displacement =
+            offset * (1.0 - self.phase()) + egui::vec2(0.0, self.drag * self.phase());
+        let slide = egui::emath::TSTransform::from_translation(displacement);
+        if matches!(self.travel, OverlayTravel::Bottom) {
+            slide
+                * crate::motion::scale_around(
+                    rect.center_bottom(),
+                    egui::lerp(0.95..=1.0, self.phase()),
+                )
+        } else {
+            slide
+        }
     }
 
     fn surface_style(&self, rect: Rect) -> LiquidStyle {
@@ -917,7 +1009,15 @@ impl OverlayPass {
                 } else {
                     self.phase()
                 };
-                let mut shape = surface_shape(self.source, self.source, rect, amount, frame, style);
+                let mut shape = surface_shape(
+                    self.source,
+                    self.source,
+                    rect,
+                    amount,
+                    frame,
+                    style,
+                    self.source_material,
+                );
                 if matches!(self.travel, OverlayTravel::Center) {
                     fade_shape(&mut shape, smoothstep(self.phase() / 0.28));
                 }
@@ -936,13 +1036,16 @@ impl OverlayPass {
     }
 
     pub fn finish(
-        &self,
+        &mut self,
         ctx: &egui::Context,
         start: egui::layers::ShapeIdx,
         surface: egui::layers::ShapeIdx,
         rect: Rect,
         frame: Frame,
     ) {
+        if matches!(self.travel, OverlayTravel::Bottom) {
+            self.drag = crate::sheet::drag_offset(ctx, self.id);
+        }
         let clip = ctx.content_rect();
         let is_backdrop = |shape: &Shape| matches!(shape, Shape::Rect(value) if value.rect == clip);
         let (end, backdrop, shapes) = ctx.graphics(|graphics| {
@@ -972,7 +1075,7 @@ impl OverlayPass {
                 },
             );
         });
-        if (self.amount - 1.0).abs() < 0.001 {
+        if (self.amount - 1.0).abs() < 0.001 && self.drag == 0.0 {
             return;
         }
         let animated_surface = self.surface(rect, frame, clip);
@@ -1019,6 +1122,9 @@ impl OverlayPass {
         let key = self.id.with("overlay-snapshot");
         if self.amount <= 0.001 {
             ctx.data_mut(|data| data.remove::<Snapshot>(key));
+            if matches!(self.travel, OverlayTravel::Bottom) && self.drag != 0.0 {
+                crate::sheet::set_drag_offset(ctx, self.id, 0.0);
+            }
             return;
         }
         if let Some(snapshot) = ctx.data(|data| data.get_temp::<Snapshot>(key)) {
@@ -1040,7 +1146,7 @@ impl OverlayPass {
     }
 }
 
-fn fade_shape(shape: &mut Shape, alpha: f32) {
+pub(crate) fn fade_shape(shape: &mut Shape, alpha: f32) {
     egui::epaint::shape_transform::adjust_colors(shape, move |color| {
         if *color != Color32::PLACEHOLDER {
             *color = color.gamma_multiply(alpha);
@@ -1069,6 +1175,8 @@ pub fn paint_surface(
         && target.size().is_finite()
         && source.union(target).size().is_finite()
     {
-        painter.add(surface_shape(source, source, target, amount, frame, motion));
+        painter.add(surface_shape(
+            source, source, target, amount, frame, motion, None,
+        ));
     }
 }
