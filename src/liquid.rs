@@ -1,5 +1,5 @@
 //! Source-connected opening/closing motion for ordinary themed surfaces.
-//! Default popups expand as one bubble; Droplet merging is an explicit alternative.
+//! Droplet is the default for opening, closing, and resizing surfaces.
 //! Material, input and layout remain owned by the host and egui.
 use crate::{Theme, motion::AnchorMaterial};
 use egui::{
@@ -11,9 +11,9 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SurfaceTransition {
     /// Soft, whole-trigger expansion; the original Temivu menu animation.
-    #[default]
     Bloom,
     /// Elastic separation and merging through a retracting droplet neck.
+    #[default]
     Droplet,
 }
 
@@ -44,7 +44,7 @@ pub struct LiquidStyle {
 }
 impl Default for LiquidStyle {
     fn default() -> Self {
-        Self::bloom()
+        Self::droplet()
     }
 }
 impl LiquidStyle {
@@ -74,45 +74,52 @@ impl LiquidStyle {
     pub fn set_context_default(self, ctx: &egui::Context) {
         ctx.data_mut(|data| data.insert_temp(Id::new("temivu-surface-motion-default"), self));
     }
-    /// Read the context default, falling back to Bloom.
+    /// Read the context default, falling back to Droplet.
     pub fn context_default(ctx: &egui::Context) -> Self {
         ctx.data(|data| data.get_temp(Id::new("temivu-surface-motion-default")))
             .unwrap_or_default()
     }
 }
 
-fn surface_progress(
+pub(crate) fn surface_progress(
     ctx: &egui::Context,
     id: Id,
     open: bool,
     motion: LiquidStyle,
     theme: &Theme,
 ) -> f32 {
-    let mut surface_theme = theme.clone();
-    surface_theme.motion.enabled &= motion.enabled;
+    surface_progress_from(ctx, id, 0.0, open, motion, theme)
+}
+
+fn surface_progress_from(
+    ctx: &egui::Context,
+    id: Id,
+    initial: f32,
+    open: bool,
+    motion: LiquidStyle,
+    theme: &Theme,
+) -> f32 {
+    let mut settings = theme.motion;
+    settings.enabled &= motion.enabled;
     let duration = if motion.duration.is_finite() {
         motion.duration.clamp(0.08, 2.0)
     } else {
         0.32
     };
-    let theme_scale = if theme.motion.normal.is_finite() {
-        theme.motion.normal / 0.2
-    } else {
-        1.0
-    };
+    let theme_scale = theme.motion.normal_scale();
     let exit_speed = if !open && motion.transition == SurfaceTransition::Droplet {
         0.82
     } else {
         1.0
     };
-    surface_theme.motion.normal = (duration * theme_scale * exit_speed).clamp(0.08, 2.0);
-    crate::motion::spring_f32_with_damping(
+    settings.normal = (duration * theme_scale * exit_speed).clamp(0.08, 2.0);
+    crate::motion::spring_f32_with_settings(
         ctx,
         id,
-        0.0,
+        initial,
         if open { 1.0 } else { 0.0 },
         motion.damping,
-        &surface_theme,
+        settings,
     )
     .clamp(
         0.0,
@@ -306,7 +313,7 @@ pub(crate) fn popup<R>(
             .flatten();
     let surface_shape = |target| {
         if matched {
-            matched_menu_shape(source, target, amount, frame, source_material)
+            matched_shape(source, target, amount, frame, source_material)
         } else {
             surface_shape(
                 source,
@@ -321,36 +328,7 @@ pub(crate) fn popup<R>(
     };
     let content_pose = |target| {
         if motion.transition == SurfaceTransition::Droplet {
-            let phase = amount.min(1.0);
-            let (body, radii, min_scale, reveal) = if matched {
-                let body = matched_menu_rect(source, target, amount);
-                let radii = matched_menu_radii(body, amount, frame.corner_radius);
-                (body, radii, 0.80, smoothstep((phase - 0.40) / 0.46))
-            } else {
-                let body = droplet_rect(source, target, amount);
-                let radii = droplet_radii(source, target, body, phase, frame.corner_radius);
-                (
-                    body,
-                    radii,
-                    0.96,
-                    content_opacity(amount, motion.transition),
-                )
-            };
-            let max_radius = radii.nw.max(radii.ne).max(radii.sw).max(radii.se);
-            // The diagonal inset lies inside even a fully rounded corner.
-            // Fit the rows as a group so their backgrounds cannot make square
-            // corners or clip the leading letters during the narrow phase.
-            let inset = max_radius.min(body.size().min_elem() * 0.5) * 0.293;
-            let inside = body.shrink(inset);
-            let inner_target = target.shrink(frame.stroke.width) - frame.inner_margin;
-            let fit = inside.size() / inner_target.size().max(Vec2::splat(1.0));
-            let scale = egui::lerp(min_scale..=1.0, smoothstep(phase)).min(fit.min_elem());
-            let transform = egui::emath::TSTransform {
-                scaling: scale,
-                translation: inside.center().to_vec2() - inner_target.center().to_vec2() * scale,
-            };
-            let alpha = reveal * smoothstep((scale - 0.54) / 0.27);
-            (transform, inside, alpha)
+            droplet_content_pose(source, target, amount, frame, matched)
         } else {
             (
                 content_transform(source, target, amount, motion.transition),
@@ -467,7 +445,51 @@ pub(crate) fn popup<R>(
     Some(result)
 }
 
-fn matched_menu_rect(source: Rect, target: Rect, amount: f32) -> Rect {
+pub(crate) fn droplet_content_pose(
+    source: Rect,
+    target: Rect,
+    amount: f32,
+    frame: Frame,
+    matched: bool,
+) -> (egui::emath::TSTransform, Rect, f32) {
+    let phase = amount.min(1.0);
+    if phase >= 1.0 {
+        return (egui::emath::TSTransform::IDENTITY, target, 1.0);
+    }
+    let (body, radii, min_scale, reveal) = if matched {
+        let body = matched_rect(source, target, amount);
+        let radii = matched_radii(body, amount, frame.corner_radius);
+        (body, radii, 0.80, smoothstep((phase - 0.40) / 0.46))
+    } else {
+        let body = droplet_rect(source, target, amount);
+        let radii = droplet_radii(source, target, body, phase, frame.corner_radius);
+        (
+            body,
+            radii,
+            0.96,
+            content_opacity(amount, SurfaceTransition::Droplet),
+        )
+    };
+    let max_radius = radii.nw.max(radii.ne).max(radii.sw).max(radii.se);
+    // The diagonal inset lies inside even a fully rounded corner.
+    // Fit the rows as a group so their backgrounds cannot make square
+    // corners or clip the leading letters during the narrow phase.
+    let settle = smoothstep((phase - 0.82) / 0.18);
+    let inset = max_radius.min(body.size().min_elem() * 0.5) * 0.293 * (1.0 - settle);
+    let inside = body.shrink(inset);
+    let inner_target = target.shrink(frame.stroke.width) - frame.inner_margin;
+    let fit = inside.size() / inner_target.size().max(Vec2::splat(1.0));
+    let scale = egui::lerp(min_scale..=1.0, smoothstep(phase)).min(fit.min_elem());
+    let center = inside.center().lerp(inner_target.center(), settle);
+    let transform = egui::emath::TSTransform {
+        scaling: scale,
+        translation: center.to_vec2() - inner_target.center().to_vec2() * scale,
+    };
+    let alpha = reveal * smoothstep((scale - 0.54) / 0.27);
+    (transform, inside, alpha)
+}
+
+pub(crate) fn matched_rect(source: Rect, target: Rect, amount: f32) -> Rect {
     let phase = amount.clamp(0.0, 1.0);
     let stretch = elongation(target);
     let overshoot = amount - phase;
@@ -485,7 +507,7 @@ fn matched_menu_rect(source: Rect, target: Rect, amount: f32) -> Rect {
     )
 }
 
-fn matched_menu_radii(
+fn matched_radii(
     body: Rect,
     amount: f32,
     corners: egui::CornerRadius,
@@ -501,9 +523,9 @@ fn matched_menu_radii(
     }
 }
 
-// A compact command menu takes the place of the icon button. The same
-// silhouette grows out of it and collapses back without a second outline.
-fn matched_menu_shape(
+// An overlapping surface takes the place of the trigger. One silhouette
+// grows out of it and collapses back without a second outline.
+pub(crate) fn matched_shape(
     source: Rect,
     target: Rect,
     amount: f32,
@@ -516,8 +538,8 @@ fn matched_menu_shape(
     if (amount - 1.0).abs() < 0.001 {
         return frame.paint(target.shrink(frame.stroke.width) - frame.inner_margin);
     }
-    let body = matched_menu_rect(source, target, amount);
-    let radii = matched_menu_radii(body, amount, frame.corner_radius);
+    let body = matched_rect(source, target, amount);
+    let radii = matched_radii(body, amount, frame.corner_radius);
     let mut shadow = frame.shadow;
     shadow.color = shadow
         .color
@@ -601,11 +623,7 @@ fn surface_shape(
         .color
         .gamma_multiply(smoothstep((phase - 0.78) / 0.21));
 
-    let blend_radius = if motion.blend_radius.is_finite() {
-        motion.blend_radius.clamp(0.0, 96.0)
-    } else {
-        34.0
-    };
+    let blend_radius = blend_radius(motion);
     let gap = if target.center().y >= source.center().y {
         body.top() - painted_source.bottom()
     } else {
@@ -629,14 +647,16 @@ fn surface_shape(
     let side = envelope.size().max_elem();
     let bounds = Rect::from_min_size(envelope.min, Vec2::splat(side));
     let material = surface_material(frame);
-    let mut outline = Contour {
+    let outline = Contour {
         mesh: egui::Mesh::default(),
         edge_mesh: egui::Mesh::default(),
-        anchor: RoundedField::new(
-            painted_source,
-            (painted_source.size().min_elem() * 0.5).into(),
-        ),
-        panel: RoundedField::new(body, radii),
+        source: ContourSource::Anchor {
+            trigger: RoundedField::new(
+                painted_source,
+                (painted_source.size().min_elem() * 0.5).into(),
+            ),
+            panel: RoundedField::new(body, radii),
+        },
         smoothing,
         material,
         // Keep the real trigger color at the join until the neck detaches.
@@ -645,11 +665,7 @@ fn surface_shape(
         color_reach: (painted_source.height() * 0.55).min(smoothing).max(0.001),
         stroke_width: stroke.width,
     };
-    outline.tile(bounds, (side / 128.0).max(3.2));
-    // A neighboring fill triangle can overlap the inside edge of a stroke.
-    // Draw every fill before the outline to keep that edge continuous.
-    outline.mesh.append(outline.edge_mesh);
-    Shape::Vec(vec![shadow.into(), Shape::mesh(outline.mesh)])
+    Shape::Vec(vec![shadow.into(), outline.paint(bounds)])
 }
 
 struct RoundedField {
@@ -704,11 +720,21 @@ impl RoundedField {
 
 // Refine only around the new contour and the narrow band that hides the old
 // trigger border. Both rounded-rectangle fields are 1-Lipschitz.
-struct Contour {
+// Finite so interpolating two samples of a group preserves full coverage.
+const NO_ANCHOR: f32 = 1.0e9;
+
+enum ContourSource<'a> {
+    Anchor {
+        trigger: RoundedField,
+        panel: RoundedField,
+    },
+    Group(&'a [RoundedField]),
+}
+
+struct Contour<'a> {
     mesh: egui::Mesh,
     edge_mesh: egui::Mesh,
-    anchor: RoundedField,
-    panel: RoundedField,
+    source: ContourSource<'a>,
     smoothing: f32,
     material: AnchorMaterial,
     source_material: Option<AnchorMaterial>,
@@ -730,7 +756,14 @@ fn mix_material(a: AnchorMaterial, b: AnchorMaterial, t: f32) -> AnchorMaterial 
     }
 }
 
-impl Contour {
+impl Contour<'_> {
+    fn paint(mut self, bounds: Rect) -> Shape {
+        self.tile(bounds, (bounds.width() / 128.0).max(3.2));
+        // Draw every fill before the outline to keep the inside edge continuous.
+        self.mesh.append(self.edge_mesh);
+        Shape::mesh(self.mesh)
+    }
+
     fn material_at(&self, anchor_distance: f32) -> AnchorMaterial {
         self.source_material
             .filter(|_| anchor_distance < self.color_reach)
@@ -743,15 +776,40 @@ impl Contour {
             })
     }
 
+    fn group_distance(&self, point: Pos2, parts: &[RoundedField]) -> f32 {
+        parts
+            .iter()
+            .map(|part| part.distance(point))
+            .reduce(|a, b| smooth_union(a, b, self.smoothing))
+            .unwrap_or(f32::INFINITY)
+    }
+
     fn distances(&self, point: Pos2) -> (f32, f32) {
-        let anchor = self.anchor.distance(point);
-        let panel = self.panel.distance(point);
-        (smooth_union(anchor, panel, self.smoothing), anchor)
+        match &self.source {
+            ContourSource::Anchor { trigger, panel } => {
+                let anchor = trigger.distance(point);
+                (
+                    smooth_union(anchor, panel.distance(point), self.smoothing),
+                    anchor,
+                )
+            }
+            ContourSource::Group(parts) => (self.group_distance(point, parts), NO_ANCHOR),
+        }
     }
 
     fn normal(&self, point: Pos2) -> Vec2 {
-        let (a, anchor) = self.anchor.sample(point);
-        let (b, panel) = self.panel.sample(point);
+        let ContourSource::Anchor { trigger, panel } = &self.source else {
+            let dx = egui::vec2(0.25, 0.0);
+            let dy = egui::vec2(0.0, 0.25);
+            let at = |point| self.distances(point).0;
+            return egui::vec2(
+                at(point + dx) - at(point - dx),
+                at(point + dy) - at(point - dy),
+            )
+            .normalized();
+        };
+        let (a, anchor) = trigger.sample(point);
+        let (b, panel) = panel.sample(point);
         let weight = if self.smoothing > 0.0 {
             (0.5 + (a - b) / (2.0 * self.smoothing)).clamp(0.0, 1.0)
         } else if a < b {
@@ -765,15 +823,24 @@ impl Contour {
     fn tile(&mut self, rect: Rect, step: f32) {
         let mid = rect.center();
         let reach = rect.size().max_elem() * std::f32::consts::FRAC_1_SQRT_2;
-        let anchor = self.anchor.distance(mid);
-        if anchor + reach < -5.0 {
-            return;
-        }
-        let panel = self.panel.distance(mid);
-        if panel - anchor >= self.smoothing + 2.0 * reach {
-            return;
-        }
-        let value = smooth_union(anchor, panel, self.smoothing);
+        let (value, anchor, refine_join) = match &self.source {
+            ContourSource::Anchor { trigger, panel } => {
+                let anchor = trigger.distance(mid);
+                if anchor + reach < -5.0 {
+                    return;
+                }
+                let panel = panel.distance(mid);
+                if panel - anchor >= self.smoothing + 2.0 * reach {
+                    return;
+                }
+                (
+                    smooth_union(anchor, panel, self.smoothing),
+                    anchor,
+                    anchor.abs() < reach + 3.0 && panel - anchor < self.smoothing,
+                )
+            }
+            ContourSource::Group(parts) => (self.group_distance(mid, parts), NO_ANCHOR, false),
+        };
         if value > reach {
             return;
         }
@@ -786,11 +853,7 @@ impl Contour {
             self.mesh.add_colored_rect(rect, self.material.fill);
             return;
         }
-        let step_here = if anchor.abs() < reach + 3.0 && panel - anchor < self.smoothing {
-            step * 0.5
-        } else {
-            step
-        };
+        let step_here = if refine_join { step * 0.5 } else { step };
         if rect.width() > step_here
             && mid.x > rect.left()
             && mid.x < rect.right()
@@ -940,11 +1003,7 @@ impl OverlayPass {
         let id = layer.id;
         let (source, source_material) = source;
         let progress = id.with("overlay-progress");
-        let amount = if matches!(travel, OverlayTravel::Bottom) {
-            crate::motion::surface_reveal(ctx, progress, open, theme)
-        } else {
-            surface_progress(ctx, progress, open, motion, theme)
-        };
+        let amount = surface_progress(ctx, progress, open, motion, theme);
         Self {
             id,
             layer,
@@ -989,21 +1048,38 @@ impl OverlayPass {
         }
     }
 
-    fn surface_style(&self, rect: Rect) -> LiquidStyle {
-        if self.source.intersects(rect) {
-            LiquidStyle {
-                transition: SurfaceTransition::Bloom,
-                ..self.motion
-            }
+    fn directional_source(&self, rect: Rect, clip: Rect) -> Rect {
+        let size = rect.size().min(egui::vec2(68.0, 44.0));
+        let center = if matches!(self.travel, OverlayTravel::Bottom) {
+            egui::pos2(rect.center().x, clip.bottom() + size.y * 0.5)
         } else {
-            self.motion
-        }
+            egui::pos2(clip.left() - size.x * 0.5, rect.center().y)
+        };
+        Rect::from_center_size(center, size)
+    }
+
+    fn directional_drag(&self) -> egui::emath::TSTransform {
+        egui::emath::TSTransform::from_translation(egui::vec2(0.0, self.drag * self.phase()))
+    }
+
+    fn matched_source(&self, rect: Rect) -> bool {
+        self.motion.transition == SurfaceTransition::Droplet
+            && (matches!(self.travel, OverlayTravel::Center) || self.source.intersects(rect))
     }
 
     fn surface(&self, rect: Rect, frame: Frame, clip: Rect) -> Shape {
         match self.travel {
             OverlayTravel::Source | OverlayTravel::Center => {
-                let style = self.surface_style(rect);
+                if self.matched_source(rect) {
+                    return matched_shape(
+                        self.source,
+                        rect,
+                        self.amount,
+                        frame,
+                        self.source_material,
+                    );
+                }
+                let style = self.motion;
                 let amount = if style.transition == SurfaceTransition::Droplet {
                     self.amount
                 } else {
@@ -1024,9 +1100,17 @@ impl OverlayPass {
                 shape
             }
             OverlayTravel::Left | OverlayTravel::Bottom => {
-                let mut shape = frame.paint(rect.shrink(frame.stroke.width) - frame.inner_margin);
-                shape.transform(self.slide(rect, clip));
-                shape
+                if self.motion.transition == SurfaceTransition::Droplet {
+                    let source = self.directional_source(rect, clip);
+                    let mut shape = matched_shape(source, rect, self.phase(), frame, None);
+                    shape.transform(self.directional_drag());
+                    shape
+                } else {
+                    let mut shape =
+                        frame.paint(rect.shrink(frame.stroke.width) - frame.inner_margin);
+                    shape.transform(self.slide(rect, clip));
+                    shape
+                }
             }
         }
     }
@@ -1079,6 +1163,7 @@ impl OverlayPass {
             return;
         }
         let animated_surface = self.surface(rect, frame, clip);
+        let pose = self.content_pose(rect, frame, clip);
         ctx.graphics_mut(|graphics| {
             let list = graphics.entry(self.layer);
             list.set(surface, clip, animated_surface);
@@ -1088,7 +1173,7 @@ impl OverlayPass {
                         if index < surface.0 && is_backdrop(&entry.shape) {
                             fade_shape(&mut entry.shape, opacity(self.phase()));
                         } else if index > surface.0 {
-                            self.decorate_content(entry, rect, clip);
+                            Self::decorate_content(entry, pose);
                         }
                     });
                 }
@@ -1096,25 +1181,50 @@ impl OverlayPass {
         });
     }
 
-    fn decorate_content(&self, entry: &mut egui::epaint::ClippedShape, rect: Rect, clip: Rect) {
+    fn content_pose(
+        &self,
+        rect: Rect,
+        frame: Frame,
+        clip: Rect,
+    ) -> (egui::emath::TSTransform, Rect, f32) {
         let phase = self.phase();
         let (transform, visible, alpha) =
             if matches!(self.travel, OverlayTravel::Source | OverlayTravel::Center) {
-                let style = self.surface_style(rect).transition;
-                (
-                    content_transform(self.source, rect, phase, style),
-                    motion_rect(self.source, rect, phase, style),
-                    content_opacity(phase, style),
-                )
+                let style = self.motion.transition;
+                if style == SurfaceTransition::Droplet {
+                    droplet_content_pose(
+                        self.source,
+                        rect,
+                        self.amount,
+                        frame,
+                        self.matched_source(rect),
+                    )
+                } else {
+                    (
+                        content_transform(self.source, rect, phase, style),
+                        motion_rect(self.source, rect, phase, style),
+                        content_opacity(phase, style),
+                    )
+                }
+            } else if self.motion.transition == SurfaceTransition::Droplet {
+                let source = self.directional_source(rect, clip);
+                let drag = self.directional_drag();
+                let (transform, visible, alpha) =
+                    droplet_content_pose(source, rect, phase, frame, true);
+                (drag * transform, drag.mul_rect(visible), alpha)
             } else {
                 let transform = self.slide(rect, clip);
                 (transform, transform.mul_rect(rect), 1.0)
             };
+        (transform, visible.intersect(clip), alpha)
+    }
+
+    fn decorate_content(
+        entry: &mut egui::epaint::ClippedShape,
+        (transform, visible, alpha): (egui::emath::TSTransform, Rect, f32),
+    ) {
         entry.shape.transform(transform);
-        entry.clip_rect = transform
-            .mul_rect(entry.clip_rect)
-            .intersect(visible)
-            .intersect(clip);
+        entry.clip_rect = transform.mul_rect(entry.clip_rect).intersect(visible);
         fade_shape(&mut entry.shape, alpha);
     }
 
@@ -1137,9 +1247,10 @@ impl OverlayPass {
                     .add(backdrop.shape);
             }
             painter.add(self.surface(snapshot.rect, snapshot.frame, clip));
+            let pose = self.content_pose(snapshot.rect, snapshot.frame, clip);
             for entry in snapshot.shapes.iter() {
                 let mut entry = entry.clone();
-                self.decorate_content(&mut entry, snapshot.rect, clip);
+                Self::decorate_content(&mut entry, pose);
                 painter.with_clip_rect(entry.clip_rect).add(entry.shape);
             }
         }
@@ -1152,6 +1263,245 @@ pub(crate) fn fade_shape(shape: &mut Shape, alpha: f32) {
             *color = color.gamma_multiply(alpha);
         }
     });
+}
+
+fn blend_radius(motion: LiquidStyle) -> f32 {
+    if motion.blend_radius.is_finite() {
+        motion.blend_radius.clamp(0.0, 96.0)
+    } else {
+        LiquidStyle::droplet().blend_radius
+    }
+}
+
+/// A reversible resize with the same spring and contour as a Droplet surface.
+pub struct DropletResize {
+    pub size: Vec2,
+    pub phase: f32,
+    collapsed: Vec2,
+    expanded: Vec2,
+}
+
+impl DropletResize {
+    /// Sample once per frame with a stable ID and use the size to lay out the widget.
+    pub fn new(
+        ctx: &egui::Context,
+        id: Id,
+        collapsed: Vec2,
+        expanded: Vec2,
+        open: bool,
+        theme: &Theme,
+    ) -> Self {
+        let dimension = |value: f32| {
+            if value.is_finite() {
+                value.max(0.0)
+            } else {
+                0.0
+            }
+        };
+        let collapsed = egui::vec2(dimension(collapsed.x), dimension(collapsed.y));
+        let expanded = egui::vec2(dimension(expanded.x), dimension(expanded.y));
+        let phase = droplet_group_progress(ctx, id, open, LiquidStyle::droplet(), theme).min(1.0);
+        Self {
+            size: collapsed + (expanded - collapsed) * phase,
+            phase,
+            collapsed,
+            expanded,
+        }
+    }
+
+    /// Paint a small source and its expanding lobe as one continuous surface.
+    /// `rect` is the outer rectangle allocated using [`Self::size`].
+    pub fn paint(&self, painter: &egui::Painter, rect: Rect, frame: Frame) {
+        if !rect.is_finite() || !rect.is_positive() {
+            return;
+        }
+        let phase = self.phase;
+        let range = (self.expanded - self.collapsed).abs();
+        if !(0.001..0.999).contains(&phase) || range.max_elem() < 1.0 {
+            painter.add(frame.paint(rect.shrink(frame.stroke.width) - frame.inner_margin));
+            return;
+        }
+        let mut seed = Rect::from_min_size(rect.min, self.collapsed.min(rect.size()));
+        let pull = (1.0 - phase) * 0.28;
+        let lobe = if range.x >= range.y {
+            seed.set_center(egui::pos2(seed.center().x, rect.center().y));
+            rect.shrink2(egui::vec2(0.0, rect.height() * pull))
+        } else {
+            seed.set_center(egui::pos2(rect.center().x, seed.center().y));
+            rect.shrink2(egui::vec2(rect.width() * pull, 0.0))
+        };
+        if !seed.is_positive() {
+            painter.add(frame.paint(lobe.shrink(frame.stroke.width) - frame.inner_margin));
+            return;
+        }
+        let radius = |part: Rect| (part.size().min_elem() * 0.5).round() as u8;
+        let parts = [
+            DropletPart {
+                rect: seed,
+                corners: radius(seed).into(),
+            },
+            DropletPart {
+                rect: lobe,
+                corners: matched_radii(lobe, phase, frame.corner_radius).into(),
+            },
+        ];
+        let style = LiquidStyle::droplet();
+        let envelope = Rect::from_min_size(rect.min, self.collapsed.max(self.expanded))
+            .expand(style.blend_radius * 0.25 + 2.0);
+        paint_joined_parts(
+            painter,
+            parts,
+            envelope,
+            frame,
+            style.blend_radius * phase * (1.0 - phase),
+        );
+    }
+}
+
+/// A separate rounded surface in a Droplet group. Bounds use painter coordinates.
+#[derive(Clone, Copy, Debug)]
+pub struct DropletPart {
+    pub rect: Rect,
+    pub corners: egui::CornerRadius,
+}
+
+/// Drive every member of a group with one reversible Droplet spring.
+/// Call each frame with a stable ID. The initial state is the requested state.
+pub fn droplet_group_progress(
+    ctx: &egui::Context,
+    id: Id,
+    merged: bool,
+    motion: LiquidStyle,
+    theme: &Theme,
+) -> f32 {
+    let motion = LiquidStyle {
+        transition: SurfaceTransition::Droplet,
+        ..motion
+    };
+    let id = id.with("droplet-group");
+    let initial = if merged { 1.0 } else { 0.0 };
+    surface_progress_from(ctx, id, initial, merged, motion, theme)
+}
+
+/// Position a member's contents from the same phase used to paint its surface.
+pub fn droplet_part_rect(source: Rect, target: Rect, amount: f32) -> Rect {
+    let travel = smoothstep(amount);
+    Rect::from_center_size(
+        source.center().lerp(target.center(), travel),
+        source.size() * (1.0 - travel),
+    )
+}
+
+/// Paint two to eight surfaces joining into one rounded frame, or splitting
+/// apart when the phase reverses. Pass the original bounds on every frame.
+/// The frame supplies a shared fill, border and shadow. Widget content and
+/// interaction remain owned by the caller. Invalid input emits no paint.
+pub fn paint_droplet_group(
+    painter: &egui::Painter,
+    parts: &[DropletPart],
+    target: Rect,
+    amount: f32,
+    frame: Frame,
+    motion: LiquidStyle,
+) {
+    let valid = |rect: Rect| rect.is_finite() && rect.is_positive() && rect.size().is_finite();
+    if !(2..=8).contains(&parts.len())
+        || !amount.is_finite()
+        || !valid(target)
+        || parts.iter().any(|part| !valid(part.rect))
+    {
+        return;
+    }
+    let phase = amount.clamp(0.0, 1.0);
+    let paint_frame = |rect: Rect, frame: Frame| {
+        frame.paint(rect.shrink(frame.stroke.width) - frame.inner_margin)
+    };
+    if phase >= 0.999 {
+        painter.add(paint_frame(target, frame));
+        return;
+    }
+    if phase <= 0.001 {
+        for part in parts {
+            painter.add(paint_frame(part.rect, frame.corner_radius(part.corners)));
+        }
+        return;
+    }
+
+    let smoothing =
+        blend_radius(motion) * smoothstep(phase / 0.30) * (1.0 - smoothstep((phase - 0.58) / 0.42));
+    let expansion = smoothstep((phase - 0.18) / 0.82);
+    let body = Rect::from_center_size(target.center(), target.size() * expansion);
+    let mut fields = Vec::with_capacity(parts.len() + 1);
+    let mut envelope = target;
+    let mut silhouettes = Vec::with_capacity(parts.len() + 2);
+    for part in parts {
+        let rect = droplet_part_rect(part.rect, target, phase);
+        let radii: egui::epaint::CornerRadiusF32 = part.corners.into();
+        let radii = radii * (1.0 - smoothstep(phase));
+        fields.push(RoundedField::new(rect, radii));
+        envelope = envelope.union(part.rect);
+        let mut shadow = frame.shadow;
+        shadow.color = shadow.color.gamma_multiply(1.0 - smoothstep(phase / 0.45));
+        if shadow.color != Color32::TRANSPARENT {
+            silhouettes.push(shadow.as_shape(rect, radii).into());
+        }
+    }
+    if expansion > 0.0 {
+        let radii: egui::epaint::CornerRadiusF32 = frame.corner_radius.into();
+        fields.push(RoundedField::new(body, radii * expansion));
+        let mut shadow = frame.shadow;
+        shadow.color = shadow
+            .color
+            .gamma_multiply(smoothstep((phase - 0.45) / 0.55));
+        if shadow.color != Color32::TRANSPARENT {
+            silhouettes.push(shadow.as_shape(body, radii * expansion).into());
+        }
+    }
+    let margin = blend_radius(motion) * parts.len() as f32 * 0.25 + 2.0;
+    silhouettes.push(group_contour(
+        painter,
+        &fields,
+        envelope.expand(margin),
+        frame,
+        smoothing,
+    ));
+    painter.add(Shape::Vec(silhouettes));
+}
+
+pub(crate) fn paint_joined_parts<const N: usize>(
+    painter: &egui::Painter,
+    parts: [DropletPart; N],
+    envelope: Rect,
+    frame: Frame,
+    smoothing: f32,
+) {
+    let fields = parts.map(|part| RoundedField::new(part.rect, part.corners.into()));
+    painter.add(group_contour(painter, &fields, envelope, frame, smoothing));
+}
+
+fn group_contour(
+    painter: &egui::Painter,
+    fields: &[RoundedField],
+    bounds: Rect,
+    frame: Frame,
+    smoothing: f32,
+) -> Shape {
+    let visible = bounds.intersect(painter.clip_rect());
+    if !visible.is_finite() || !visible.is_positive() || !visible.size().is_finite() {
+        return Shape::Noop;
+    }
+    let bounds = Rect::from_min_size(visible.min, Vec2::splat(visible.size().max_elem()));
+    Contour {
+        mesh: egui::Mesh::default(),
+        edge_mesh: egui::Mesh::default(),
+        source: ContourSource::Group(fields),
+        smoothing,
+        material: surface_material(frame),
+        source_material: None,
+        color_reach: 0.0,
+        stroke_width: frame.stroke.width,
+    }
+    .paint(bounds)
 }
 
 /// Draw the same SDF morph in a custom widget without choosing a GPU backend.

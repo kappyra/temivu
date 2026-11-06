@@ -98,3 +98,94 @@ fn state_controls_report_changes_and_direction_pad_accepts_arrow_keys() {
     );
     assert!(harness.get_by_label("Left").accesskit_node().is_focused());
 }
+
+#[test]
+fn quantity_joins_and_folds_using_the_droplet_contour() {
+    let mut harness = Harness::builder().build_ui_state(
+        |ui, count| {
+            quantity_stepper(ui, &Theme::light(), count, 0..=9, "Less", "More");
+        },
+        0,
+    );
+    harness
+        .ctx
+        .all_styles_mut(|style| style.animation_time = 0.2);
+    let mut step = |count, time| {
+        *harness.state_mut() = count;
+        harness.input_mut().time = Some(time);
+        harness.step();
+        let mesh = harness.output().shapes.iter().any(|entry| {
+            matches!(&entry.shape, egui::Shape::Mesh(mesh) if mesh.is_valid() && !mesh.indices.is_empty())
+        });
+        (
+            mesh,
+            harness.get_by_label("More").rect().center().x,
+            harness.query_by_label("Less").is_some(),
+        )
+    };
+
+    let (mesh, collapsed, less) = step(0, 0.0);
+    assert!(!mesh && !less);
+    step(1, 0.02);
+    let (mesh, joining, _) = step(1, 0.12);
+    assert!(mesh && joining > collapsed);
+    let (mesh, settled, less) = step(1, 1.0);
+    assert!(!mesh && less && settled > joining);
+    step(0, 1.02);
+    let (mesh, closing, less) = step(0, 1.12);
+    assert!(mesh && !less && closing < settled && closing > collapsed);
+    let (mesh, restored, _) = step(0, 2.0);
+    assert!(!mesh && (restored - collapsed).abs() < 0.1);
+}
+
+#[test]
+fn search_capsule_morphs_in_both_directions() {
+    let theme = Theme::light();
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(160.0, 120.0))
+        .build_ui_state(
+            |ui, state: &mut (bool, String)| {
+                search_box(ui, &theme, &mut state.0, &mut state.1, "Find", "Close");
+            },
+            (false, "filters".to_owned()),
+        );
+    harness
+        .ctx
+        .all_styles_mut(|style| style.animation_time = 0.2);
+    let mut step = |open, time| {
+        harness.state_mut().0 = open;
+        harness.input_mut().time = Some(time);
+        harness.step();
+        harness
+            .output()
+            .shapes
+            .iter()
+            .find_map(|entry| match &entry.shape {
+                egui::Shape::Rect(rect)
+                    if rect.stroke.color == theme.border && rect.corner_radius.nw == 21 =>
+                {
+                    Some((rect.rect, false))
+                }
+                egui::Shape::Path(path) if path.points.len() == 26 && path.closed => {
+                    Some((egui::Rect::from_points(&path.points), true))
+                }
+                _ => None,
+            })
+            .expect("search capsule")
+    };
+    let (closed, _) = step(false, 0.0);
+    step(true, 0.02);
+    let (opening, tapered) = step(true, 0.05);
+    assert!(tapered);
+    let (full, _) = step(true, 1.0);
+    assert!(closed.width() < opening.width() && opening.width() < full.width());
+    assert_eq!(closed.height(), full.height());
+    assert!(full.right() <= 160.0);
+    step(false, 1.02);
+    let (closing, tapered) = step(false, 1.05);
+    assert!(!tapered);
+    assert_eq!(closing.height(), full.height());
+    assert!(closed.width() < closing.width() && closing.width() < full.width());
+    assert_eq!(step(false, 2.0), (closed, false));
+    assert_eq!(harness.state().1, "filters");
+}

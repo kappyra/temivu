@@ -151,10 +151,13 @@ fn zero_duration_never_exposes_a_toast() {
     assert!(harness.query_by_label("Invisible").is_none());
 }
 
-fn toast_card<'a>(harness: &'a Harness<'_, ToastState>) -> Option<&'a egui::epaint::RectShape> {
-    fn card(shape: &egui::Shape) -> Option<&egui::epaint::RectShape> {
+fn toast_card(harness: &Harness<'_, ToastState>) -> Option<(egui::Rect, egui::Color32)> {
+    fn card(shape: &egui::Shape) -> Option<(egui::Rect, egui::Color32)> {
         match shape {
-            egui::Shape::Rect(rect) if (20..=22).contains(&rect.corner_radius.nw) => Some(rect),
+            egui::Shape::Rect(rect) if rect.corner_radius.nw == 22 => Some((rect.rect, rect.fill)),
+            egui::Shape::Path(path) if path.fill != egui::Color32::TRANSPARENT => {
+                Some((egui::Rect::from_points(&path.points), path.fill))
+            }
             egui::Shape::Vec(shapes) => shapes.iter().rev().find_map(card),
             _ => None,
         }
@@ -167,7 +170,7 @@ fn toast_card<'a>(harness: &'a Harness<'_, ToastState>) -> Option<&'a egui::epai
 }
 
 fn toast_card_alpha(harness: &Harness<'_, ToastState>) -> Option<u8> {
-    toast_card(harness).map(|card| card.fill.a())
+    toast_card(harness).map(|(_, fill)| fill.a())
 }
 
 #[test]
@@ -190,15 +193,15 @@ fn toast_fade_in_respects_motion_settings() {
         "the first revealed frame is fully opaque"
     );
 
-    let full = toast_card(&harness).unwrap().rect;
+    let (full, _) = toast_card(&harness).unwrap();
     harness.state_mut().dismiss();
     harness.input_mut().time = Some(0.01);
     harness.step();
     harness.input_mut().time = Some(0.08);
     harness.step();
-    let closing = toast_card(&harness).expect("paint-only closing card");
-    assert!(closing.fill.a() > 0 && closing.fill.a() < 255);
-    assert!(closing.rect.width() < full.width());
+    let (closing, fill) = toast_card(&harness).expect("paint-only closing card");
+    assert!(fill.a() > 0 && fill.a() < 255);
+    assert!(closing.width() < full.width());
     assert!(
         harness
             .query_by_role(egui::accesskit::Role::Alert)
@@ -211,8 +214,7 @@ fn toast_fade_in_respects_motion_settings() {
     harness.state_mut().restart();
     harness.input_mut().time = Some(10.0);
     harness.step();
-    let start = toast_card_alpha(&harness).expect("toast card while fading in");
-    assert_eq!(start, 0, "the fade starts transparent");
+    assert!(toast_card(&harness).is_none(), "the morph starts invisible");
     assert!(
         harness.ctx.has_requested_repaint(),
         "a running fade must request repaints"

@@ -179,14 +179,14 @@ fn apply_configures_visuals_and_named_text_styles() {
 }
 
 #[test]
-fn motion_defaults_match_forui_durations_and_linear_easing() {
+fn motion_defaults_use_temivu_durations_and_linear_easing() {
     let motion = Theme::light().motion;
     assert_eq!(motion, MotionSettings::default());
     assert!(motion.enabled);
     assert!(!motion.reduced_motion);
-    assert_eq!(motion.fast, 0.1);
-    assert_eq!(motion.normal, 0.2);
-    assert_eq!(motion.slow, 0.3);
+    assert_eq!(motion.fast, 0.11);
+    assert_eq!(motion.normal, 0.22);
+    assert_eq!(motion.slow, 0.33);
     assert_eq!(motion.easing, Easing::Linear);
     assert_eq!(Theme::dark().motion, MotionSettings::default());
 }

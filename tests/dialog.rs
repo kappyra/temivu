@@ -225,6 +225,7 @@ fn modal_frame_and_input_stay_in_sync_with_custom_area() {
                 Dialog::new(egui::Id::new("logical-modal"), "Example")
                     .theme(&theme)
                     .area(area)
+                    .liquid(temivu::liquid::LiquidStyle::bloom())
                     .source(egui::Rect::from_min_size(
                         egui::pos2(20.0, 52.0),
                         egui::vec2(110.0, 44.0),
@@ -318,6 +319,12 @@ fn centered_droplet_dialog_starts_as_a_small_surface() {
         );
         let width = output.shapes.iter().find_map(|entry| match &entry.shape {
             egui::Shape::Rect(rect) if rect.fill == fill => Some(rect.rect.width()),
+            egui::Shape::Vec(shapes) => shapes.iter().find_map(|shape| match shape {
+                egui::Shape::Path(path) if path.fill == fill => {
+                    Some(egui::Rect::from_points(&path.points).width())
+                }
+                _ => None,
+            }),
             _ => None,
         });
         output.textures_delta.clear();
@@ -328,4 +335,56 @@ fn centered_droplet_dialog_starts_as_a_small_surface() {
     let early = render_width(0.14, true).expect("opening surface");
     let settled = render_width(0.8, true).expect("settled surface");
     assert!(early < settled * 0.7, "early={early}, settled={settled}");
+}
+
+#[test]
+fn overlapping_droplet_dialog_matches_the_trigger_in_both_directions() {
+    use egui::{Color32, Frame, Rect, Shape, pos2, vec2};
+
+    let ctx = egui::Context::default();
+    let theme = temivu::Theme::light();
+    theme.apply(&ctx);
+    ctx.all_styles_mut(|style| style.animation_time = 0.2);
+    let fill = Color32::from_rgb(192, 214, 221);
+    let render = |time, mut open| {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                time: Some(time),
+                screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(480.0, 420.0))),
+                ..Default::default()
+            },
+            |ui| {
+                Dialog::new(egui::Id::new("overlapping-source"), "Example")
+                    .theme(&theme)
+                    .liquid(temivu::liquid::LiquidStyle::droplet())
+                    .source(Rect::from_center_size(pos2(230.0, 210.0), vec2(44.0, 44.0)))
+                    .frame(Frame::new().fill(fill).inner_margin(16).corner_radius(24))
+                    .show(ui.ctx(), &mut open, |ui| {
+                        ui.set_width(160.0);
+                        ui.button("Apply")
+                    });
+            },
+        );
+        output.textures_delta.clear();
+        output
+    };
+    let width = |output: &egui::FullOutput| {
+        output.shapes.iter().find_map(|entry| match &entry.shape {
+            Shape::Vec(shapes) => shapes.iter().find_map(|shape| match shape {
+                Shape::Path(path) if path.fill == fill => {
+                    Some(Rect::from_points(&path.points).width())
+                }
+                _ => None,
+            }),
+            _ => None,
+        })
+    };
+    render(0.0, false);
+    render(0.01, true);
+    let expanding = width(&render(0.10, true)).expect("matched Droplet outline");
+    assert!((44.0..192.0).contains(&expanding));
+    render(1.0, true);
+    render(1.01, false);
+    let retracting = width(&render(1.10, false)).expect("matched closing outline");
+    assert!((44.0..192.0).contains(&retracting));
 }

@@ -21,7 +21,7 @@ Call `show` every frame, including when closed. The trigger toggles the menu. Se
 - `Drawer`: a rounded left-edge modal drawer with a sliding spring, a dimmed backdrop and scrollable destinations.
 - `Adaptive`: drawer below 640 logical points and floating otherwise.
 
-`Close`, Escape and selection dismiss the menu. Outside clicks dismiss through egui's modal/popover handling. Keyboard Up/Down skips disabled destinations, Tab traverses controls and focus returns to the trigger after dismissal. egui supplies touch/pointer input. Temivu adds a spring slide for the drawer and a the selected Bloom/Droplet animation for the floating surface, including paint-only closing transitions. Reduced motion snaps both.
+`Close`, Escape and selection dismiss the menu. Outside clicks dismiss through egui's modal/popover handling. Keyboard Up/Down skips disabled destinations, Tab traverses controls and focus returns to the trigger after dismissal. egui supplies touch/pointer input. The drawer expands from the edge and the floating surface expands from its trigger. Both use Droplet by default and replay paint while closing. Reduced motion snaps both.
 
 `NavigationMenu::frame(egui::Frame)` overrides padding, corners, shadow, border and fill without introducing a separate styling language. The same egui implementation is used across targets. Tests cover drawer, full-screen and floating presentations in a narrow viewport, selection, disabled semantics and Escape/focus restoration. Native mobile deployment and assistive-device testing remain separate work.
 
@@ -31,4 +31,4 @@ Design references: [shadcn dropdown menus](https://ui.shadcn.com/docs/components
 
 See [liquid motion](LIQUID_MOTION.md) for the transition implementation and its limits. The showcase's left hamburger always opens the drawer; Quick menu opens the island.
 
-`NavigationMenu::liquid(LiquidStyle::droplet())` overrides the context preset; without an override it inherits `LiquidStyle::set_context_default`. Drawers keep their slide direction. See [Bloom and Droplet](LIQUID_MOTION.md).
+`NavigationMenu::liquid(LiquidStyle::droplet())` overrides the context preset; without an override it inherits `LiquidStyle::set_context_default`. Drawers keep their edge alignment. See [Droplet motion](LIQUID_MOTION.md).

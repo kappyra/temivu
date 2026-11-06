@@ -1,11 +1,16 @@
 //! Responsive notification card with a paint-only exit.
-use crate::{Theme, liquid::fade_shape, motion};
+use crate::{
+    Theme,
+    liquid::{self, LiquidStyle, fade_shape},
+    motion,
+};
 use egui::{Id, Rect, Response, RichText, Ui, WidgetInfo, WidgetType, vec2};
 use std::time::Duration;
 
 #[derive(Clone, Debug)]
 struct ToastSnapshot {
     rect: Rect,
+    frame: egui::Frame,
     shapes: Vec<egui::epaint::ClippedShape>,
 }
 
@@ -146,7 +151,14 @@ impl<'a> Toast<'a> {
             return None;
         }
 
-        let reveal = motion::surface_reveal(ui.ctx(), motion_id, true, self.theme);
+        let reveal = liquid::surface_progress(
+            ui.ctx(),
+            motion_id,
+            true,
+            LiquidStyle::droplet(),
+            self.theme,
+        )
+        .min(1.0);
         let animate = self.theme.motion.animations_enabled(ui.ctx()) && !ui.is_sizing_pass();
         let layer = ui.layer_id();
         let start = animate.then(|| {
@@ -256,23 +268,28 @@ impl<'a> Toast<'a> {
             let clip = ui.clip_rect();
             let snapshot = self.state.snapshot.get_or_insert_with(|| ToastSnapshot {
                 rect: response.rect,
+                frame,
                 shapes: Vec::new(),
             });
             snapshot.rect = response.rect;
+            snapshot.frame = frame;
             snapshot.shapes.clear();
             ui.ctx().graphics(|graphics| {
                 if let Some(list) = graphics.get(layer) {
                     snapshot
                         .shapes
-                        .extend(list.all_entries().skip(start).cloned());
+                        .extend(list.all_entries().skip(start + 1).cloned());
                 }
             });
             if reveal < 1.0 {
+                let pose = toast_pose(response.rect, layout, clip, reveal, frame);
+                let surface = toast_surface(response.rect, layout, reveal, frame);
                 ui.ctx().graphics_mut(|graphics| {
                     let list = graphics.entry(layer);
-                    for index in start..list.next_idx().0 {
+                    list.set(egui::layers::ShapeIdx(start), clip, surface);
+                    for index in start + 1..list.next_idx().0 {
                         list.mutate_shape(egui::layers::ShapeIdx(index), |entry| {
-                            pose_toast(entry, response.rect, layout, clip, reveal);
+                            pose_toast(entry, pose);
                         });
                     }
                 });
@@ -311,7 +328,9 @@ impl<'a> Toast<'a> {
             motion::reset(ui.ctx(), id);
             return;
         };
-        let reveal = motion::surface_reveal(ui.ctx(), id, false, self.theme);
+        let reveal =
+            liquid::surface_progress(ui.ctx(), id, false, LiquidStyle::droplet(), self.theme)
+                .min(1.0);
         if reveal <= 0.001 {
             self.state.snapshot = None;
             motion::reset(ui.ctx(), id);
@@ -319,9 +338,18 @@ impl<'a> Toast<'a> {
         }
         let rect = Rect::from_min_size(ui.available_rect_before_wrap().min, snapshot.rect.size());
         let layout = toast_layout(ui, rect, reveal);
-        for entry in snapshot.shapes.iter() {
+        let pose = toast_pose(
+            snapshot.rect,
+            layout,
+            ui.clip_rect(),
+            reveal,
+            snapshot.frame,
+        );
+        ui.painter()
+            .add(toast_surface(snapshot.rect, layout, reveal, snapshot.frame));
+        for entry in &snapshot.shapes {
             let mut entry = entry.clone();
-            pose_toast(&mut entry, snapshot.rect, layout, ui.clip_rect(), reveal);
+            pose_toast(&mut entry, pose);
             ui.painter()
                 .with_clip_rect(entry.clip_rect)
                 .add(entry.shape);
@@ -338,22 +366,41 @@ fn toast_layout(ui: &mut Ui, rect: Rect, reveal: f32) -> Rect {
     layout
 }
 
-fn pose_toast(
-    entry: &mut egui::epaint::ClippedShape,
+fn toast_bounds(rect: Rect, layout: Rect) -> (Rect, Rect) {
+    let target = rect.translate(layout.center_bottom() - rect.center_bottom());
+    let size = target.size().min(vec2(52.0, 18.0));
+    let source = Rect::from_center_size(target.center_bottom() - vec2(0.0, size.y * 0.5), size);
+    (source, target)
+}
+
+fn toast_surface(rect: Rect, layout: Rect, reveal: f32, frame: egui::Frame) -> egui::Shape {
+    let (source, target) = toast_bounds(rect, layout);
+    let mut surface = liquid::matched_shape(source, target, reveal, frame, None);
+    fade_shape(&mut surface, reveal);
+    surface
+}
+
+fn toast_pose(
     rect: Rect,
     layout: Rect,
     clip: Rect,
     reveal: f32,
+    frame: egui::Frame,
+) -> (egui::emath::TSTransform, Rect, f32) {
+    let (source, target) = toast_bounds(rect, layout);
+    let (transform, visible, alpha) =
+        liquid::droplet_content_pose(source, target, reveal, frame, true);
+    let shift = egui::emath::TSTransform::from_translation(target.min - rect.min);
+    (transform * shift, visible.intersect(clip), alpha * reveal)
+}
+
+fn pose_toast(
+    entry: &mut egui::epaint::ClippedShape,
+    (transform, visible, alpha): (egui::emath::TSTransform, Rect, f32),
 ) {
-    let transform = egui::emath::TSTransform::from_translation(
-        layout.center_bottom() - rect.center_bottom() + vec2(0.0, 8.0 * (1.0 - reveal)),
-    ) * motion::scale_around(rect.center_bottom(), egui::lerp(0.92..=1.0, reveal));
     entry.shape.transform(transform);
-    entry.clip_rect = transform
-        .mul_rect(entry.clip_rect)
-        .intersect(layout.expand(12.0))
-        .intersect(clip);
-    fade_shape(&mut entry.shape, reveal);
+    entry.clip_rect = transform.mul_rect(entry.clip_rect).intersect(visible);
+    fade_shape(&mut entry.shape, alpha);
 }
 
 #[cfg(test)]

@@ -1,5 +1,9 @@
 //! Compact, caller-controlled widgets with spring feedback.
-use crate::{Theme, motion};
+use crate::{
+    Theme,
+    liquid::{self, DropletPart, LiquidStyle},
+    motion,
+};
 use egui::{Align2, Color32, FontId, Id, Key, Pos2, Rect, Response, Sense, Stroke, Ui, Vec2, vec2};
 use std::ops::RangeInclusive;
 
@@ -71,8 +75,9 @@ fn icon(painter: &egui::Painter, center: Pos2, icon: Icon, stretch: f32, color: 
             line((2.0, 2.0), (6.0, 6.0));
         }
         Icon::Close => {
-            line((-4.0, -4.0), (4.0, 4.0));
-            line((-4.0, 4.0), (4.0, -4.0));
+            let extent = 4.0 * motion::press_scale(stretch);
+            line((-extent, -extent), (extent, extent));
+            line((-extent, extent), (extent, -extent));
         }
         Icon::Arrow(direction) => {
             let along = match direction {
@@ -290,68 +295,169 @@ pub fn quantity_stepper(
     }
     let before = *value;
     *value = (*value).clamp(min, max);
-    let id = ui.next_auto_id().with("quantity");
     let side = height(theme);
-    let progress =
-        motion::spring_bool(ui.ctx(), id, *value > min || min == max, theme).clamp(0.0, 1.0);
-    let widest = label_width(
-        ui,
-        theme,
-        &[&min.to_string(), &max.to_string(), &value.to_string()],
-    ) + 12.0;
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 4.0;
-        if progress > 0.015 {
-            let width = ((side + widest + 4.0) * progress)
-                .min((ui.available_width() - side - 4.0).max(0.0));
-            if width > 0.0 {
-                let (rect, _) = ui.allocate_exact_size(vec2(width, side), Sense::hover());
-                {
-                    let mut ui = ui.new_child(egui::UiBuilder::new().id(id).max_rect(rect));
-                    ui.set_clip_rect(ui.clip_rect().intersect(rect));
-                    ui.set_opacity(progress);
-                    if width >= side {
-                        if icon_button(&mut ui, theme, decrease_label, Icon::Minus, *value > min)
-                            .clicked()
-                        {
-                            *value = value.saturating_sub(1);
-                        }
-                        let count = Rect::from_min_max(rect.min + vec2(side, 0.0), rect.max);
-                        if count.is_positive() {
-                            let previous =
-                                ui.ctx().data(|data| data.get_temp::<i32>(id.with("value")));
-                            let direction = if previous.is_some_and(|old| old > *value) {
-                                -1.0
-                            } else {
-                                1.0
-                            };
-                            label_reel(
-                                &ui,
-                                theme,
-                                id.with("count"),
-                                count,
-                                &value.to_string(),
-                                theme.foreground,
-                                direction,
-                            );
-                            ui.ctx()
-                                .data_mut(|data| data.insert_temp(id.with("value"), *value));
-                        }
-                    }
-                }
+    let available = ui.available_width().max(1.0);
+    let collapsed_width = side.min(available);
+    let id = ui.next_auto_id().with("quantity");
+    let style = LiquidStyle::droplet();
+    let expanded = *value > min || min == max;
+    let phase = liquid::droplet_group_progress(ui.ctx(), id, expanded, style, theme).min(1.0);
+    let count_width = label_width(ui, theme, &[&min.to_string(), &max.to_string()]) + 12.0;
+    let full_width = (2.0 * side + count_width).min(available);
+    let width = egui::lerp(collapsed_width..=full_width, phase);
+    let button_width = egui::lerp(collapsed_width..=side.min(full_width * 0.40), phase);
+    let (rect, _) = ui.allocate_exact_size(vec2(width, side), Sense::hover());
+    let increase_rect = rect.with_min_x(rect.right() - button_width);
+    let corners = (side * 0.5) as u8;
+    let frame = egui::Frame::new()
+        .fill(theme.muted)
+        .stroke(Stroke::new(1.0, theme.border))
+        .corner_radius(corners);
+    if phase > 0.001 && phase < 0.999 && width > button_width + 1.0 {
+        // The count and decrement button grow as a lobe from the plus button.
+        let height = side * egui::lerp(0.40..=1.0, phase);
+        let lobe = Rect::from_center_size(
+            egui::pos2(
+                (rect.left() + increase_rect.center().x) * 0.5,
+                rect.center().y,
+            ),
+            vec2(increase_rect.center().x - rect.left(), height),
+        );
+        let parts = [
+            DropletPart {
+                rect: lobe,
+                corners: ((height * 0.5) as u8).into(),
+            },
+            DropletPart {
+                rect: increase_rect,
+                corners: corners.into(),
+            },
+            DropletPart {
+                rect: Rect::from_center_size(rect.center(), vec2(width, side * phase.powi(3))),
+                corners: corners.into(),
+            },
+        ];
+        let smoothing = style.blend_radius * (1.0 - phase) * phase * 3.0;
+        let envelope = rect
+            .with_max_x(rect.left() + full_width)
+            .expand(style.blend_radius * 0.5 + 2.0);
+        liquid::paint_joined_parts(ui.painter(), parts, envelope, frame, smoothing);
+    } else {
+        ui.painter().rect(
+            rect,
+            corners,
+            frame.fill,
+            frame.stroke,
+            egui::StrokeKind::Inside,
+        );
+    }
+
+    let button = |ui: &mut Ui, rect: Rect, id: Id, label: &str, glyph, enabled: bool| {
+        let mut builder = egui::UiBuilder::new().id_salt(id).max_rect(rect);
+        if !enabled {
+            builder = builder.disabled();
+        }
+        let response = ui.new_child(builder).interact(rect, id, Sense::click());
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), label)
+        });
+        let press = press_amount(&response, theme);
+        let hover = motion::animate_bool(ui.ctx(), id.with("hover"), response.hovered(), theme);
+        let visual = rect.scale_from_center(motion::press_scale(press));
+        let painter = ui.painter().with_clip_rect(rect.expand(2.0));
+        let fill = theme.secondary.gamma_multiply(hover);
+        painter.add(motion::press_shape(
+            egui::epaint::RectShape::filled(visual, corners, fill),
+            press,
+        ));
+        if response.has_focus() {
+            painter.rect_stroke(
+                visual.shrink(1.0),
+                corners,
+                Stroke::new(2.0, theme.foreground),
+                egui::StrokeKind::Inside,
+            );
+        }
+        let ink = theme
+            .foreground
+            .gamma_multiply(if response.enabled() { 1.0 } else { 0.46 });
+        icon(&painter, visual.center(), glyph, 0.0, ink);
+        response
+    };
+
+    let leading_width = width - button_width;
+    let decrease_id = id.with("decrease");
+    let restore_focus = !expanded && ui.memory(|memory| memory.has_focus(decrease_id));
+    let decrease_width = side.min(leading_width - count_width.min(leading_width * 0.45));
+    let decrease_rect = rect.with_max_x(rect.left() + decrease_width);
+    if expanded && decrease_width >= button_width * 0.55 {
+        let decrease = button(
+            ui,
+            decrease_rect,
+            decrease_id,
+            decrease_label,
+            Icon::Minus,
+            *value > min,
+        );
+        if decrease.clicked() {
+            *value = value.saturating_sub(1);
+            if *value == min && decrease.has_focus() {
+                ui.memory_mut(|memory| memory.request_focus(id.with("increase")));
             }
         }
-        let increase = ui
-            .push_id(id.with("increase"), |ui| {
-                icon_button(ui, theme, increase_label, Icon::Plus, *value < max)
-            })
-            .inner;
-        ui.ctx()
-            .accesskit_node_builder(increase.id, |node| node.set_description(value.to_string()));
-        if increase.clicked() {
-            *value = value.saturating_add(1);
+    } else {
+        // Keep subsequent widgets' automatic IDs stable as the minus folds away.
+        ui.skip_ahead_auto_ids(1);
+        if decrease_width > 2.0 {
+            icon(
+                &ui.painter().with_clip_rect(decrease_rect),
+                decrease_rect.center(),
+                Icon::Minus,
+                0.0,
+                theme.foreground.gamma_multiply(phase),
+            );
         }
-    });
+    }
+
+    let increase = button(
+        ui,
+        increase_rect,
+        id.with("increase"),
+        increase_label,
+        Icon::Plus,
+        *value < max,
+    );
+    if restore_focus {
+        increase.request_focus();
+    }
+    if increase.clicked() {
+        *value = value.saturating_add(1);
+    }
+    let label = value.to_string();
+    ui.ctx()
+        .accesskit_node_builder(increase.id, |node| node.set_description(label.as_str()));
+    let count = rect
+        .with_min_x(decrease_rect.right())
+        .with_max_x(increase_rect.left());
+    if count.width() > 2.0 {
+        let previous = ui.ctx().data(|data| data.get_temp::<i32>(id.with("value")));
+        let direction = if previous.is_some_and(|old| old > *value) {
+            -1.0
+        } else {
+            1.0
+        };
+        label_reel(
+            ui,
+            theme,
+            id.with("count"),
+            count,
+            &label,
+            theme.foreground.gamma_multiply(phase),
+            direction,
+        );
+    }
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(id.with("value"), *value));
     if *value != before {
         ui.ctx().request_repaint();
     }
@@ -613,6 +719,48 @@ pub fn direction_pad(ui: &mut Ui, theme: &Theme, labels: [&str; 4]) -> Option<Di
     clicked
 }
 
+// The two circular ends share straight tangents. The trailing end narrows
+// during travel and returns to the same capsule at either endpoint.
+fn search_surface(painter: &egui::Painter, rect: Rect, phase: f32, fill: Color32, stroke: Stroke) {
+    use egui::epaint::{PathShape, PathStroke};
+
+    let radius = rect.size().min_elem() * 0.5;
+    let taper = 4.0 * phase * (1.0 - phase);
+    let leading = rect.left_center() + vec2(radius, 0.0);
+    let trailing_radius = radius * (1.0 - 0.24 * taper);
+    let trailing = rect.right_center() - vec2(trailing_radius, 0.0);
+    let distance = trailing.x - leading.x;
+    let delta = radius - trailing_radius;
+    if delta < 0.1 || distance <= delta + 0.1 {
+        painter.rect(
+            rect,
+            radius.round() as u8,
+            fill,
+            stroke,
+            egui::StrokeKind::Inside,
+        );
+        return;
+    }
+
+    let tangent = (delta / distance).acos();
+    let mut points = Vec::with_capacity(26);
+    for (center, radius, from, to) in [
+        (trailing, trailing_radius, -tangent, tangent),
+        (leading, radius, tangent, std::f32::consts::TAU - tangent),
+    ] {
+        points.extend(
+            (0..=12).map(|step| {
+                center + Vec2::angled(egui::lerp(from..=to, step as f32 / 12.0)) * radius
+            }),
+        );
+    }
+    painter.add(PathShape::convex_polygon(
+        points,
+        fill,
+        PathStroke::from(stroke).with_kind(egui::StrokeKind::Inside),
+    ));
+}
+
 /// An inline search field that grows from its button. Closing preserves the query.
 /// The caller controls the open state and can use the returned field response for submission.
 pub fn search_box(
@@ -630,20 +778,26 @@ pub fn search_box(
     let mut pending_focus = ui
         .ctx()
         .data(|data| data.get_temp::<bool>(id).unwrap_or(false));
-    let expanded = motion::spring_bool(ui.ctx(), id, *open, theme).clamp(0.0, 1.0);
     let side = height(theme);
     let max_width = ui.available_width().clamp(1.0, 320.0);
     let start_width = side.min(max_width);
-    let width = egui::lerp(start_width..=max_width, expanded);
+    let opening = *open;
+    let resize = liquid::DropletResize::new(
+        ui.ctx(),
+        id.with("size"),
+        vec2(start_width, side),
+        vec2(max_width, side),
+        opening,
+        theme,
+    );
+    let width = resize.size.x.clamp(start_width, max_width);
+    let expanded = resize.phase;
     let (rect, _) = ui.allocate_exact_size(vec2(width, side), Sense::hover());
-    let trigger_rect = Rect::from_min_size(rect.min, vec2(start_width, side));
-    let compact = max_width < 54.0;
-    let reveal_start = (start_width + 38.0).min(max_width * 0.9).max(54.0);
-    let ready = width >= reveal_start;
-    let show_field = *open && (ready || compact);
+    let trigger_rect = rect.with_max_x(rect.left() + start_width);
+    let reveal_start = (start_width + 38.0).min(max_width * 0.9).max(start_width);
+    let show_field = *open && width >= reveal_start;
     let focused = ui.memory(|memory| memory.focused());
-    let mut press = 0.0;
-    if !show_field {
+    let press = if !show_field {
         let trigger = ui.interact(trigger_rect, trigger_id, Sense::click());
         trigger.widget_info(|| {
             egui::WidgetInfo::labeled(egui::WidgetType::Button, trigger.enabled(), label)
@@ -657,64 +811,71 @@ pub fn search_box(
             pending_focus = true;
             ui.ctx().request_repaint();
         }
-        press = press_amount(&trigger, theme);
-    }
+        press_amount(&trigger, theme)
+    } else {
+        motion::press(ui.ctx(), trigger_id, false, false, theme)
+    };
     let drawn = rect.scale_from_center(1.0 - 0.05 * press);
-    let radius = (side * 0.5) as u8;
-    ui.painter().rect(
-        drawn,
-        radius,
-        mix(theme.muted, theme.card, expanded),
-        Stroke::new(1.0, theme.border),
-        egui::StrokeKind::Inside,
+    let focused_field = *open && (focused == Some(input_id) || focused == Some(close_id));
+    let focus = motion::animate_bool(ui.ctx(), id.with("focus"), focused_field, theme);
+    let border = Stroke::new(
+        1.0 + 0.5 * focus,
+        mix(theme.border, theme.foreground, focus),
     );
-    let response = if show_field {
-        let (field, close) = if compact {
-            let field = ui.add(
-                egui::TextEdit::singleline(query)
-                    .id(input_id)
-                    .hint_text(label)
-                    .desired_width(max_width),
-            );
-            let close = ui.interact(trigger_rect, close_id, Sense::click());
-            (field, close)
-        } else {
-            let close_side = (side - 6.0).min(width * 0.38);
-            let close_rect = Rect::from_center_size(
-                egui::pos2(rect.right() - close_side * 0.5 - 3.0, rect.center().y),
-                Vec2::splat(close_side),
-            );
-            let field_rect = Rect::from_min_max(
-                rect.min + vec2(12.0, 3.0),
-                close_rect.left_bottom() - vec2(4.0, 0.0),
-            );
-            // Overlay the allocated capsule without advancing the parent cursor again.
-            let mut input_ui = ui.new_child(
-                egui::UiBuilder::new()
-                    .id(id.with("field"))
-                    .max_rect(field_rect)
-                    .layout(egui::Layout::centered_and_justified(
-                        egui::Direction::TopDown,
-                    )),
-            );
-            input_ui.set_clip_rect(ui.clip_rect().intersect(field_rect));
-            input_ui.multiply_opacity(
-                ((width - reveal_start) / 32.0)
-                    .clamp(0.0, 1.0)
-                    .max(if expanded >= 0.99 { 1.0 } else { 0.0 }),
-            );
-            let field = input_ui.add(
-                egui::TextEdit::singleline(query)
-                    .id(input_id)
-                    .hint_text(label)
-                    .margin(egui::Margin::ZERO)
-                    .vertical_align(egui::Align::Center)
-                    .desired_width(field_rect.width())
-                    .frame(egui::Frame::NONE),
-            );
-            let close = ui.interact(close_rect, close_id, Sense::click());
-            (field, close)
-        };
+    search_surface(
+        ui.painter(),
+        drawn,
+        if opening { expanded } else { 0.0 },
+        mix(theme.muted, theme.card, expanded),
+        border,
+    );
+
+    let leading = egui::lerp(start_width..=start_width.min(max_width * 0.36), expanded);
+    let icon_center = drawn.left_center() + vec2(leading * 0.5, 0.0);
+    icon(
+        &ui.painter().with_clip_rect(drawn),
+        icon_center,
+        Icon::Search,
+        0.0,
+        theme.foreground,
+    );
+
+    let close_width = (side - 6.0).min(width * 0.34);
+    let close_rect = rect.with_min_x(rect.right() - close_width);
+    let field_rect = Rect::from_min_max(
+        rect.min + vec2(leading, 3.0),
+        close_rect.left_bottom() - vec2(2.0_f32.min(width * 0.05), 3.0),
+    );
+    let reveal = if max_width <= start_width {
+        expanded
+    } else {
+        crate::Easing::EaseInOut.apply((expanded - 0.06) / 0.55)
+    };
+    let mut close_press = 0.0;
+    let mut close_hover = false;
+    let mut close_focused = false;
+    let response = if show_field && field_rect.is_positive() {
+        // Overlay the allocated capsule without advancing the parent cursor again.
+        let mut input_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .id(id.with("field"))
+                .max_rect(field_rect)
+                .layout(egui::Layout::centered_and_justified(
+                    egui::Direction::TopDown,
+                )),
+        );
+        input_ui.set_clip_rect(ui.clip_rect().intersect(field_rect));
+        input_ui.multiply_opacity(reveal);
+        let field = input_ui.add(
+            egui::TextEdit::singleline(query)
+                .id(input_id)
+                .hint_text(label)
+                .margin(egui::Margin::ZERO)
+                .vertical_align(egui::Align::Center)
+                .desired_width(field_rect.width())
+                .frame(egui::Frame::NONE),
+        );
+        let close = ui.interact(close_rect, close_id, Sense::click());
         ui.ctx()
             .accesskit_node_builder(field.id, |node| node.set_label(label));
         close.widget_info(|| {
@@ -724,9 +885,9 @@ pub fn search_box(
             field.request_focus();
             pending_focus = false;
         }
-        let close_press = press_amount(&close, theme);
-        let (visual, ink) = paint_pill(ui, theme, &close, close_press, 0.0);
-        icon(ui.painter(), visual.center(), Icon::Close, 0.0, ink);
+        close_press = press_amount(&close, theme);
+        close_hover = close.hovered();
+        close_focused = close.has_focus();
         let escape = (field.has_focus() || field.lost_focus() || close.has_focus())
             && !ui.ctx().any_popup_open()
             && ui.input_mut(|input| input.consume_key(egui::Modifiers::NONE, Key::Escape));
@@ -737,50 +898,60 @@ pub fn search_box(
             close.surrender_focus();
             ui.ctx().request_repaint();
         }
-        if field.has_focus() {
-            ui.painter().rect_stroke(
-                drawn,
-                radius,
-                Stroke::new(1.5, theme.foreground),
-                egui::StrokeKind::Inside,
-            );
-        }
         Some(field)
     } else {
-        icon(
-            ui.painter(),
-            trigger_rect.center(),
-            Icon::Search,
-            0.0,
-            theme.foreground,
-        );
-        if ui.memory(|memory| memory.has_focus(trigger_id)) {
-            ui.painter().rect_stroke(
-                trigger_rect.expand(1.0),
-                radius,
-                Stroke::new(2.0, theme.foreground),
-                egui::StrokeKind::Outside,
+        // Match the input child UI's ID allocation while the field is hidden.
+        ui.skip_ahead_auto_ids(1);
+        if !*open && focused == Some(trigger_id) {
+            ui.painter().circle_stroke(
+                icon_center,
+                (start_width.min(side) * 0.5 - 1.0).max(0.0),
+                Stroke::new(
+                    1.5,
+                    theme
+                        .foreground
+                        .gamma_multiply(crate::Easing::EaseInOut.apply(1.0 - expanded / 0.24)),
+                ),
             );
         }
-        let preview = if query.is_empty() {
-            label
+        let preview_opacity = if opening {
+            reveal
         } else {
-            query.as_str()
+            crate::Easing::EaseInOut.apply((expanded - 0.50) / 0.50)
         };
-        let clip = rect
-            .with_min_x(trigger_rect.right())
-            .shrink2(vec2(4.0, 0.0));
-        if clip.is_positive() {
-            ui.painter().with_clip_rect(clip).text(
-                clip.left_center(),
+        if field_rect.is_positive() && preview_opacity > 0.0 {
+            let (preview, ink) = if query.is_empty() {
+                (label, theme.muted_foreground)
+            } else {
+                (query.as_str(), theme.foreground)
+            };
+            ui.painter().with_clip_rect(field_rect).text(
+                field_rect.left_center(),
                 Align2::LEFT_CENTER,
                 preview,
                 font(theme),
-                theme.muted_foreground.gamma_multiply(expanded),
+                ink.gamma_multiply(preview_opacity),
             );
         }
         None
     };
+    let hover = motion::animate_bool(ui.ctx(), close_id.with("hover"), close_hover, theme);
+    let close_clip = close_rect.shrink2(vec2(3.0, 8.0)).intersect(drawn);
+    let close_opacity = if opening {
+        reveal
+    } else {
+        crate::Easing::EaseInOut.apply((expanded - 0.72) / 0.28)
+    };
+    if close_opacity > 0.0 && close_clip.width() >= 10.0 {
+        let ink =
+            mix(theme.muted_foreground, theme.foreground, hover).gamma_multiply(close_opacity);
+        let painter = ui.painter().with_clip_rect(close_clip);
+        let center = close_rect.center() + vec2(2.0 * (1.0 - reveal), 0.0);
+        icon(&painter, center, Icon::Close, close_press, ink);
+        if close_focused {
+            painter.circle_stroke(center, 9.0, Stroke::new(1.5, ink));
+        }
+    }
     ui.ctx()
         .data_mut(|data| data.insert_temp(id, pending_focus));
     response

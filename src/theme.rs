@@ -242,14 +242,11 @@ pub struct MotionSettings {
     pub enabled: bool,
     /// Accessibility preference that forces animations to snap to their target.
     pub reduced_motion: bool,
-    /// Duration in seconds of quick fades such as popover and tooltip entrances
-    /// (Forui defaults to 100 ms).
+    /// Duration in seconds of quick transitions. Defaults to 110 ms.
     pub fast: f32,
-    /// Duration in seconds of standard transitions such as theme and modal
-    /// fades (Forui's `FThemeMotion.duration` defaults to 200 ms).
+    /// Duration in seconds of standard transitions. Defaults to 220 ms.
     pub normal: f32,
-    /// Duration in seconds of larger transitions such as tab changes (Forui
-    /// defaults to 300 ms).
+    /// Duration in seconds of larger transitions. Defaults to 330 ms.
     pub slow: f32,
     /// Easing curve. Forui's theme motion defaults to a linear curve.
     pub easing: Easing,
@@ -260,15 +257,25 @@ impl Default for MotionSettings {
         Self {
             enabled: true,
             reduced_motion: false,
-            fast: 0.1,
-            normal: 0.2,
-            slow: 0.3,
+            fast: 0.11,
+            normal: 0.22,
+            slow: 0.33,
             easing: Easing::Linear,
         }
     }
 }
 
 impl MotionSettings {
+    pub(crate) fn normal_scale(self) -> f32 {
+        // Presets and looping cycles are authored at the original 200 ms pace.
+        let normal = if self.normal.is_finite() {
+            self.normal
+        } else {
+            Self::default().normal
+        };
+        normal / 0.20
+    }
+
     /// Whether animations may run in `ctx`.
     ///
     /// Requires the master switch to be on, reduced motion to be off and

@@ -7,7 +7,7 @@ that inventory.
 
 | Area | Additional Temivu components and behavior |
 | --- | --- |
-| Motion | [Bloom and Droplet](LIQUID_MOTION.md), shared-source page transitions, animated tab selection and reduced-motion settings |
+| Motion | [Droplet](LIQUID_MOTION.md), shared-source page transitions, animated tab selection and reduced-motion settings |
 | Navigation | [Drawer, fullscreen and floating menus](NAVIGATION_MENU.md), plus a floating bottom bar with press-and-drag selection |
 | Controls | Circular progress, segments, quantity stepper, directional controls and animated volume adjustment |
 | Media | Backend-independent video player controls and local playback in the optional Linux showcase |
@@ -120,4 +120,4 @@ The native showcase now starts with neutral light/dark colors; mint is optional.
 
 ## Floating-surface update (5 November 2026)
 
-Overview/Controls now use shared source-connected bubble expansion/collapse for Select, MultiSelect, Autocomplete and the date-field Popover. The original expansion is named Bloom; the optional improved separation/merging mode is named Droplet. Both have context defaults, per-widget overrides and a live showcase comparison. Logical close removes live controls immediately; cached paint completes the exit. The default 12-point trigger gap and settled outer frame bounds are tested. Generic Dialog supports a source rectangle and NavigationMenu adds a sliding Drawer; Adaptive chooses Drawer on narrow viewports. These local design extensions do not establish exact upstream motion parity. Details, configuration and measurement limits: [LIQUID_MOTION.md](LIQUID_MOTION.md). Theme switches preserve rasterization options to avoid rebuilding the font atlas.
+Droplet is the default for floating controls, dialogs, sheets, notifications, page transitions and inline resizing. The default trigger gap is eight points. Floating controls still accept an explicit Bloom override. Closed overlays replay paint while live controls are removed. See [Droplet motion](LIQUID_MOTION.md) for configuration and verification. Theme switches preserve rasterization options to avoid rebuilding the font atlas.

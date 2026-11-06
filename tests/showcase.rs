@@ -378,7 +378,7 @@ fn showcase_overlays_open_and_close() {
     harness.run_steps(3);
     harness.get_by_role_and_label(
         egui::accesskit::Role::Alert,
-        "Notification: This notification closes when dismissed.",
+        "Changes saved: Your preferences are up to date.",
     );
     harness.get_by_label("Dismiss").click();
     harness.run_steps(3);
@@ -563,37 +563,28 @@ fn theme_switch_timing_probe() {
 }
 
 #[test]
-fn bloom_and_droplet_can_be_selected_and_previewed() {
+fn showcase_uses_droplet_for_the_surface_preview() {
     use temivu::liquid::{LiquidStyle, SurfaceTransition};
     let mut harness = harness();
     navigate(&mut harness, "Controls");
-    for (label, transition) in [
-        ("Droplet", SurfaceTransition::Droplet),
-        ("Bloom", SurfaceTransition::Bloom),
-    ] {
+    assert_eq!(
+        LiquidStyle::context_default(&harness.ctx).transition,
+        SurfaceTransition::Droplet
+    );
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::Button, "Preview")
+        .click();
+    harness.run_steps(3);
+    harness.get_by_label("Expand and retract from the same control.");
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::Button, "Done")
+        .click();
+    harness.run_steps(3);
+    assert!(
         harness
-            .get_by_role_and_label(egui::accesskit::Role::Button, label)
-            .click();
-        harness.run_steps(3);
-        assert_eq!(
-            LiquidStyle::context_default(&harness.ctx).transition,
-            transition
-        );
-        harness
-            .get_by_role_and_label(egui::accesskit::Role::Button, "Preview")
-            .click();
-        harness.run_steps(3);
-        harness.get_by_label("One surface, two ways to move.");
-        harness
-            .get_by_role_and_label(egui::accesskit::Role::Button, "Done")
-            .click();
-        harness.run_steps(3);
-        assert!(
-            harness
-                .query_by_label("One surface, two ways to move.")
-                .is_none()
-        );
-    }
+            .query_by_label("Expand and retract from the same control.")
+            .is_none()
+    );
 }
 
 #[test]
@@ -678,14 +669,14 @@ fn widgets_open_from_the_header_and_filter_by_name() {
     harness.get_by_label("Widgets").click();
     harness.run_steps(3);
     harness.get_by_label("Motion gallery");
-    harness.get_by_label("13 of 13 examples");
+    harness.get_by_label("14 of 14 examples");
     harness
         .get_by_role_and_label(egui::accesskit::Role::TextInput, "Find a widget")
         .focus();
     harness.run_steps(2);
     harness.event(egui::Event::Text("direction".to_owned()));
     harness.run_steps(3);
-    harness.get_by_label("1 of 13 examples");
+    harness.get_by_label("1 of 14 examples");
     harness.get_by_label("Direction pad");
     assert!(harness.query_by_label("Quantity").is_none());
 }
@@ -728,41 +719,66 @@ fn video_source_can_be_opened_from_the_keyboard() {
 }
 
 #[test]
-fn widgets_zoom_from_the_trigger_and_return_to_the_origin_page() {
+fn widgets_morph_from_the_trigger_and_return_to_the_origin_page() {
     let mut app = harness();
     let trigger = app.get_by_label("Widgets").rect();
     app.get_by_label("Widgets").click();
-    app.run_steps(2);
-    let now = app.ctx.input(|input| input.time);
-    app.input_mut().time = Some(now + 0.10);
+    app.input_mut().time = Some(10.0);
+    app.step();
+    app.input_mut().time = Some(10.13);
     app.step();
     let surface = |app: &Harness<'_, showcase::Showcase>| {
+        let background = temivu::Theme::light().background.to_srgba_unmultiplied();
+        app.output().shapes.iter().find_map(|entry| {
+            let egui::Shape::Path(path) = &entry.shape else {
+                return None;
+            };
+            let color = path.fill.to_srgba_unmultiplied();
+            let bounds = egui::Rect::from_points(&path.points);
+            (color[3] > 0
+                && (0..3).all(|i| color[i].abs_diff(background[i]) <= 2)
+                && bounds.width() > trigger.width()
+                && bounds.width() < 870.0)
+                .then_some(bounds)
+        })
+    };
+    let growing = surface(&app).expect("intermediate rounded page");
+    assert!(growing.center().x < trigger.center().x && growing.center().x > 450.0);
+    let resize_title = |app: &Harness<'_, showcase::Showcase>| {
         app.output()
             .shapes
             .iter()
             .find_map(|entry| match &entry.shape {
-                egui::Shape::Path(path) if path.fill == temivu::Theme::light().background => {
-                    let bounds = egui::Rect::from_points(&path.points);
-                    (bounds.width() > trigger.width() && bounds.width() < 870.0).then_some(bounds)
+                egui::Shape::Text(text)
+                    if text.galley.text() == "Spring resize"
+                        && text.opacity_factor > 0.0
+                        && text.visual_bounding_rect().intersects(entry.clip_rect) =>
+                {
+                    Some(text.galley.size())
                 }
                 _ => None,
             })
     };
-    let growing = surface(&app).expect("intermediate rounded page");
-    assert!(growing.center().x < trigger.center().x && growing.center().x > 450.0);
+    let moving_title =
+        resize_title(&app).expect("gallery text is visible while the page is opening");
     app.get_by_label("Motion gallery");
     assert!(app.query_by_label("Welcome to Temivu").is_none());
 
-    app.input_mut().time = Some(now + 1.0);
+    app.input_mut().time = Some(11.0);
     app.step();
     assert!(
         surface(&app).is_none(),
         "settled page uses its normal layout"
     );
+    assert_eq!(
+        resize_title(&app),
+        Some(moving_title),
+        "text keeps its size throughout the reveal"
+    );
     app.get_by_label("Back").click();
-    app.run_steps(2);
-    let now = app.ctx.input(|input| input.time);
-    app.input_mut().time = Some(now + 0.13);
+    app.input_mut().time = Some(11.03);
+    app.step();
+    app.input_mut().time = Some(11.13);
     app.step();
     assert!(
         surface(&app).is_some(),

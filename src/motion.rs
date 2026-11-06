@@ -14,7 +14,7 @@
 //! * [`Theme::motion`]'s `reduced_motion` flag is `true`, or
 //! * egui's active style has `animation_time == 0.0` (in egui 0.36 that style
 //!   is `Context::global_style()`; older releases call it `Context::style()`).
-use crate::theme::{Easing, Theme};
+use crate::theme::{Easing, MotionSettings, Theme};
 use egui::{Context, Id};
 
 #[derive(Clone, Copy)]
@@ -72,10 +72,6 @@ pub fn scale_around(pivot: egui::Pos2, scale: f32) -> egui::emath::TSTransform {
     }
 }
 
-pub(crate) fn surface_reveal(ctx: &Context, id: Id, open: bool, theme: &Theme) -> f32 {
-    spring_f32_with_damping(ctx, id, 0.0, if open { 1.0 } else { 0.0 }, 0.86, theme).clamp(0.0, 1.0)
-}
-
 pub(crate) fn spring_f32_with_damping(
     ctx: &Context,
     id: Id,
@@ -84,13 +80,24 @@ pub(crate) fn spring_f32_with_damping(
     damping: f32,
     theme: &Theme,
 ) -> f32 {
+    spring_f32_with_settings(ctx, id, initial, target, damping, theme.motion)
+}
+
+pub(crate) fn spring_f32_with_settings(
+    ctx: &Context,
+    id: Id,
+    initial: f32,
+    target: f32,
+    damping: f32,
+    settings: MotionSettings,
+) -> f32 {
     if !initial.is_finite() || !target.is_finite() {
         return target;
     }
-    let duration = if theme.motion.normal.is_finite() {
-        theme.motion.normal.clamp(0.04, 2.0)
+    let duration = if settings.normal.is_finite() {
+        settings.normal.clamp(0.04, 2.0)
     } else {
-        0.2
+        MotionSettings::default().normal
     };
     let damping = if damping.is_finite() {
         damping.clamp(0.1, 0.99)
@@ -112,7 +119,7 @@ pub(crate) fn spring_f32_with_damping(
         duration,
         damping,
     });
-    if !theme.motion.animations_enabled(ctx) {
+    if !settings.animations_enabled(ctx) {
         state.value = target;
         state.velocity = 0.0;
     } else {
@@ -274,7 +281,8 @@ pub(crate) fn press(ctx: &Context, id: Id, held: bool, clicked: bool, theme: &Th
     }
     let previous = ctx.data(|data| data.get_temp::<SpringState>(spring));
     if clicked && previous.is_none_or(|state| state.value < 0.60) {
-        ctx.data_mut(|data| data.insert_temp(pulse, now + 0.048));
+        let duration = 0.048 * f64::from(theme.motion.normal_scale().clamp(0.2, 10.0));
+        ctx.data_mut(|data| data.insert_temp(pulse, now + duration));
     }
     let release = ctx.data(|data| data.get_temp::<f64>(pulse));
     let pulsing = release.is_some_and(|until| now < until);

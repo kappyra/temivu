@@ -122,8 +122,7 @@ fn bool_animation_advances_then_stops_requesting_repaints() {
         "a running animation must request a repaint"
     );
 
-    // Half of the 200 ms default duration.
-    harness.input_mut().time = Some(0.1);
+    harness.input_mut().time = Some(f64::from(theme.motion.normal) * 0.5);
     harness.step();
     let halfway = harness.state().1;
     assert!(
@@ -132,7 +131,7 @@ fn bool_animation_advances_then_stops_requesting_repaints() {
     );
     assert!(harness.ctx.has_requested_repaint());
 
-    harness.input_mut().time = Some(0.2);
+    harness.input_mut().time = Some(f64::from(theme.motion.normal));
     harness.step();
     assert_eq!(harness.state().1, 1.0);
 
@@ -314,7 +313,7 @@ fn float_animation_supports_values_outside_the_unit_range() {
     harness.input_mut().time = Some(0.0);
     harness.step();
     assert_eq!(*harness.state(), 0.0);
-    harness.input_mut().time = Some(0.1);
+    harness.input_mut().time = Some(f64::from(theme.motion.normal) * 0.5);
     harness.step();
     let halfway = *harness.state();
     assert!(

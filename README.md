@@ -71,7 +71,7 @@ Create a theme such as `Theme::light()` in the host, apply it to the egui contex
 
 - [Component inventory and coverage](docs/COVERAGE.md)
 - [Navigation menus and responsive presentation](docs/NAVIGATION_MENU.md)
-- [Bloom and Droplet motion presets](docs/LIQUID_MOTION.md)
+- [Droplet motion](docs/LIQUID_MOTION.md)
 - [Calendar API and keyboard behavior](docs/CALENDAR.md)
 - [Accessibility and verification scope](docs/ACCESSIBILITY.md)
 - [Changes since the first public version](CHANGELOG.md)

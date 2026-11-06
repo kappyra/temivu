@@ -39,7 +39,7 @@ impl Gallery {
             ),
             (
                 "Spring resize",
-                "Expand a panel and reverse it while it is moving.",
+                "Stretch and retract a Droplet surface.",
                 Self::resize,
             ),
             (
@@ -54,7 +54,7 @@ impl Gallery {
             ),
             (
                 "Quantity",
-                "Watch the number roll between values.",
+                "Add the first item to see the controls join. Return to zero to fold them back.",
                 Self::quantity,
             ),
             (
@@ -94,7 +94,7 @@ impl Gallery {
             ),
             (
                 "Search",
-                "An icon expands into an editable field.",
+                "An icon springs open into an editable field.",
                 Self::search,
             ),
             (
@@ -154,27 +154,23 @@ impl Gallery {
         {
             self.expanded = !self.expanded;
         }
-        let target = if self.expanded {
-            egui::vec2(200.0, 70.0)
-        } else {
-            egui::vec2(96.0, 32.0)
-        };
-        let size = temivu::motion::spring_size(
+        let available = ui.available_width().max(1.0);
+        let resize = temivu::liquid::DropletResize::new(
             ui.ctx(),
             ui.make_persistent_id("resize-preview"),
-            target,
+            egui::vec2(96.0_f32.min(available), 32.0),
+            egui::vec2(200.0_f32.min(available), 70.0),
+            self.expanded,
             theme,
         );
-        let (rect, _) = ui.allocate_exact_size(
-            egui::vec2(size.x.min(ui.available_width()), size.y),
-            egui::Sense::hover(),
-        );
-        ui.painter().rect(
+        let (rect, _) = ui.allocate_exact_size(resize.size, egui::Sense::hover());
+        resize.paint(
+            ui.painter(),
             rect,
-            16,
-            theme.muted,
-            egui::Stroke::new(1.0, theme.border),
-            egui::StrokeKind::Inside,
+            egui::Frame::new()
+                .fill(theme.muted)
+                .stroke(egui::Stroke::new(1.0, theme.border))
+                .corner_radius(16),
         );
     }
 

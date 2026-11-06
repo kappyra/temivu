@@ -92,14 +92,10 @@ pub fn link_preview(response: Response, destination: &str, theme: &crate::Theme)
     }
     ctx.data_mut(|data| data.insert_temp(id, dismissed));
     describe(&response, destination);
-    let amount = crate::motion::spring_f32(
-        ctx,
-        id.with("rise"),
-        0.0,
-        if active && !dismissed { 1.0 } else { 0.0 },
-        theme,
-    )
-    .clamp(0.0, 1.0);
+    let style = crate::liquid::LiquidStyle::droplet();
+    let amount =
+        crate::liquid::surface_progress(ctx, id.with("rise"), active && !dismissed, style, theme)
+            .min(1.0);
     if amount > 0.001 {
         let screen = ctx.content_rect().shrink(5.0);
         let painter = ctx
@@ -108,38 +104,41 @@ pub fn link_preview(response: Response, destination: &str, theme: &crate::Theme)
         let mut job = egui::text::LayoutJob::simple(
             destination.to_owned(),
             egui::FontId::proportional(theme.typography.body.size),
-            theme.foreground.gamma_multiply(amount),
+            egui::Color32::PLACEHOLDER,
             (screen.width() - 24.0).max(1.0),
         );
         job.wrap.max_rows = 1;
         job.wrap.break_anywhere = true;
         let text = painter.layout_job(job);
         let size = text.size() + egui::vec2(24.0, 14.0);
-        let anchor = ctx
-            .layer_transform_to_global(response.layer_id)
-            .map_or(response.rect, |transform| transform * response.rect);
+        let anchor = crate::motion::anchor_rect(&response);
         let x = (anchor.center().x - size.x * 0.5)
             .clamp(screen.left(), (screen.right() - size.x).max(screen.left()));
         let above = anchor.top() - size.y - 9.0;
         let y = if above >= screen.top() {
-            above + 8.0 * (1.0 - amount)
+            above
         } else {
-            anchor.bottom() + 9.0 - 8.0 * (1.0 - amount)
+            anchor.bottom() + 9.0
         };
         let y = y.clamp(screen.top(), (screen.bottom() - size.y).max(screen.top()));
         let rect = egui::Rect::from_min_size(egui::pos2(x, y), size);
-        painter.rect(
-            rect,
-            (size.y * 0.5) as u8,
-            theme.card.gamma_multiply(amount),
-            egui::Stroke::new(1.0, theme.border.gamma_multiply(amount)),
-            egui::StrokeKind::Inside,
-        );
-        painter.galley(
-            rect.min + egui::vec2(12.0, 7.0),
-            text,
-            theme.foreground.gamma_multiply(amount),
-        );
+        let frame = egui::Frame::new()
+            .fill(theme.card)
+            .stroke(egui::Stroke::new(1.0, theme.border))
+            .corner_radius((size.y * 0.5) as u8)
+            .inner_margin(egui::Margin::symmetric(12, 7));
+        let (transform, visible, alpha) =
+            crate::liquid::droplet_content_pose(anchor, rect, amount, frame, true);
+        painter.add(crate::liquid::matched_shape(
+            anchor, rect, amount, frame, None,
+        ));
+        if alpha > 0.0 {
+            let position = rect.min + egui::vec2(12.0, 7.0);
+            let mut label =
+                egui::Shape::galley(position, text, theme.foreground.gamma_multiply(alpha));
+            label.transform(transform);
+            painter.with_clip_rect(visible).add(label);
+        }
     }
     response
 }

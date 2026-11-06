@@ -94,32 +94,32 @@ fn morph_emits_valid_bounded_geometry_and_exit_is_paint_only() {
     );
 }
 
+fn opacity_at(mesh: &egui::Mesh, point: egui::Pos2) -> f32 {
+    let cross = |a: egui::Vec2, b: egui::Vec2| a.x * b.y - a.y * b.x;
+    mesh.indices
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .filter_map(|index| {
+            let [a, b, c] = std::array::from_fn(|i| mesh.vertices[index[i] as usize]);
+            let area = cross(b.pos - a.pos, c.pos - a.pos);
+            if area.abs() < 0.0001 {
+                return None;
+            }
+            let u = cross(b.pos - point, c.pos - point) / area;
+            let v = cross(c.pos - point, a.pos - point) / area;
+            let w = 1.0 - u - v;
+            (u.min(v).min(w) >= -0.0001).then_some(
+                u * f32::from(a.color.a())
+                    + v * f32::from(b.color.a())
+                    + w * f32::from(c.color.a()),
+            )
+        })
+        .fold(0.0, f32::max)
+}
+
 #[test]
 fn droplet_overpaints_the_trigger_edge_at_the_join() {
-    fn opacity_at(mesh: &egui::Mesh, point: egui::Pos2) -> f32 {
-        let cross = |a: egui::Vec2, b: egui::Vec2| a.x * b.y - a.y * b.x;
-        mesh.indices
-            .as_chunks::<3>()
-            .0
-            .iter()
-            .filter_map(|index| {
-                let [a, b, c] = std::array::from_fn(|i| mesh.vertices[index[i] as usize]);
-                let area = cross(b.pos - a.pos, c.pos - a.pos);
-                if area.abs() < 0.0001 {
-                    return None;
-                }
-                let u = cross(b.pos - point, c.pos - point) / area;
-                let v = cross(c.pos - point, a.pos - point) / area;
-                let w = 1.0 - u - v;
-                (u.min(v).min(w) >= -0.0001).then_some(
-                    u * f32::from(a.color.a())
-                        + v * f32::from(b.color.a())
-                        + w * f32::from(c.color.a()),
-                )
-            })
-            .fold(0.0, f32::max)
-    }
-
     let ctx = egui::Context::default();
     let source = egui::Rect::from_min_size(egui::pos2(20.0, 20.0), egui::vec2(120.0, 40.0));
     let target = egui::Rect::from_min_size(egui::pos2(20.0, 68.0), egui::vec2(120.0, 100.0));
@@ -463,7 +463,7 @@ fn settled_surface_uses_outer_bounds_without_adding_padding_twice() {
 }
 
 #[test]
-fn default_popup_expands_from_the_trigger_without_shrinking_text() {
+fn bloom_popup_expands_from_the_trigger_without_shrinking_text() {
     let ctx = egui::Context::default();
     let theme = Theme::light();
     theme.apply(&ctx);
@@ -481,6 +481,7 @@ fn default_popup_expands_from_the_trigger_without_shrinking_text() {
                 let anchor = ui.button("Open");
                 target = Popover::new(egui::Id::new("expand"), "Options", &mut open)
                     .theme(&theme)
+                    .liquid(LiquidStyle::bloom())
                     .width(240.0)
                     .show(&anchor, |ui| ui.label("Normal sized text"))
                     .map(|r| r.response.rect);
@@ -605,4 +606,81 @@ fn context_preset_is_inherited_and_widget_override_takes_precedence() {
         !sample(true),
         "an explicit Bloom popup must retain its original rounded-frame rendering"
     );
+}
+
+#[test]
+fn three_droplets_form_one_filled_surface_and_separate_again() {
+    use egui::{Color32, Frame, Pos2, Rect, Shape, pos2, vec2};
+    use temivu::liquid::{DropletPart, droplet_group_progress, paint_droplet_group};
+
+    let ctx = egui::Context::default();
+    let theme = Theme::light();
+    theme.apply(&ctx);
+    let style = LiquidStyle::droplet();
+    let id = egui::Id::new("group");
+    let parts = [80.0, 150.0, 220.0].map(|x| DropletPart {
+        rect: Rect::from_center_size(pos2(x, 100.0), vec2(50.0, 40.0)),
+        corners: 20.into(),
+    });
+    let target = Rect::from_center_size(pos2(150.0, 120.0), vec2(180.0, 72.0));
+    let fill = Color32::from_rgb(192, 214, 221);
+    let frame = Frame::new().fill(fill).corner_radius(28);
+    let mut phase = 0.0;
+    let mut render = |time, merged| {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                time: Some(time),
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(300.0, 240.0))),
+                ..Default::default()
+            },
+            |ui| {
+                phase = droplet_group_progress(ui.ctx(), id, merged, style, &theme);
+                paint_droplet_group(ui.painter(), &parts, target, phase, frame, style);
+            },
+        );
+        output.textures_delta.clear();
+        (phase, output)
+    };
+    let count_cards = |output: &egui::FullOutput| {
+        output
+            .shapes
+            .iter()
+            .filter(|entry| matches!(&entry.shape, Shape::Rect(rect) if rect.fill == fill))
+            .count()
+    };
+    let (_, split) = render(0.0, false);
+    assert_eq!(count_cards(&split), 3);
+    render(0.01, true);
+    let (mid, joining) = render(0.10, true);
+    assert!((0.40..0.90).contains(&mid), "phase={mid}");
+    let mesh = joining
+        .shapes
+        .iter()
+        .find_map(|entry| match &entry.shape {
+            Shape::Vec(shapes) => shapes.iter().find_map(|shape| match shape {
+                Shape::Mesh(mesh) => Some(mesh),
+                _ => None,
+            }),
+            _ => None,
+        })
+        .expect("one mesh for all three surfaces");
+    assert!(mesh.is_valid());
+    assert!(mesh.vertices.len() < 20_000);
+    assert!(mesh.vertices.iter().all(|vertex| vertex.pos.is_finite()));
+    for x in (124..=176).step_by(4) {
+        assert!(
+            opacity_at(mesh, pos2(x as f32, 113.0)) > 240.0,
+            "join at x={x}"
+        );
+    }
+    let (retarget, _) = render(0.10, false);
+    assert_eq!(retarget, mid, "reversing preserves the current pose");
+    let (_, split) = render(1.0, false);
+    assert_eq!(count_cards(&split), 3);
+    render(1.01, true);
+    let (_, joined) = render(2.0, true);
+    assert_eq!(count_cards(&joined), 1);
+    assert!(joined.shapes.iter().any(|entry| {
+        matches!(&entry.shape, Shape::Rect(rect) if rect.fill == fill && rect.rect == target)
+    }));
 }

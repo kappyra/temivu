@@ -150,8 +150,8 @@ impl Page {
 /// State for the interactive demos. Kept apart from navigation and theme state
 /// so the scaffold closures borrow disjoint fields.
 struct DemoState {
-    surface_motion: temivu::liquid::SurfaceTransition,
     surface_preview_open: bool,
+    droplet_group_merged: bool,
     show_motion_gallery: bool,
     motion_gallery: motion_gallery::Gallery,
     catalog_group: widget_catalog::Category,
@@ -215,8 +215,8 @@ struct DemoState {
 impl Default for DemoState {
     fn default() -> Self {
         Self {
-            surface_motion: temivu::liquid::SurfaceTransition::Bloom,
             surface_preview_open: false,
+            droplet_group_merged: false,
             show_motion_gallery: false,
             motion_gallery: motion_gallery::Gallery::default(),
             catalog_group: widget_catalog::Category::default(),
@@ -553,35 +553,9 @@ fn motion_controls(
     theme: &Theme,
     gallery_link: bool,
 ) -> Option<egui::Response> {
-    use temivu::liquid::{LiquidStyle, SurfaceTransition};
     let mut preview = None;
     let mut gallery = None;
     ui.horizontal_wrapped(|ui| {
-        for (kind, label, description) in [
-            (
-                SurfaceTransition::Bloom,
-                "Bloom",
-                "Soft expansion from the whole trigger",
-            ),
-            (
-                SurfaceTransition::Droplet,
-                "Droplet",
-                "Elastic separation and merging",
-            ),
-        ] {
-            let response = Button::new(label, theme)
-                .variant(if state.surface_motion == kind {
-                    ButtonVariant::Primary
-                } else {
-                    ButtonVariant::Ghost
-                })
-                .show(ui)
-                .on_hover_text(description);
-            if response.clicked() {
-                state.surface_motion = kind;
-                ui.ctx().request_repaint();
-            }
-        }
         let anchor = Button::new("Preview", theme)
             .variant(ButtonVariant::Secondary)
             .show(ui);
@@ -598,11 +572,6 @@ fn motion_controls(
             }
         }
     });
-    let motion = match state.surface_motion {
-        SurfaceTransition::Bloom => LiquidStyle::bloom(),
-        SurfaceTransition::Droplet => LiquidStyle::droplet(),
-    };
-    motion.set_context_default(ui.ctx());
     if let Some(anchor) = preview {
         Popover::new(
             Id::new("demo-surface-preview"),
@@ -610,18 +579,10 @@ fn motion_controls(
             &mut state.surface_preview_open,
         )
         .theme(theme)
-        .liquid(motion)
         .width(280.0)
         .show(&anchor, |ui| {
-            ui.label(
-                egui::RichText::new(match state.surface_motion {
-                    SurfaceTransition::Bloom => "Bloom",
-                    SurfaceTransition::Droplet => "Droplet",
-                })
-                .size(18.0)
-                .strong(),
-            );
-            ui.label("One surface, two ways to move.");
+            ui.label(egui::RichText::new("Droplet").size(18.0).strong());
+            ui.label("Expand and retract from the same control.");
             ui.add_space(12.0);
             let close = Button::new("Done", theme).show(ui);
             if close.clicked() {
@@ -972,7 +933,95 @@ fn overlays(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
     ui.add_space(14.0);
     studio_pair(state, ui, theme, overlay_dialog, overlay_sheet);
     studio_pair(state, ui, theme, overlay_actions, overlay_notifications);
+    overlay_droplet_group(state, ui, theme);
     show_toast_stack(state, ui, theme);
+}
+
+fn overlay_droplet_group(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
+    use temivu::liquid::{
+        DropletPart, LiquidStyle, droplet_group_progress, droplet_part_rect, paint_droplet_group,
+    };
+
+    studio_panel(
+        ui,
+        theme,
+        "Droplet group",
+        "Three controls combine into one surface and separate along the same path.",
+        |ui| {
+            let merged = &mut state.droplet_group_merged;
+            let action = if *merged {
+                "Separate controls"
+            } else {
+                "Combine controls"
+            };
+            if Button::new(action, theme)
+                .variant(ButtonVariant::Secondary)
+                .show(ui)
+                .clicked()
+            {
+                *merged = !*merged;
+            }
+
+            let width = ui.available_width().clamp(1.0, 360.0);
+            let (space, _) = ui.allocate_exact_size(egui::vec2(width, 110.0), egui::Sense::hover());
+            let part_width = (width / 3.0 - 8.0).clamp(1.0, 76.0);
+            let parts = std::array::from_fn::<_, 3, _>(|index| DropletPart {
+                rect: egui::Rect::from_center_size(
+                    space.center() + egui::vec2((index as f32 - 1.0) * width / 3.0, -14.0),
+                    egui::vec2(part_width, 38.0),
+                ),
+                corners: 19.into(),
+            });
+            let target = egui::Rect::from_center_size(
+                space.center() + egui::vec2(0.0, 10.0),
+                egui::vec2((width * 0.8).min(260.0), 64.0),
+            );
+            let style = LiquidStyle::droplet();
+            let phase = droplet_group_progress(
+                ui.ctx(),
+                ui.make_persistent_id("controls"),
+                *merged,
+                style,
+                theme,
+            );
+            let painter = ui.painter();
+            paint_droplet_group(
+                painter,
+                &parts,
+                target,
+                phase,
+                egui::Frame::new()
+                    .fill(theme.muted)
+                    .stroke(egui::Stroke::new(1.0, theme.border))
+                    .corner_radius(30),
+                style,
+            );
+            let font = egui::FontId::proportional(theme.typography.body.size);
+            let outgoing = (1.0 - phase / 0.55).clamp(0.0, 1.0);
+            if outgoing > 0.0 {
+                for (part, label) in parts.iter().zip(["View", "Sort", "Filter"]) {
+                    let pose = droplet_part_rect(part.rect, target, phase);
+                    painter.with_clip_rect(pose).text(
+                        pose.center(),
+                        egui::Align2::CENTER_CENTER,
+                        label,
+                        font.clone(),
+                        theme.foreground.gamma_multiply(outgoing),
+                    );
+                }
+            }
+            let incoming = ((phase - 0.52) / 0.36).clamp(0.0, 1.0);
+            if incoming > 0.0 {
+                painter.with_clip_rect(target).text(
+                    target.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "View options",
+                    font,
+                    theme.foreground.gamma_multiply(incoming),
+                );
+            }
+        },
+    );
 }
 
 fn show_toast_stack(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
@@ -1724,16 +1773,15 @@ impl eframe::App for Showcase {
             self.applied_theme = Some((self.dark, self.high_contrast, self.neutral));
         }
         if self.applied_reduced_motion != Some(self.reduced_motion) {
-            let animation_time = if self.reduced_motion { 0.0 } else { 0.1 };
+            let animation_time = if self.reduced_motion {
+                0.0
+            } else {
+                theme.motion.fast
+            };
             ui.ctx()
                 .all_styles_mut(|style| style.animation_time = animation_time);
             self.applied_reduced_motion = Some(self.reduced_motion);
         }
-        match self.state.surface_motion {
-            temivu::liquid::SurfaceTransition::Bloom => temivu::liquid::LiquidStyle::bloom(),
-            temivu::liquid::SurfaceTransition::Droplet => temivu::liquid::LiquidStyle::droplet(),
-        }
-        .set_context_default(ui.ctx());
         // The root Ui exists before this frame applies a changed theme.
         ui.set_style(ui.ctx().global_style());
         if self.motion_preview {
@@ -1983,7 +2031,6 @@ impl eframe::App for Showcase {
 fn main() -> eframe::Result {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     let mobile = arguments.iter().any(|argument| argument == "--mobile");
-    let droplet = arguments.iter().any(|argument| argument == "--droplet");
     let vsync = !arguments.iter().any(|argument| argument == "--no-vsync");
     let motion_preview = arguments
         .iter()
@@ -2048,11 +2095,6 @@ fn main() -> eframe::Result {
                         widget_catalog::Category::default()
                     },
                     video: video_demo::DemoVideo::with_path(video_path),
-                    surface_motion: if droplet {
-                        temivu::liquid::SurfaceTransition::Droplet
-                    } else {
-                        temivu::liquid::SurfaceTransition::Bloom
-                    },
                     ..Default::default()
                 },
                 destination: Some(
