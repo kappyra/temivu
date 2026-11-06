@@ -40,9 +40,11 @@ end-of-month clamping, ordering and `clamp`. Supply `today` explicitly;
 
 ## Navigation, bounds and disabled dates
 
-The header exposes previous/next month buttons with accessible names. Enable
-`year_navigation(true)` to add direct year-jump buttons, or use the month/year
-picker from the compact default header. `Calendar::bounds` sets inclusive minimum and maximum dates,
+The header has previous and next month buttons. Click the month heading or its
+chevron to open the month picker. Enable `year_navigation(true)` to show direct
+year-jump buttons when there is room. When supplied, **Today** returns to the
+current month and moves grid focus while preserving the selection. The grid
+reserves six rows so month changes leave surrounding content in place. `Calendar::bounds` sets inclusive minimum and maximum dates,
 clamping an out-of-range visible month and disabling navigation (and day cells)
 outside the range. `Calendar::selectable` adds a caller predicate that disables
 individual dates. `Calendar::toggleable` makes re-selecting the selected date
@@ -73,20 +75,19 @@ outside the date bounds are disabled, the visible month is selected, and
 choosing a month returns to the day grid. The month view has its own year
 navigation plus a "choose year" control that opens a 12-year page sub-grid with
 previous/next page buttons; choosing a year returns to the month view (clamped
-to the date bounds), and Escape steps back one view at a time
+to the date bounds), and the Back button or Escape steps back one view at a time
 (year -> month -> days). Grid roles/labels and the selected state are exposed.
 
 Picker text defaults to English and can be localized with
 `CalendarPickerLabels` via `Calendar::picker_labels`; it covers the chooser and
 navigation accessible names, the month names, the year formatter and the
-year-range heading.
+year-range heading. Use `Calendar::picker_back_label` to localize Back.
 
 ## Known gaps
 
 Swipe paging, contiguous range and multi-date selection, arrow-key navigation
 inside the picker sub-grids (they use normal button focus/Tab/Enter), localized
-date formats beyond the picker labels, RTL layout, animation, hover/pressed
-parity, screen-reader testing and upstream visual parity remain open.
+date formats beyond the picker labels, RTL layout, hover/pressed parity, screen-reader testing and upstream visual parity remain open.
 
 The picker consumes Escape before a hosting dialog can see it (so stepping back
 a view never also closes the dialog), enters the year page containing the
@@ -97,4 +98,4 @@ AccessKit selected state (in addition to egui's button toggle state). See `COVER
 
 ## Floating date field surface
 
-Date fields open a padded, rounded calendar surface with a preferred 280-point desktop content width (308 with touch sizing), capped to the viewport. The calendar caps its own width and uses compact painted chevrons. Days use circular selection by default; `CalendarStyle::radius` remains configurable. Existing date arithmetic, month/year pickers, bounds and keyboard semantics are preserved.
+Date fields open a padded, rounded calendar surface with a preferred 280-point desktop content width (308 with touch sizing), capped to the viewport. The popup scrolls when vertical space is limited. The calendar caps its own width and uses compact painted chevrons. Days use circular selection by default; `CalendarStyle::radius` remains configurable. Existing date arithmetic, month/year pickers, bounds and keyboard semantics are preserved.

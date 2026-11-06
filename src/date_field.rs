@@ -403,37 +403,43 @@ impl<'a> DateField<'a> {
                         .hint_text(hint)
                         .id(edit_id)
                         .margin(egui::Margin::symmetric(10, 8))
+                        .desired_width(edit_width)
                         .min_size(Vec2::new(edit_width, height)),
                 );
                 let button = crate::button::press_native(ui, theme, |ui| {
-                    ui.add_enabled(
+                    let button = ui.add_enabled(
                         enabled,
                         egui::Button::new("")
                             .fill(theme.card)
                             .stroke(egui::Stroke::new(1.0, theme.border))
                             .min_size(button_size)
                             .corner_radius(255),
-                    )
-                });
-                if ui.is_rect_visible(button.rect) {
-                    let icon =
-                        egui::Rect::from_center_size(button.rect.center(), Vec2::splat(16.0));
-                    let color = if enabled {
-                        theme.foreground
-                    } else {
-                        theme.muted_foreground
-                    };
-                    let stroke = egui::Stroke::new(1.5, color);
-                    ui.painter()
-                        .rect_stroke(icon.shrink(1.0), 3, stroke, egui::StrokeKind::Inside);
-                    ui.painter().line_segment(
-                        [
-                            egui::pos2(icon.left() + 2.0, icon.top() + 5.0),
-                            egui::pos2(icon.right() - 2.0, icon.top() + 5.0),
-                        ],
-                        stroke,
                     );
-                }
+                    if ui.is_rect_visible(button.rect) {
+                        let icon =
+                            egui::Rect::from_center_size(button.rect.center(), Vec2::splat(16.0));
+                        let color = if enabled {
+                            theme.foreground
+                        } else {
+                            theme.muted_foreground
+                        };
+                        let stroke = egui::Stroke::new(1.5, color);
+                        ui.painter().rect_stroke(
+                            icon.shrink(1.0),
+                            3,
+                            stroke,
+                            egui::StrokeKind::Inside,
+                        );
+                        ui.painter().line_segment(
+                            [
+                                egui::pos2(icon.left() + 2.0, icon.top() + 5.0),
+                                egui::pos2(icon.right() - 2.0, icon.top() + 5.0),
+                            ],
+                            stroke,
+                        );
+                    }
+                    button
+                });
                 ui.ctx().accesskit_node_builder(button.id, |node| {
                     node.set_label(labels.calendar_button);
                 });
@@ -459,6 +465,7 @@ impl<'a> DateField<'a> {
                         calendar_state.set_focused(state.value);
                     }
                     let mut popover_open = state.open;
+                    let max_height = (ui.ctx().content_rect().height() - 72.0).max(1.0);
                     Popover::new(popover_id, labels.calendar_button, &mut popover_open)
                         .theme(theme)
                         .liquid(liquid.unwrap_or_else(|| {
@@ -468,18 +475,23 @@ impl<'a> DateField<'a> {
                         .width((theme.sizes.calendar.max(40.0) * 7.0 + 32.0).min(340.0))
                         .frame(crate::surface::popup_frame(theme, 16))
                         .show(&button, |ui| {
-                            let mut calendar = Calendar::new(&mut calendar_state, theme)
-                                .bounds(min_date, max_date)
-                                .toggleable(false);
-                            if let Some(today) = today {
-                                calendar = calendar.today(today);
-                            }
-                            let output = calendar.show(ui);
-                            if let Some(date) = output.activated {
-                                activated = Some(date);
-                                calendar_state.set_selected(Some(date));
-                            }
-                            output.response
+                            egui::ScrollArea::vertical()
+                                .max_height(max_height)
+                                .show(ui, |ui| {
+                                    let mut calendar = Calendar::new(&mut calendar_state, theme)
+                                        .bounds(min_date, max_date)
+                                        .toggleable(false);
+                                    if let Some(today) = today {
+                                        calendar = calendar.today(today);
+                                    }
+                                    let output = calendar.show(ui);
+                                    if let Some(date) = output.activated {
+                                        activated = Some(date);
+                                        calendar_state.set_selected(Some(date));
+                                    }
+                                    output.response
+                                })
+                                .inner
                         });
                     state.open = popover_open;
                     ui.data_mut(|data| data.insert_temp(calendar_key, calendar_state));

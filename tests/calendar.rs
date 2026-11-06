@@ -710,3 +710,52 @@ fn picker_escape_does_not_also_close_a_hosting_dialog() {
         "with the picker closed, Escape should close the dialog"
     );
 }
+
+#[test]
+fn compact_calendar_keeps_its_grid_height_and_returns_to_today_without_selecting() {
+    let today = date(2026, 2, 10);
+    let selected = date(2026, 2, 8);
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(252.0, 460.0))
+        .build_ui_state(
+            move |ui, state: &mut CalendarState| {
+                Calendar::new(state, &Theme::light().touch())
+                    .today(today)
+                    .year_navigation(true)
+                    .show(ui);
+            },
+            CalendarState::new(today, Some(selected)),
+        );
+    harness.run();
+    let grid = harness
+        .get_by_role_and_label(egui::accesskit::Role::Grid, "Calendar")
+        .rect();
+    let next = harness.get_by_label("Next month");
+    assert!(next.rect().right() <= 252.0);
+    next.click();
+    harness.run();
+    assert_eq!(harness.state().visible_month(), date(2026, 3, 1));
+    assert_eq!(
+        harness
+            .get_by_role_and_label(egui::accesskit::Role::Grid, "Calendar")
+            .rect()
+            .height(),
+        grid.height(),
+    );
+
+    harness.get_by_label("Choose month").click();
+    harness.run();
+    harness.get_by_label("Choose year").click();
+    harness.run();
+    harness.get_by_label("Back").click();
+    harness.run();
+    harness.get_by_label("Months");
+    harness.get_by_label("Back").click();
+    harness.run();
+
+    harness.get_by_label("Today").click();
+    harness.run();
+    assert_eq!(harness.state().visible_month(), today.first_of_month());
+    assert_eq!(harness.state().selected(), Some(selected));
+    assert_eq!(harness.state().focused(), Some(today));
+}
