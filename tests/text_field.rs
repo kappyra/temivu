@@ -151,3 +151,51 @@ fn stable_id_preserves_focus_when_a_preceding_sibling_appears() {
     harness.run();
     assert_eq!(harness.state().0, "Ada");
 }
+
+#[test]
+fn single_line_hint_and_value_share_the_configured_alignment() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(320.0, 240.0))
+        .build_ui_state(
+            |ui, (plain, centered): &mut (String, String)| {
+                let theme = Theme::light();
+                TextField::new(plain, &theme, "Plain")
+                    .hint("Plain hint")
+                    .show(ui);
+                TextField::new(centered, &theme, "Centered")
+                    .hint("Centered hint")
+                    .alignment(egui::Align2::CENTER_CENTER)
+                    .show(ui);
+            },
+            (String::new(), String::new()),
+        );
+    for (plain, centered) in [
+        ("Plain hint", "Centered hint"),
+        ("Plain value", "Centered value"),
+    ] {
+        harness.run();
+        for (label, value) in [("Plain", plain), ("Centered", centered)] {
+            let field = harness
+                .get_by_role_and_label(egui::accesskit::Role::TextInput, label)
+                .rect();
+            let text = harness
+                .output()
+                .shapes
+                .iter()
+                .find_map(|entry| match &entry.shape {
+                    egui::Shape::Text(text) if text.galley.job.text == value => {
+                        Some(text.galley.rect.translate(text.pos.to_vec2()))
+                    }
+                    _ => None,
+                })
+                .expect("field text");
+            assert!((text.center().y - field.center().y).abs() <= 1.0);
+            if label == "Centered" {
+                assert!((text.center().x - field.center().x).abs() <= 1.0);
+            } else {
+                assert!(text.center().x < field.center().x);
+            }
+        }
+        *harness.state_mut() = ("Plain value".to_owned(), "Centered value".to_owned());
+    }
+}

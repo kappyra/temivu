@@ -26,6 +26,7 @@ pub struct TextField<'a> {
     max_chars: Option<usize>,
     id: Option<egui::Id>,
     padding: egui::Margin,
+    alignment: Option<egui::Align2>,
 }
 impl<'a> TextField<'a> {
     pub fn new(value: &'a mut String, theme: &'a Theme, label: &'a str) -> Self {
@@ -43,6 +44,7 @@ impl<'a> TextField<'a> {
             max_chars: None,
             id: None,
             padding: egui::Margin::symmetric(10, 8),
+            alignment: None,
         }
     }
     pub fn hint(mut self, hint: &'a str) -> Self {
@@ -89,6 +91,13 @@ impl<'a> TextField<'a> {
         self
     }
 
+    /// Align text and placeholder within the editable area.
+    /// Single-line fields default to left-center and multiline fields to left-top.
+    pub fn alignment(mut self, alignment: egui::Align2) -> Self {
+        self.alignment = Some(alignment);
+        self
+    }
+
     pub fn show(self, ui: &mut Ui) -> TextFieldOutput {
         ui.vertical(|ui| {
             let label = ui.label(self.label);
@@ -101,35 +110,30 @@ impl<'a> TextField<'a> {
                 })
                 .stroke(egui::Stroke::new(1.0, self.theme.border))
                 .corner_radius(14);
-            let response = if self.read_only {
-                let mut view = self.value.as_str();
-                let edit = make_edit(
-                    &mut view,
-                    self.multiline,
-                    self.hint,
-                    self.password,
-                    self.max_chars,
-                    self.id,
-                );
-                ui.add_enabled(
-                    self.enabled,
-                    edit.frame(frame).desired_width(ui.available_width()),
-                )
+            let mut view = self.value.as_str();
+            let buffer: &mut dyn egui::TextBuffer = if self.read_only {
+                &mut view
             } else {
-                let edit = make_edit(
-                    self.value,
-                    self.multiline,
-                    self.hint,
-                    self.password,
-                    self.max_chars,
-                    self.id,
-                );
-                ui.add_enabled(
-                    self.enabled,
-                    edit.frame(frame).desired_width(ui.available_width()),
-                )
-            }
-            .labelled_by(label.id);
+                self.value
+            };
+            let alignment = self.alignment.unwrap_or(if self.multiline {
+                egui::Align2::LEFT_TOP
+            } else {
+                egui::Align2::LEFT_CENTER
+            });
+            let edit = make_edit(
+                buffer,
+                self.multiline,
+                self.hint,
+                self.password,
+                self.max_chars,
+                self.id,
+            )
+            .horizontal_align(alignment.x())
+            .vertical_align(alignment.y())
+            .frame(frame)
+            .desired_width(ui.available_width());
+            let response = ui.add_enabled(self.enabled, edit).labelled_by(label.id);
             let error = self.validator.and_then(|validator| validator(self.value));
             let focused = crate::motion::spring_bool(
                 ui.ctx(),

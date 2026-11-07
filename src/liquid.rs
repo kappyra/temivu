@@ -365,10 +365,10 @@ pub(crate) fn popup<R>(
             data.get_temp::<(bool, Option<f32>)>(contact_key)
                 .unwrap_or_default()
         });
-        origin.contact = if *open && !was_open {
-            trigger_contact(anchor)
-        } else {
-            contact
+        origin.contact = match (was_open, *open) {
+            (false, true) => trigger_contact(anchor),
+            (true, false) => trigger_contact(anchor).or(contact),
+            _ => contact,
         };
         if *open != was_open {
             ctx.data_mut(|data| data.insert_temp(contact_key, (*open, origin.contact)));
@@ -485,7 +485,8 @@ pub(crate) fn popup<R>(
         content(ui)
     });
     if !*open && motion.transition == SurfaceTransition::Droplet {
-        ctx.data_mut(|data| data.insert_temp(contact_key, (false, origin.contact)));
+        let contact = trigger_contact(anchor).or(origin.contact);
+        ctx.data_mut(|data| data.insert_temp(contact_key, (false, contact)));
     }
     let result = result?;
     if sizing {

@@ -250,3 +250,181 @@ fn dismissed_card_keeps_paint_until_the_queue_finishes_its_exit() {
     harness.step();
     assert!(!harness.state().needs_render());
 }
+
+#[test]
+fn notification_center_includes_pending_entries_and_clears_only_multiple() {
+    let mut state = ToasterState::new(1);
+    for index in 0..3 {
+        state.push(ToastEntry::new(egui::Id::new(index), format!("Update {index}")).timeout(None));
+    }
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(390.0, 480.0))
+        .build_ui_state(
+            |ui, (state, open): &mut (ToasterState, bool)| {
+                let theme = Theme::light();
+                ui.add_space(220.0);
+                let trigger = ui.button("View all notifications");
+                *open |= trigger.clicked();
+                state.show_center(&trigger, open, &theme, Default::default());
+                if !*open {
+                    Toaster::new(state, &theme, "Dismiss").show(ui);
+                }
+            },
+            (state, false),
+        );
+
+    harness.run();
+    assert_eq!(
+        harness
+            .query_all_by_role(egui::accesskit::Role::Alert)
+            .count(),
+        1,
+    );
+    harness.get_by_label("View all notifications").click();
+    harness.run();
+    let center = harness.get_by_role_and_label(egui::accesskit::Role::Dialog, "Notifications");
+    let panel = center.rect();
+    assert!(panel.left() >= 0.0 && panel.right() <= 390.0);
+    assert!(
+        panel.height() < 360.0,
+        "three short notices fit in a compact panel: {panel:?}"
+    );
+    let close = harness.get_by_label("Close notifications").rect();
+    assert!((close.width() - close.height()).abs() <= 1.0);
+    let title = harness
+        .output()
+        .shapes
+        .iter()
+        .find_map(|entry| match &entry.shape {
+            egui::Shape::Text(text) if text.galley.job.text == "Notifications" => {
+                Some(text.galley.rect.translate(text.pos.to_vec2()))
+            }
+            _ => None,
+        })
+        .expect("center title");
+    assert!(
+        (title.center().x - panel.center().x).abs() <= 1.0,
+        "{title:?} vs {panel:?}"
+    );
+    assert!(
+        (title.center().y - close.center().y).abs() <= 1.0,
+        "{title:?} vs {close:?}"
+    );
+    let cross = harness
+        .output()
+        .shapes
+        .iter()
+        .filter(|entry| match &entry.shape {
+            egui::Shape::LineSegment { points, .. } => {
+                points.iter().all(|point| close.contains(*point))
+                    && points[0].lerp(points[1], 0.5).distance(close.center()) <= 0.5
+            }
+            _ => false,
+        })
+        .count();
+    assert_eq!(
+        cross, 2,
+        "both strokes should cross at the center of the button"
+    );
+    let clear = harness.get_by_label("Clear all").rect();
+    assert!((clear.center().x - panel.center().x).abs() <= 1.0);
+    let first = harness.get_by_label("Dismiss: Update 0").rect();
+    let last = harness.get_by_label("Dismiss: Update 2").rect();
+    assert!(first.height() >= 44.0 && last.bottom() < panel.bottom());
+    assert!(
+        last.top() - first.top() < 160.0,
+        "rows should hug their content"
+    );
+    harness.get_by_label("Clear all");
+
+    for index in 0..2 {
+        harness
+            .get_by_label(format!("Dismiss: Update {index}").as_str())
+            .click();
+        harness.run();
+    }
+    assert_eq!(harness.state().0.len(), 1);
+    assert!(harness.query_by_label("Clear all").is_none());
+    let single = harness
+        .get_by_role_and_label(egui::accesskit::Role::Dialog, "Notifications")
+        .rect();
+    assert!(
+        single.height() < 165.0,
+        "one short notice should fit in a short panel: {single:?}"
+    );
+
+    harness
+        .state_mut()
+        .0
+        .push(ToastEntry::new(egui::Id::new(3), "New update"));
+    harness.run_steps(3);
+    harness.get_by_label("Clear all").click();
+    harness.run();
+    assert!(harness.state().0.is_empty());
+    harness.get_by_label("No notifications");
+    harness.key_press(egui::Key::Escape);
+    harness.run();
+    assert!(!harness.state().1);
+}
+
+#[test]
+fn stacked_preview_actions_are_under_the_cards_and_only_for_multiple_notices() {
+    let mut state = ToasterState::default();
+    state.push(ToastEntry::new(egui::Id::new(0), "First notice").timeout(None));
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(390.0, 844.0))
+        .build_ui_state(
+            |ui, (state, open): &mut (ToasterState, bool)| {
+                let theme = Theme::light();
+                Toaster::new(state, &theme, "Dismiss").show_with_center(
+                    ui,
+                    open,
+                    Default::default(),
+                );
+            },
+            (state, false),
+        );
+    harness.run();
+    assert!(harness.query_by_label("Clear all").is_none());
+    assert!(harness.query_by_label("View all notifications").is_none());
+
+    harness
+        .state_mut()
+        .0
+        .push(ToastEntry::new(egui::Id::new(1), "Second notice").timeout(None));
+    harness.run();
+    let first = harness
+        .get_by_role_and_label(egui::accesskit::Role::Alert, "First notice")
+        .rect();
+    let second = harness
+        .get_by_role_and_label(egui::accesskit::Role::Alert, "Second notice")
+        .rect();
+    let view = harness.get_by_label("View all notifications");
+    assert!((0.0..=12.0).contains(&(second.top() - first.bottom())));
+    assert!((first.center().x - second.center().x).abs() <= 1.0);
+    assert!(view.rect().top() > second.bottom());
+    assert!(harness.query_by_label("+1").is_none());
+
+    for index in 2..5 {
+        harness
+            .state_mut()
+            .0
+            .push(ToastEntry::new(egui::Id::new(index), format!("Notice {index}")).timeout(None));
+    }
+    harness.run();
+    harness.get_by_label("+2");
+    assert!(harness.query_by_label("Dismiss: Notice 4").is_none());
+    harness.get_by_label("Dismiss: First notice").click();
+    harness.run();
+    harness.get_by_label("+1");
+    harness.get_by_label("View all notifications").click();
+    harness.run();
+    harness.get_by_role_and_label(egui::accesskit::Role::Dialog, "Notifications");
+    harness.get_by_label("Dismiss: Notice 4");
+    harness.get_by_label("Close notifications").click();
+    harness.run();
+    harness.get_by_label("Clear all").click();
+    harness.run();
+    assert!(harness.state().0.is_empty());
+    assert!(harness.query_by_label("Clear all").is_none());
+}

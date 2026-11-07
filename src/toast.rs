@@ -1,6 +1,6 @@
 //! Responsive notification card with a paint-only exit.
 use crate::{
-    Theme,
+    InputMode, Theme,
     liquid::{self, LiquidStyle, fade_shape},
     motion,
 };
@@ -30,6 +30,14 @@ impl Default for ToastState {
     }
 }
 
+/// Visual lifecycle of a notification.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ToastStatus {
+    Visible,
+    Closing,
+    Closed,
+}
+
 impl ToastState {
     /// `None` keeps the toast visible until explicitly dismissed.
     pub fn new(timeout: Option<Duration>) -> Self {
@@ -51,6 +59,20 @@ impl ToastState {
         self.started_at = None;
     }
 
+    pub(crate) fn pause_timer(&mut self) {
+        self.started_at = None;
+    }
+
+    pub fn status(&self) -> ToastStatus {
+        if self.visible {
+            ToastStatus::Visible
+        } else if self.snapshot.is_some() {
+            ToastStatus::Closing
+        } else {
+            ToastStatus::Closed
+        }
+    }
+
     /// Whether the card or its closing animation still needs to be rendered.
     pub fn needs_render(&self) -> bool {
         self.visible || self.snapshot.is_some()
@@ -62,7 +84,7 @@ impl ToastState {
             return None;
         }
         if paused {
-            self.started_at = None;
+            self.pause_timer();
             return None;
         }
         let timeout = self.timeout?;
@@ -77,9 +99,8 @@ impl ToastState {
     }
 }
 
-/// The upstream `FToastVariant`: the primary style uses the regular text colours,
-/// the destructive style paints the title and description in the destructive
-/// colour (contrast-adjusted against the card so it meets AA).
+/// Notification severity. Destructive notices use a warning mark and a tinted
+/// status tile, with standard theme colors for the message.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ToastVariant {
     #[default]
@@ -96,7 +117,9 @@ pub struct Toast<'a> {
     dismiss_label: &'a str,
     variant: ToastVariant,
     dismiss_accessible_label: Option<&'a str>,
+    input_mode: Option<InputMode>,
     icon: Option<&'a str>,
+    inset: bool,
 }
 
 impl<'a> Toast<'a> {
@@ -114,7 +137,9 @@ impl<'a> Toast<'a> {
             dismiss_label,
             variant: ToastVariant::Primary,
             dismiss_accessible_label: None,
+            input_mode: None,
             icon: None,
+            inset: false,
         }
     }
     pub fn description(mut self, description: &'a str) -> Self {
@@ -139,6 +164,17 @@ impl<'a> Toast<'a> {
         self.dismiss_accessible_label = Some(label);
         self
     }
+    /// Select the touch or desktop layout explicitly.
+    pub fn input_mode(mut self, input_mode: InputMode) -> Self {
+        self.input_mode = Some(input_mode);
+        self
+    }
+
+    pub(crate) fn inset(mut self, inset: bool) -> Self {
+        self.inset = inset;
+        self
+    }
+
     /// Show the toast and return its response while it is visible.
     /// Keep calling this after dismissal to finish the paint-only exit.
     pub fn show(mut self, ui: &mut Ui) -> Option<Response> {
@@ -166,100 +202,42 @@ impl<'a> Toast<'a> {
                 .graphics(|graphics| graphics.get(layer).map_or(0, |list| list.next_idx().0))
         });
         let mut child = ui.new_child(egui::UiBuilder::new().id_salt(motion_id));
-        let compact = self.theme.touch || ui.ctx().content_rect().width() < 600.0;
-        let width = ui.available_width().min(392.0);
+        let compact = self.input_mode.map_or_else(
+            || self.theme.touch || ui.ctx().content_rect().width() < 600.0,
+            |mode| mode == InputMode::Touch,
+        );
+        let width = ui
+            .available_width()
+            .min(if compact { 392.0 } else { 360.0 });
         child.set_max_width(width);
-        let mut frame = crate::surface::popup_frame(self.theme, if compact { 14 } else { 16 })
-            .corner_radius(22);
-        frame.shadow.offset = [0, 4];
-        frame.shadow.blur = 14;
-        let colors = match self.variant {
-            ToastVariant::Primary => (self.theme.foreground, self.theme.muted_foreground),
-            ToastVariant::Destructive => {
-                let destructive =
-                    self.theme
-                        .readable_on(self.theme.destructive, self.theme.card, 4.5);
-                (destructive, destructive)
-            }
+        let frame = if self.inset {
+            notice_frame(self.theme)
+        } else {
+            crate::surface::popup_frame(self.theme, if compact { 16 } else { 14 })
         };
+        let notice = Notice {
+            title: self.title,
+            description: self.description,
+            icon: self.icon,
+            variant: self.variant,
+        };
+        let touch_footer = compact && !self.inset;
+        let label = self.dismiss_accessible_label.unwrap_or(self.dismiss_label);
         let card = frame.show(&mut child, |ui| {
             ui.set_width((width - frame.total_margin().sum().x).max(0.0));
-            ui.spacing_mut().item_spacing.x = 10.0;
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                let size = if compact { 44.0 } else { 34.0 };
-                let dismiss = ui
-                    .add_enabled_ui(reveal >= 0.97, |ui| {
-                        crate::button::press_native(ui, self.theme, |ui| {
-                            ui.add(
-                                egui::Button::new(
-                                    RichText::new("×").size(21.0).color(self.theme.foreground),
-                                )
-                                .fill(self.theme.muted)
-                                .stroke(egui::Stroke::NONE)
-                                .corner_radius(255)
-                                .min_size(vec2(size, size)),
-                            )
-                        })
-                    })
-                    .inner
-                    .on_hover_text(self.dismiss_label);
-                let accessible = self.dismiss_accessible_label.unwrap_or(self.dismiss_label);
-                ui.ctx()
-                    .accesskit_node_builder(dismiss.id, |node| node.set_label(accessible));
-
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::TOP), |ui| {
-                    if ui.available_width() >= 114.0 {
-                        let (rect, _) =
-                            ui.allocate_exact_size(vec2(30.0, 30.0), egui::Sense::hover());
-                        ui.painter()
-                            .circle_filled(rect.center(), 15.0, self.theme.muted);
-                        let icon = self.icon.unwrap_or(match self.variant {
-                            ToastVariant::Primary => "i",
-                            ToastVariant::Destructive => "!",
-                        });
-                        let glyph = ui.put(
-                            rect,
-                            egui::Label::new(RichText::new(icon).strong().color(colors.0))
-                                .selectable(false)
-                                .truncate(),
-                        );
-                        ui.ctx()
-                            .accesskit_node_builder(glyph.id, |node| node.set_hidden());
-                    } else if let Some(icon) = self.icon {
-                        // Preserve explicit decorative icons even in very narrow cards.
-                        let glyph = ui.add(
-                            egui::Label::new(RichText::new(icon).color(colors.0)).selectable(false),
-                        );
-                        ui.ctx()
-                            .accesskit_node_builder(glyph.id, |node| node.set_hidden());
-                    }
-                    ui.vertical(|ui| {
-                        ui.set_width(ui.available_width());
-                        ui.spacing_mut().item_spacing.y = 3.0;
-                        ui.add(
-                            egui::Label::new(
-                                RichText::new(self.title)
-                                    .size(self.theme.typography.body.size)
-                                    .strong()
-                                    .color(colors.0),
-                            )
-                            .wrap(),
-                        );
-                        if let Some(description) = self.description {
-                            ui.add(
-                                egui::Label::new(
-                                    RichText::new(description)
-                                        .size(self.theme.typography.body.size)
-                                        .color(colors.1),
-                                )
-                                .wrap(),
-                            );
-                        }
-                    });
-                });
-                dismiss
+            notice.show(ui, self.theme, compact, touch_footer, |ui, size| {
+                ui.add_enabled_ui(reveal >= 0.97, |ui| {
+                    notice_close(
+                        ui,
+                        self.theme,
+                        self.dismiss_label,
+                        label,
+                        size,
+                        touch_footer,
+                    )
+                })
+                .inner
             })
-            .inner
         });
 
         let mut response = card.response;
@@ -355,6 +333,175 @@ impl<'a> Toast<'a> {
                 .add(entry.shape);
         }
     }
+}
+
+pub(crate) fn notice_frame(theme: &Theme) -> egui::Frame {
+    egui::Frame::new()
+        .fill(theme.muted)
+        .corner_radius(18)
+        .inner_margin(8)
+}
+
+pub(crate) struct Notice<'a> {
+    pub title: &'a str,
+    pub description: Option<&'a str>,
+    pub icon: Option<&'a str>,
+    pub variant: ToastVariant,
+}
+
+impl Notice<'_> {
+    fn marker(&self, ui: &mut Ui, rect: Rect, theme: &Theme) {
+        let tint = match self.variant {
+            ToastVariant::Primary => theme.foreground,
+            ToastVariant::Destructive => theme.readable_on(theme.destructive, theme.card, 4.5),
+        };
+        let fill = if self.variant == ToastVariant::Destructive {
+            tint.gamma_multiply(if theme.dark { 0.18 } else { 0.09 })
+        } else {
+            theme
+                .foreground
+                .gamma_multiply(if theme.dark { 0.13 } else { 0.07 })
+        };
+        ui.painter().rect_filled(rect, 11, fill);
+        if let Some(icon) = self
+            .icon
+            .or((self.variant == ToastVariant::Destructive).then_some("!"))
+        {
+            let mut icon_ui = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt("notice-marker")
+                    .max_rect(rect)
+                    .layout(egui::Layout::centered_and_justified(
+                        egui::Direction::LeftToRight,
+                    )),
+            );
+            let response = icon_ui.add(
+                egui::Label::new(RichText::new(icon).strong().color(tint))
+                    .selectable(false)
+                    .truncate(),
+            );
+            ui.ctx()
+                .accesskit_node_builder(response.id, |node| node.set_hidden());
+        } else {
+            ui.painter().circle_filled(rect.center(), 3.0, tint);
+        }
+    }
+
+    pub fn show(
+        &self,
+        ui: &mut Ui,
+        theme: &Theme,
+        touch: bool,
+        footer: bool,
+        dismiss: impl FnOnce(&mut Ui, f32) -> Response,
+    ) -> Response {
+        let width = ui.available_width();
+        let size = if touch { 44.0 } else { 32.0 };
+        let marker_size = 28.0_f32;
+        let text_left = (marker_size + 10.0).min(width * 0.30);
+        let text_right = if footer { 0.0 } else { size + 6.0 };
+        let start = ui.cursor().min;
+        let text_rect = Rect::from_min_size(
+            start + vec2(text_left, 0.0),
+            vec2((width - text_left - text_right).max(1.0), marker_size),
+        );
+        let mut text_ui = ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt("message")
+                .max_rect(text_rect)
+                .layout(egui::Layout::top_down(egui::Align::Min)),
+        );
+        text_ui.set_width(text_rect.width());
+        text_ui.spacing_mut().item_spacing.y = 3.0;
+        for (text, heading) in [(Some(self.title), true), (self.description, false)] {
+            if let Some(text) = text {
+                let text = if heading {
+                    RichText::new(text)
+                        .size(theme.typography.body.size)
+                        .strong()
+                        .color(theme.foreground)
+                } else {
+                    RichText::new(text)
+                        .size(theme.typography.body.size)
+                        .color(theme.muted_foreground)
+                };
+                text_ui.add(egui::Label::new(text).wrap().selectable(false));
+            }
+        }
+        let row_height = text_ui
+            .min_rect()
+            .height()
+            .max(if footer { marker_size } else { size });
+        let row = Rect::from_min_size(start, vec2(width, row_height));
+        let mark_width = marker_size.min((text_left - 4.0).max(0.0));
+        self.marker(
+            ui,
+            Rect::from_center_size(
+                egui::pos2(row.left() + mark_width / 2.0, row.center().y),
+                vec2(mark_width, marker_size),
+            ),
+            theme,
+        );
+        ui.advance_cursor_after_rect(row);
+
+        if footer {
+            ui.add_space(4.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                dismiss(ui, size)
+            })
+            .inner
+        } else {
+            let action = Rect::from_center_size(
+                egui::pos2(row.right() - size / 2.0, row.center().y),
+                egui::Vec2::splat(size),
+            );
+            let mut action_ui = ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt("close")
+                    .max_rect(action)
+                    .layout(egui::Layout::top_down(egui::Align::Center)),
+            );
+            dismiss(&mut action_ui, size)
+        }
+    }
+}
+
+pub(crate) fn notice_close(
+    ui: &mut Ui,
+    theme: &Theme,
+    label: &str,
+    accessible: &str,
+    size: f32,
+    show_label: bool,
+) -> Response {
+    let text = if show_label { label } else { "" };
+    let response = crate::button::press_native(ui, theme, |ui| {
+        let response = ui.add(
+            egui::Button::new(RichText::new(text).color(theme.foreground))
+                .wrap()
+                .fill(if show_label {
+                    theme.muted
+                } else {
+                    theme.foreground.gamma_multiply(0.07)
+                })
+                .stroke(egui::Stroke::NONE)
+                .corner_radius(255)
+                .min_size(egui::Vec2::splat(size)),
+        );
+        if !show_label && ui.is_rect_visible(response.rect) {
+            let center = response.rect.center();
+            let stroke = egui::Stroke::new(1.5, theme.foreground);
+            for dy in [-3.0, 3.0] {
+                ui.painter()
+                    .line_segment([center + vec2(-3.0, dy), center + vec2(3.0, -dy)], stroke);
+            }
+        }
+        response
+    })
+    .on_hover_text(label);
+    ui.ctx()
+        .accesskit_node_builder(response.id, |node| node.set_label(accessible));
+    response
 }
 
 fn toast_layout(ui: &mut Ui, rect: Rect, reveal: f32) -> Rect {

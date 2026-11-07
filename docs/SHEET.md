@@ -16,6 +16,6 @@ fn filters(ui: &mut egui::Ui, theme: &Theme, open: &mut bool) {
 }
 ```
 
-On compact windows and touch layouts the sheet is bottom-aligned with narrow side insets. Wide windows get a centered, floating panel. The default maximum width is 560 points. Long content scrolls within the sheet while the title and dismiss control remain visible.
+Both layouts float above the bottom edge and use the same radius on all four corners. The touch layout has narrow side margins and a dismiss action below the content when height permits. The desktop layout uses a wider panel with the title, description and dismiss action in its header. Long content scrolls between the fixed controls. Use `Sheet::input_mode` to select a layout explicitly. The default maximum width is 560 points.
 
 The close button, downward drag, Escape, a backdrop click when enabled, and `ui.close()` dismiss the sheet. Use a stable ID and call `show` every frame so the exit can finish and previous keyboard focus can be restored. Reduced motion skips the automatic transition.

@@ -301,6 +301,7 @@ impl<'a> Autocomplete<'a> {
             vertical_arrows: true,
         };
         let edit = egui::TextEdit::singleline(query)
+            .vertical_align(egui::Align::Center)
             .margin(egui::Margin::symmetric(10, 8))
             .hint_text(hint)
             .id(field_id)

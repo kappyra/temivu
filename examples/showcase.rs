@@ -178,6 +178,7 @@ struct DemoState {
     toast: Option<ToastState>,
     toaster: ToasterState,
     next_toast: usize,
+    notification_center_open: bool,
     dialog_open: bool,
     dialog_from_center: bool,
     dialog_result: Option<&'static str>,
@@ -240,6 +241,7 @@ impl Default for DemoState {
             toast: None,
             toaster: ToasterState::default(),
             next_toast: 0,
+            notification_center_open: false,
             dialog_open: false,
             dialog_from_center: false,
             dialog_result: None,
@@ -1023,25 +1025,20 @@ fn overlay_droplet_group(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme
 }
 
 fn show_toast_stack(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
-    if state.toaster.needs_render() {
-        let narrow = ui.ctx().content_rect().width() < 640.0;
-        let (anchor, offset) = if narrow {
-            (egui::Align2::CENTER_TOP, egui::vec2(0.0, 66.0))
-        } else {
-            (
-                egui::Align2::RIGHT_BOTTOM,
-                egui::vec2(-20.0, -FloatingNavigation::BOTTOM_CLEARANCE),
-            )
-        };
-        state.toaster.show_with(
-            ui,
-            theme,
-            "Dismiss",
-            Id::new("demo-overlay-notifications"),
-            anchor,
-            offset,
-        );
-    }
+    let narrow = theme.touch || ui.ctx().content_rect().width() < 600.0;
+    let (anchor, offset) = if narrow {
+        (egui::Align2::CENTER_TOP, egui::vec2(0.0, 66.0))
+    } else {
+        (
+            egui::Align2::RIGHT_BOTTOM,
+            egui::vec2(-12.0, -FloatingNavigation::BOTTOM_CLEARANCE - 4.0),
+        )
+    };
+    temivu::Toaster::new(&mut state.toaster, theme, "Dismiss")
+        .id(Id::new("demo-overlay-notifications"))
+        .anchor(anchor)
+        .offset(offset)
+        .show_with_center(ui, &mut state.notification_center_open, Default::default());
 }
 
 fn overlay_dialog(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
@@ -1332,13 +1329,26 @@ fn overlay_notifications(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme
                     );
                 }
             });
+
+            let mut status = None;
             if let Some(toast) = &mut state.toast {
-                Toast::new(toast, theme, "Changes saved", "Dismiss")
-                    .description("Your preferences are up to date.")
-                    .show(ui);
-                if !toast.needs_render() {
-                    state.toast = None;
+                ui.add_space(14.0);
+                if toast.needs_render() {
+                    Toast::new(toast, theme, "Changes saved", "Dismiss")
+                        .description("Your preferences are up to date.")
+                        .show(ui);
                 }
+                status = match toast.status() {
+                    temivu::ToastStatus::Visible => None,
+                    temivu::ToastStatus::Closing => Some("Closing notification…"),
+                    temivu::ToastStatus::Closed => Some("Notification dismissed"),
+                };
+            }
+            if state.toaster.closing_count() > 0 {
+                status = Some("Closing notification…");
+            }
+            if let Some(status) = status {
+                ui.label(egui::RichText::new(status).color(theme.muted_foreground));
             }
         },
     );

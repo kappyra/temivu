@@ -181,7 +181,7 @@ fn width_is_clamped_on_a_narrow_window() {
     let dialog = harness.get_by_role_and_label(egui::accesskit::Role::Dialog, "Filters");
     let width = dialog.rect().width();
     assert!(
-        width <= 200.0 - 2.0 * 8.0 + 0.5,
+        width <= 200.0 - 2.0 * 12.0 + 0.5,
         "sheet width {width} should be clamped to the window"
     );
     assert!(width > 100.0, "the sheet should keep a usable width");
@@ -211,8 +211,24 @@ fn compact_sheet_keeps_its_header_visible_and_dismisses_by_grip() {
         .rect();
     let close = harness.get_by_label("Close").rect();
     assert!(
-        sheet.top() >= 0.0 && sheet.bottom() <= 300.5,
+        sheet.top() >= 0.0 && sheet.bottom() <= 288.5,
         "sheet={sheet:?}, close={close:?}"
+    );
+    let rounded_frame = harness.output().shapes.iter().any(|entry| {
+        let egui::Shape::Vec(shapes) = &entry.shape else {
+            return false;
+        };
+        shapes.iter().any(|shape| {
+            matches!(shape, egui::Shape::Rect(rect)
+            if rect.fill == Theme::light().card
+                && rect.corner_radius == egui::CornerRadius::same(32))
+        })
+    });
+    assert!(rounded_frame, "the floating sheet has four rounded corners");
+    let description = harness.get_by_label("Choose which items are shown.").rect();
+    assert!(
+        close.top() > description.bottom(),
+        "touch dismissal belongs below the content"
     );
     assert!(sheet.height() < 300.0 && close.height() >= 44.0);
     let grip = egui::pos2(sheet.center().x, sheet.top() + 23.0);

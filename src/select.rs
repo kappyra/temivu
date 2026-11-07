@@ -189,6 +189,7 @@ impl<'a> Select<'a> {
                         if self.searchable {
                             let search = ui.add(
                                 egui::TextEdit::singleline(&mut query)
+                                    .vertical_align(egui::Align::Center)
                                     .margin(egui::Margin::symmetric(8, 6))
                                     .hint_text(self.search_hint)
                                     .desired_width(f32::INFINITY),

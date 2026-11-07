@@ -686,15 +686,15 @@ fn three_droplets_form_one_filled_surface_and_separate_again() {
 }
 
 #[test]
-fn wide_popup_grows_from_the_click_and_retracts_to_the_same_point() {
-    fn sample(fraction: f32) -> (f32, f32) {
+fn wide_popup_uses_the_current_click_and_retains_the_contact_on_external_close() {
+    fn sample(fraction: f32, close_at: Option<f32>) -> (f32, f32) {
         let mut harness = Harness::builder()
             .with_size(egui::vec2(500.0, 420.0))
             .build_ui_state(
                 |ui, open| {
                     let anchor = ui.add_sized([300.0, 44.0], egui::Button::new("Wide trigger"));
                     if anchor.clicked() {
-                        *open = true;
+                        *open = !*open;
                     }
                     Popover::new(egui::Id::new("contact"), "Options", open)
                         .width(200.0)
@@ -751,18 +751,36 @@ fn wide_popup_grows_from_the_click_and_retracts_to_the_same_point() {
         let opening = surface_center(&harness);
         harness.input_mut().time = Some(1.0);
         harness.step();
-        *harness.state_mut() = false;
-        harness.hover_at(egui::pos2(480.0, 400.0));
-        harness.input_mut().time = Some(1.02);
+        if let Some(close_at) = close_at {
+            let pointer = egui::pos2(egui::lerp(trigger.x_range(), close_at), trigger.center().y);
+            harness.hover_at(pointer);
+            harness.drag_at(pointer);
+            harness.input_mut().time = Some(1.02);
+            harness.step();
+            harness.event(egui::Event::PointerButton {
+                pos: pointer,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: egui::Modifiers::NONE,
+            });
+        } else {
+            *harness.state_mut() = false;
+            harness.hover_at(egui::pos2(480.0, 400.0));
+        }
+        harness.input_mut().time = Some(1.04);
         harness.step();
-        harness.input_mut().time = Some(1.18);
+        assert!(!*harness.state());
+        harness.input_mut().time = Some(1.20);
         harness.step();
         (opening, surface_center(&harness))
     }
 
-    let left = sample(0.15);
-    let middle = sample(0.5);
-    let right = sample(0.85);
+    let left = sample(0.15, None);
+    let middle = sample(0.5, None);
+    let right = sample(0.85, None);
     assert!(left.0 + 50.0 < middle.0 && middle.0 + 50.0 < right.0);
     assert!(left.1 + 50.0 < middle.1 && middle.1 + 50.0 < right.1);
+    let left_to_right = sample(0.15, Some(0.85));
+    let right_to_left = sample(0.85, Some(0.15));
+    assert!(right_to_left.1 + 100.0 < left_to_right.1);
 }

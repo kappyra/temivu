@@ -136,24 +136,39 @@ impl<'a> Dialog<'a> {
             .theme
             .cloned()
             .unwrap_or_else(|| crate::surface::context_theme(ctx));
-        let newly_opened = *open
-            && ctx
-                .data(|data| data.get_temp::<PreviousFocus>(focus_key))
-                .is_none();
+        let was_open = ctx.data(|data| data.get_temp::<PreviousFocus>(focus_key).is_some());
+        let newly_opened = *open && !was_open;
         let source_key = self.id.with("transition-source");
-        let stored_source = ctx.data(|data| data.get_temp::<DropletAnchor>(source_key));
+        let current_source = self
+            .source
+            .filter(|source| source.rect.is_finite() && source.rect.is_positive())
+            .map(|source| (source, self.source_material));
+        let stored_source = ctx.data(|data| {
+            data.get_temp::<(DropletAnchor, Option<crate::motion::AnchorMaterial>)>(source_key)
+        });
         let source = if newly_opened {
-            self.source
+            current_source
+        } else if was_open
+            && !*open
+            && let Some(source) = current_source.filter(|(source, _)| source.contact.is_some())
+        {
+            // Latch the closing activation before the response loses its pointer.
+            ctx.data_mut(|data| data.insert_temp(source_key, source));
+            Some(source)
         } else {
-            stored_source.or(self.source)
-        }
-        .filter(|source| source.rect.is_finite() && source.rect.is_positive())
-        .unwrap_or_else(|| DropletAnchor {
-            rect: egui::Rect::from_center_size(
-                ctx.content_rect().center() + egui::vec2(0.0, 16.0),
-                egui::vec2(48.0, 32.0),
-            ),
-            contact: None,
+            stored_source.or(current_source)
+        };
+        let (anchor, material) = source.unwrap_or_else(|| {
+            (
+                DropletAnchor {
+                    rect: egui::Rect::from_center_size(
+                        ctx.content_rect().center() + egui::vec2(0.0, 16.0),
+                        egui::vec2(48.0, 32.0),
+                    ),
+                    contact: None,
+                },
+                None,
+            )
         });
         let area = self
             .area
@@ -163,7 +178,7 @@ impl<'a> Dialog<'a> {
         let motion = self
             .liquid
             .unwrap_or_else(|| crate::liquid::LiquidStyle::context_default(ctx));
-        let travel = if matches!(self.travel, OverlayTravel::Source) && self.source.is_none() {
+        let travel = if matches!(self.travel, OverlayTravel::Source) && source.is_none() {
             OverlayTravel::Center
         } else {
             self.travel
@@ -172,7 +187,7 @@ impl<'a> Dialog<'a> {
             ctx,
             area.layer(),
             *open,
-            (source, self.source_material),
+            (anchor, material),
             travel,
             motion,
             &theme,
@@ -185,7 +200,13 @@ impl<'a> Dialog<'a> {
         if newly_opened {
             let previous = ctx.memory(|memory| memory.focused());
             ctx.data_mut(|data| {
-                data.insert_temp(source_key, source);
+                if let Some(source) = source {
+                    data.insert_temp(source_key, source);
+                } else {
+                    data.remove::<(DropletAnchor, Option<crate::motion::AnchorMaterial>)>(
+                        source_key,
+                    );
+                }
                 data.insert_temp(focus_key, PreviousFocus(previous));
             });
         }

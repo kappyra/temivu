@@ -1,6 +1,7 @@
 //! Caller-owned queue for responsive notification cards.
 //! Visible entries are limited, and closing cards release their space smoothly.
-use crate::{Theme, Toast, ToastState, ToastVariant};
+use crate::toast::{Notice, notice_close, notice_frame};
+use crate::{Button, ButtonVariant, Dialog, Theme, Toast, ToastState, ToastStatus, ToastVariant};
 use egui::{Align2, Area, Id, Order, Response, Ui, Vec2};
 use std::time::Duration;
 
@@ -46,11 +47,43 @@ impl ToastEntry {
         self.icon = Some(icon.into());
         self
     }
+    fn notice(&self) -> Notice<'_> {
+        Notice {
+            title: &self.title,
+            description: self.description.as_deref(),
+            icon: self.icon.as_deref(),
+            variant: self.variant,
+        }
+    }
     pub fn id(&self) -> Id {
         self.id
     }
     pub fn title(&self) -> &str {
         &self.title
+    }
+}
+
+/// Localized labels for the notification center.
+#[derive(Clone, Copy, Debug)]
+pub struct NotificationCenterLabels<'a> {
+    pub title: &'a str,
+    pub view_all: &'a str,
+    pub close: &'a str,
+    pub clear_all: &'a str,
+    pub dismiss: &'a str,
+    pub empty: &'a str,
+}
+
+impl Default for NotificationCenterLabels<'_> {
+    fn default() -> Self {
+        Self {
+            title: "Notifications",
+            view_all: "View all notifications",
+            close: "Close notifications",
+            clear_all: "Clear all",
+            dismiss: "Dismiss",
+            empty: "No notifications",
+        }
     }
 }
 
@@ -125,6 +158,154 @@ impl ToasterState {
         !self.entries.is_empty()
     }
 
+    /// Number of preview cards still animating out.
+    pub fn closing_count(&self) -> usize {
+        self.entries
+            .iter()
+            .filter(|queued| queued.state.status() == ToastStatus::Closing)
+            .count()
+    }
+
+    /// Render a modal with all active and pending notifications. Call every frame,
+    /// including after closing, and hide the floating preview while `open` is true.
+    /// The trigger response supplies the origin for the opening and closing motion.
+    pub fn show_center(
+        &mut self,
+        trigger: &Response,
+        open: &mut bool,
+        theme: &Theme,
+        labels: NotificationCenterLabels<'_>,
+    ) {
+        self.center(
+            &trigger.ctx,
+            trigger.id.with("notification-center"),
+            Some(trigger),
+            open,
+            theme,
+            labels,
+        );
+    }
+
+    fn center(
+        &mut self,
+        ctx: &egui::Context,
+        id: Id,
+        trigger: Option<&Response>,
+        open: &mut bool,
+        theme: &Theme,
+        labels: NotificationCenterLabels<'_>,
+    ) {
+        if *open {
+            for queued in &mut self.entries {
+                queued.state.pause_timer();
+            }
+        }
+
+        let viewport = ctx.content_rect();
+        let touch = theme.touch || viewport.width() < 600.0;
+        let inset = if touch { 24.0 } else { 64.0 };
+        let padding = if touch { 12 } else { 18 };
+        let width = (viewport.width() - inset - 2.0 * f32::from(padding) - 2.0).clamp(1.0, 456.0);
+        let max_height = (viewport.height() * if touch { 0.84 } else { 0.72 }
+            - 2.0 * f32::from(padding))
+        .max(1.0);
+        let mut close = false;
+        let dialog = Dialog::new(id, labels.title)
+            .theme(theme)
+            .frame(crate::surface::popup_frame(theme, padding));
+        let dialog = match trigger {
+            Some(trigger) => dialog.source_response(trigger),
+            None => dialog,
+        };
+        dialog.show(ctx, open, |ui| {
+            ui.set_width(width);
+            ui.set_max_height(max_height);
+            ui.spacing_mut().item_spacing.y = 8.0;
+            let count = self.len();
+            let count_key = id.with("center-count");
+            let count_changed = ctx.data_mut(|data| {
+                let previous = data.get_temp::<usize>(count_key);
+                data.insert_temp(count_key, count);
+                previous != Some(count)
+            });
+            if count_changed {
+                ctx.request_repaint();
+            }
+            close = center_header(ui, theme, labels, count, touch).clicked();
+
+            if count == 0 {
+                notice_frame(theme).show(ui, |ui| {
+                    ui.label(egui::RichText::new(labels.empty).color(theme.muted_foreground));
+                });
+                return;
+            }
+
+            let footer_height = if count > 1 {
+                if touch { 64.0 } else { 54.0 }
+            } else {
+                0.0
+            };
+            let remaining = (max_height - ui.min_rect().height() - footer_height - 8.0).max(1.0);
+            let mut dismissed = None;
+            egui::ScrollArea::vertical()
+                .max_height(remaining)
+                .min_scrolled_height(0.0)
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    egui::Frame::NONE.inner_margin(3).show(ui, |ui| {
+                        for queued in self
+                            .entries
+                            .iter()
+                            .filter(|queued| queued.state.is_visible())
+                        {
+                            let entry = &queued.entry;
+                            ui.push_id(entry.id, |ui| {
+                                let accessible = format!("{}: {}", labels.dismiss, entry.title);
+                                notice_frame(theme).show(ui, |ui| {
+                                    let response =
+                                        entry.notice().show(ui, theme, touch, false, |ui, size| {
+                                            notice_close(
+                                                ui,
+                                                theme,
+                                                labels.dismiss,
+                                                &accessible,
+                                                size,
+                                                false,
+                                            )
+                                        });
+                                    if response.clicked() {
+                                        dismissed = Some(entry.id);
+                                    }
+                                });
+                            });
+                        }
+                    });
+                });
+            if let Some(id) = dismissed {
+                self.entries.retain(|queued| queued.entry.id != id);
+                ctx.request_repaint();
+            }
+            if self.len() > 1 {
+                ui.separator();
+                ui.vertical_centered(|ui| {
+                    if Button::new(labels.clear_all, theme)
+                        .variant(ButtonVariant::Ghost)
+                        .input_mode(notice_input(touch))
+                        .show(ui)
+                        .clicked()
+                    {
+                        self.entries.clear();
+                        ctx.request_repaint();
+                    }
+                });
+            }
+        });
+        if close {
+            *open = false;
+            ctx.request_repaint();
+        }
+    }
+
     pub fn contains(&self, id: Id) -> bool {
         self.entries
             .iter()
@@ -135,9 +316,8 @@ impl ToasterState {
         self.entries.retain(|queued| queued.state.needs_render());
     }
 
-    /// Render the visible queue as a foreground overlay with the upstream
-    /// default anchor (bottom-end on desktop, top-centre on touch) and prune
-    /// expired toasts.
+    /// Render the queue at the bottom trailing corner on desktop or the top
+    /// center on touch layouts. Expired toasts are pruned after rendering.
     pub fn show(&mut self, ui: &mut Ui, theme: &Theme, dismiss_label: &str) -> ToasterResponse {
         let id = ui.make_persistent_id("temivu-toaster");
         let anchor = default_anchor(ui, theme);
@@ -155,60 +335,276 @@ impl ToasterState {
         anchor: Align2,
         offset: Vec2,
     ) -> ToasterResponse {
+        self.preview(ui, theme, dismiss_label, (id, anchor, offset), None)
+            .0
+    }
+
+    fn preview(
+        &mut self,
+        ui: &mut Ui,
+        theme: &Theme,
+        dismiss_label: &str,
+        (id, anchor, offset): (Id, Align2, Vec2),
+        labels: Option<NotificationCenterLabels<'_>>,
+    ) -> (ToasterResponse, Option<Response>) {
         let viewport = ui.ctx().content_rect();
-        let width = (viewport.width() - 2.0 * offset.x.abs().max(12.0)).clamp(0.0, 392.0);
+        let compact = theme.touch || viewport.width() < 600.0;
+        const GUTTER: i8 = 14;
+        let max_width = if compact { 392.0 } else { 360.0 };
+        let width = (viewport.width() - 2.0 * offset.x.abs().max(4.0))
+            .clamp(0.0, max_width + 2.0 * f32::from(GUTTER));
         let height =
             (viewport.height() - offset.y.abs() - 16.0).clamp(0.0, viewport.height() * 0.62);
+        let inset = labels.is_some();
+        let footer = labels.filter(|_| self.len() > 1);
+        let mut view_all = None;
         let area = Area::new(id)
             .order(Order::Foreground)
             .anchor(anchor, offset)
             .constrain_to(viewport)
+            .default_size(egui::vec2(width, height))
             .fade_in(false)
             .show(ui.ctx(), |ui| {
                 if self.entries.is_empty() {
                     return 0;
                 }
                 ui.set_width(width);
-                egui::ScrollArea::vertical()
-                    .max_height(height)
-                    .auto_shrink([false, true])
-                    .show(ui, |ui| {
-                        ui.spacing_mut().item_spacing.y = 8.0;
-                        let mut rendered = 0;
-                        for queued in &mut self.entries {
-                            let QueuedToast { entry, state } = queued;
-                            if state.is_visible() && rendered >= self.limit {
-                                continue;
-                            }
-                            let shown = ui
-                                .push_id(entry.id, |ui| {
-                                    let mut toast =
-                                        Toast::new(state, theme, &entry.title, dismiss_label)
-                                            .variant(entry.variant);
-                                    if let Some(description) = &entry.description {
-                                        toast = toast.description(description);
-                                    }
-                                    if let Some(icon) = &entry.icon {
-                                        toast = toast.icon(icon);
-                                    }
-                                    let accessible = format!("{dismiss_label}: {}", entry.title);
-                                    toast
-                                        .dismiss_accessible_label(&accessible)
-                                        .show(ui)
-                                        .is_some()
-                                })
-                                .inner;
-                            rendered += usize::from(shown && state.is_visible());
-                        }
-                        rendered
+                ui.set_max_height(height);
+                let mut shown = 0;
+                egui::Frame::NONE
+                    .inner_margin(egui::Margin {
+                        left: GUTTER,
+                        right: GUTTER,
+                        ..egui::Margin::ZERO
                     })
-                    .inner
+                    .show(ui, |ui| {
+                        let tray = if inset {
+                            let alpha = crate::motion::animate_bool(
+                                ui.ctx(),
+                                id.with("tray-chrome"),
+                                !self.is_empty(),
+                                theme,
+                            );
+                            crate::surface::popup_frame(theme, 8)
+                                .corner_radius(28)
+                                .multiply_with_opacity(alpha)
+                        } else {
+                            egui::Frame::NONE
+                        };
+                        tray.show(ui, |ui| {
+                            let overflow = self.len().saturating_sub(self.limit);
+                            let action_space = if footer.is_some() {
+                                if compact && width < 350.0 {
+                                    122.0
+                                } else {
+                                    68.0
+                                }
+                            } else {
+                                0.0
+                            };
+                            let count_space = if inset && overflow > 0 { 22.0 } else { 0.0 };
+                            egui::ScrollArea::vertical()
+                                .max_height(
+                                    (height
+                                        - action_space
+                                        - count_space
+                                        - tray.total_margin().sum().y)
+                                        .max(1.0),
+                                )
+                                .min_scrolled_height(0.0)
+                                .auto_shrink([false, true])
+                                .show(ui, |ui| {
+                                    ui.spacing_mut().item_spacing.y = 6.0;
+                                    let padding = if inset { 2.0 } else { f32::from(GUTTER) };
+                                    ui.add_space(padding);
+                                    for queued in &mut self.entries {
+                                        let QueuedToast { entry, state } = queued;
+                                        if state.is_visible() && shown >= self.limit {
+                                            continue;
+                                        }
+                                        let rendered = ui
+                                            .push_id(entry.id, |ui| {
+                                                show_toast(
+                                                    ui,
+                                                    theme,
+                                                    dismiss_label,
+                                                    entry,
+                                                    state,
+                                                    inset,
+                                                )
+                                            })
+                                            .inner;
+                                        shown += usize::from(rendered && state.is_visible());
+                                    }
+                                    ui.add_space(padding);
+                                });
+
+                            if let Some(labels) = footer.filter(|_| self.len() > 1) {
+                                let opacity = if theme.motion.animations_enabled(ui.ctx()) {
+                                    ui.ctx()
+                                        .animate_bool_responsive(id.with("queue-actions"), true)
+                                } else {
+                                    1.0
+                                };
+                                let (clear, view) = ui
+                                    .scope(|ui| {
+                                        ui.multiply_opacity(opacity);
+                                        ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+                                        ui.separator();
+                                        let overflow = self.len().saturating_sub(shown);
+                                        if overflow > 0 {
+                                            ui.vertical_centered(|ui| {
+                                                ui.label(
+                                                    egui::RichText::new(format!("+{overflow}"))
+                                                        .strong()
+                                                        .color(theme.muted_foreground),
+                                                );
+                                            });
+                                        }
+                                        ui.with_layout(
+                                            egui::Layout::right_to_left(egui::Align::TOP)
+                                                .with_main_wrap(true),
+                                            |ui| {
+                                                let view = Button::new(labels.view_all, theme)
+                                                    .input_mode(notice_input(compact))
+                                                    .show(ui);
+                                                let clear = Button::new(labels.clear_all, theme)
+                                                    .input_mode(notice_input(compact))
+                                                    .variant(ButtonVariant::Ghost)
+                                                    .show(ui);
+                                                (clear.clicked(), view)
+                                            },
+                                        )
+                                        .inner
+                                    })
+                                    .inner;
+                                view_all = Some(view);
+                                if clear {
+                                    self.clear();
+                                    ui.ctx().request_repaint();
+                                }
+                            } else if labels.is_some() {
+                                ui.ctx()
+                                    .animate_bool_responsive(id.with("queue-actions"), false);
+                            }
+                        });
+                    });
+                shown
             });
         self.prune();
-        ToasterResponse {
-            response: area.response,
-            visible: area.inner,
-        }
+        (
+            ToasterResponse {
+                response: area.response,
+                visible: area.inner,
+            },
+            view_all,
+        )
+    }
+}
+
+fn show_toast(
+    ui: &mut Ui,
+    theme: &Theme,
+    dismiss_label: &str,
+    entry: &ToastEntry,
+    state: &mut ToastState,
+    inset: bool,
+) -> bool {
+    let mut toast = Toast::new(state, theme, &entry.title, dismiss_label)
+        .variant(entry.variant)
+        .inset(inset);
+    if let Some(description) = &entry.description {
+        toast = toast.description(description);
+    }
+    if let Some(icon) = &entry.icon {
+        toast = toast.icon(icon);
+    }
+    let accessible = format!("{dismiss_label}: {}", entry.title);
+    toast
+        .dismiss_accessible_label(&accessible)
+        .show(ui)
+        .is_some()
+}
+
+fn center_header(
+    ui: &mut Ui,
+    theme: &Theme,
+    labels: NotificationCenterLabels<'_>,
+    count: usize,
+    touch: bool,
+) -> Response {
+    let size = if touch { 44.0 } else { 32.0 };
+    let width = ui.available_width();
+    let lane = (size + 6.0_f32).min(width * 0.33);
+    let origin = ui.cursor().min;
+    let title_rect = egui::Rect::from_min_size(
+        origin + egui::vec2(lane, 0.0),
+        egui::vec2((width - 2.0 * lane).max(1.0), size),
+    );
+    let mut title = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt("title")
+            .max_rect(title_rect)
+            .layout(egui::Layout::left_to_right(egui::Align::Center).with_main_justify(true)),
+    );
+    title.add(
+        egui::Label::new(
+            egui::RichText::new(labels.title)
+                .size(20.0)
+                .strong()
+                .color(theme.foreground),
+        )
+        .wrap()
+        .halign(egui::Align::Center)
+        .selectable(false),
+    );
+
+    let height = size.max(title.min_rect().height());
+    let row = egui::Rect::from_min_size(origin, egui::vec2(width, height));
+    let action_size = Vec2::splat(size.min(lane));
+    let slot = |x| egui::Rect::from_center_size(egui::pos2(x, row.center().y), action_size);
+    let badge_rect = slot(row.left() + lane / 2.0);
+    let mut badge = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt("count")
+            .max_rect(badge_rect)
+            .layout(egui::Layout::centered_and_justified(
+                egui::Direction::LeftToRight,
+            )),
+    );
+    badge
+        .painter()
+        .rect_filled(badge_rect.shrink(2.0), 255, theme.muted);
+    badge.add(
+        egui::Label::new(egui::RichText::new(count.to_string()).color(theme.muted_foreground))
+            .truncate()
+            .selectable(false),
+    );
+
+    let close_rect = slot(row.right() - lane / 2.0);
+    let mut action = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt("dismiss")
+            .max_rect(close_rect)
+            .layout(egui::Layout::top_down(egui::Align::Center)),
+    );
+    let close = notice_close(
+        &mut action,
+        theme,
+        labels.close,
+        labels.close,
+        action_size.x,
+        false,
+    );
+    ui.advance_cursor_after_rect(row);
+    close
+}
+
+fn notice_input(touch: bool) -> crate::InputMode {
+    if touch {
+        crate::InputMode::Touch
+    } else {
+        crate::InputMode::Desktop
     }
 }
 
@@ -250,6 +646,7 @@ pub struct Toaster<'a> {
     dismiss_label: &'a str,
     id: Option<Id>,
     anchor: Option<Align2>,
+    offset: Option<Vec2>,
 }
 
 impl<'a> Toaster<'a> {
@@ -260,6 +657,7 @@ impl<'a> Toaster<'a> {
             dismiss_label,
             id: None,
             anchor: None,
+            offset: None,
         }
     }
 
@@ -275,6 +673,52 @@ impl<'a> Toaster<'a> {
         self
     }
 
+    /// Offset from the chosen anchor, in egui points.
+    pub fn offset(mut self, offset: Vec2) -> Self {
+        self.offset = Some(offset);
+        self
+    }
+
+    /// Render a grouped preview with queue actions under the cards when
+    /// at least two notices remain. The center lists the entire queue.
+    /// Call every frame on the same parent so the modal can animate closed.
+    pub fn show_with_center(
+        self,
+        ui: &mut Ui,
+        open: &mut bool,
+        labels: NotificationCenterLabels<'_>,
+    ) {
+        let id = self
+            .id
+            .unwrap_or_else(|| ui.make_persistent_id("temivu-toaster"));
+        let anchor = self
+            .anchor
+            .unwrap_or_else(|| default_anchor(ui, self.theme));
+        let offset = self.offset.unwrap_or_else(|| default_offset(anchor));
+        let trigger = if !*open && self.state.needs_render() {
+            self.state
+                .preview(
+                    ui,
+                    self.theme,
+                    self.dismiss_label,
+                    (id, anchor, offset),
+                    Some(labels),
+                )
+                .1
+        } else {
+            None
+        };
+        *open |= trigger.as_ref().is_some_and(Response::clicked);
+        self.state.center(
+            ui.ctx(),
+            id.with("notification-center"),
+            trigger.as_ref(),
+            open,
+            self.theme,
+            labels,
+        );
+    }
+
     pub fn show(self, ui: &mut Ui) -> ToasterResponse {
         let id = self
             .id
@@ -288,7 +732,7 @@ impl<'a> Toaster<'a> {
             self.dismiss_label,
             id,
             anchor,
-            default_offset(anchor),
+            self.offset.unwrap_or_else(|| default_offset(anchor)),
         )
     }
 }

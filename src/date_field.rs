@@ -400,6 +400,7 @@ impl<'a> DateField<'a> {
                 let edit = ui.add_enabled(
                     enabled,
                     egui::TextEdit::singleline(&mut state.text)
+                        .vertical_align(egui::Align::Center)
                         .hint_text(hint)
                         .id(edit_id)
                         .margin(egui::Margin::symmetric(10, 8))

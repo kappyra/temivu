@@ -365,15 +365,18 @@ fn showcase_overlays_open_and_close() {
         0,
         "dismissing a queued toast should remove it from the overlay"
     );
-    if harness
-        .query_by_label("Dismiss: Queued notification 2")
-        .is_some()
-    {
-        harness
-            .get_by_label("Dismiss: Queued notification 2")
-            .click();
-    }
+    // Wait for the exit to reflow the anchored stack before clicking its next card.
+    harness.run_steps(24);
+    harness
+        .get_by_label("Dismiss: Queued notification 2")
+        .click();
     harness.run_steps(3);
+    assert!(
+        harness
+            .query_by_label("Dismiss: Queued notification 2")
+            .is_none(),
+        "the remaining toast should still be dismissible after the stack reflows"
+    );
     harness.get_by_label("Show notification").click();
     harness.run_steps(3);
     harness.get_by_role_and_label(

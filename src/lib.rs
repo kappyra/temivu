@@ -126,8 +126,8 @@ pub use time_field::{TimeField, TimeFieldResponse, TimeFieldState};
 pub use time_picker::{
     Time, TimeError, TimeParseError, TimePicker, TimePickerLabels, TimePickerResponse,
 };
-pub use toast::{Toast, ToastState, ToastVariant};
-pub use toaster::{ToastEntry, Toaster, ToasterResponse, ToasterState};
+pub use toast::{Toast, ToastState, ToastStatus, ToastVariant};
+pub use toaster::{NotificationCenterLabels, ToastEntry, Toaster, ToasterResponse, ToasterState};
 pub use tokens::{Breakpoints, FieldSizes, Sizes, ViewportClass};
 pub use tooltip::link_preview;
 pub use video_player::{

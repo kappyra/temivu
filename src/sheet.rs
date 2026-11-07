@@ -1,4 +1,4 @@
-//! Modal bottom sheet with a spring slide.
+//! Floating modal sheet with a Droplet entrance and drag dismissal.
 use crate::{Button, ButtonVariant, Dialog, InputMode, Theme};
 use egui::{Context, Id, Ui, Vec2};
 
@@ -31,6 +31,7 @@ pub struct Sheet<'a> {
     dismiss_button: bool,
     barrier_dismissible: bool,
     max_width: f32,
+    input_mode: Option<InputMode>,
 }
 
 impl<'a> Sheet<'a> {
@@ -43,6 +44,7 @@ impl<'a> Sheet<'a> {
             dismiss_button: true,
             barrier_dismissible: true,
             max_width: 560.0,
+            input_mode: None,
         }
     }
 
@@ -71,6 +73,12 @@ impl<'a> Sheet<'a> {
         self
     }
 
+    /// Select the touch or desktop layout explicitly.
+    pub fn input_mode(mut self, input_mode: InputMode) -> Self {
+        self.input_mode = Some(input_mode);
+        self
+    }
+
     /// Returns the content's result while open; updates `open` on dismissal.
     pub fn show<R>(
         self,
@@ -79,9 +87,17 @@ impl<'a> Sheet<'a> {
         content: impl FnOnce(&mut Ui) -> R,
     ) -> Option<R> {
         let viewport = ctx.content_rect();
-        let compact = self.theme.touch || viewport.width() < 600.0;
-        let inset = if compact { 8.0 } else { 24.0 };
-        let padding = if compact { 16 } else { 24 };
+        let input = self.input_mode.unwrap_or_else(|| {
+            if self.theme.touch || viewport.width() < 600.0 {
+                InputMode::Touch
+            } else {
+                InputMode::Desktop
+            }
+        });
+        let compact = input == InputMode::Touch;
+        let footer = compact && self.dismiss_button && viewport.height() >= 260.0;
+        let inset = if compact { 12.0 } else { 28.0 };
+        let padding = if compact { 18 } else { 26 };
         let target_width = (viewport.width() - 2.0 * inset)
             .max(0.0)
             .min(self.max_width.max(0.0));
@@ -95,17 +111,14 @@ impl<'a> Sheet<'a> {
         .min((viewport.width() - 2.0 * inset).max(0.0));
         let content_width = (width - 2.0 * f32::from(padding) - 2.0).max(0.0);
 
-        let mut frame = crate::surface::popup_frame(self.theme, padding)
-            .corner_radius(28)
-            .inner_margin(egui::Margin {
+        let mut frame =
+            crate::surface::popup_frame(self.theme, padding).inner_margin(egui::Margin {
                 top: 8,
                 ..egui::Margin::same(padding)
             });
-        if compact {
-            frame.corner_radius.sw = 0;
-            frame.corner_radius.se = 0;
-        }
-        let bottom = if compact { 0.0 } else { inset };
+        frame.shadow.offset = [0, 3];
+        frame.shadow.blur = 12;
+        let bottom = inset.min(viewport.height() * 0.06);
         let area = egui::Modal::default_area(self.id)
             .anchor(egui::Align2::CENTER_BOTTOM, Vec2::new(0.0, -bottom));
         Dialog::new(self.id, self.title)
@@ -141,21 +154,19 @@ impl<'a> Sheet<'a> {
                     self.theme.muted_foreground.gamma_multiply(0.48),
                 );
                 ui.add_space(4.0);
+                let dismiss = |ui: &mut Ui| {
+                    if Button::new("Close", self.theme)
+                        .input_mode(input)
+                        .variant(ButtonVariant::Secondary)
+                        .show(ui)
+                        .clicked()
+                    {
+                        ui.close();
+                    }
+                };
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                    if self.dismiss_button {
-                        let input = if compact {
-                            InputMode::Touch
-                        } else {
-                            InputMode::Desktop
-                        };
-                        if Button::new("Close", self.theme)
-                            .input_mode(input)
-                            .variant(ButtonVariant::Secondary)
-                            .show(ui)
-                            .clicked()
-                        {
-                            ui.close();
-                        }
+                    if self.dismiss_button && !footer {
+                        dismiss(ui);
                     }
                     ui.vertical(|ui| {
                         ui.set_width(ui.available_width());
@@ -166,25 +177,41 @@ impl<'a> Sheet<'a> {
                                 .strong()
                                 .color(self.theme.foreground),
                         );
+                        if !compact && let Some(description) = self.description {
+                            ui.label(
+                                egui::RichText::new(description).color(self.theme.muted_foreground),
+                            );
+                        }
                     });
                 });
-                ui.add_space(12.0);
+                if compact && let Some(description) = self.description {
+                    ui.add_space(4.0);
+                    ui.label(egui::RichText::new(description).color(self.theme.muted_foreground));
+                }
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(10.0);
                 let chrome = ui.min_rect().height() + f32::from(padding) + bottom + 22.0;
-                let max_body = (viewport.height() * 0.9 - chrome).max(0.0);
-                egui::ScrollArea::vertical()
+                let height_fraction = if compact { 0.82 } else { 0.90 };
+                let footer_height = if footer { 66.0 } else { 0.0 };
+                let max_body =
+                    (viewport.height() * height_fraction - chrome - footer_height).max(0.0);
+                let result = egui::ScrollArea::vertical()
                     .max_height(max_body)
                     .min_scrolled_height(0.0)
                     .auto_shrink([false, true])
                     .show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 10.0;
-                        if let Some(description) = self.description {
-                            ui.label(
-                                egui::RichText::new(description).color(self.theme.muted_foreground),
-                            );
-                        }
-                        content(ui)
+                        egui::Frame::NONE.inner_margin(4).show(ui, content).inner
                     })
-                    .inner
+                    .inner;
+                if footer {
+                    ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(8.0);
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), dismiss);
+                }
+                result
             })
     }
 }

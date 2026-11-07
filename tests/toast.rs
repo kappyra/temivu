@@ -85,6 +85,12 @@ fn narrow_toast_keeps_localized_dismiss_action_usable() {
     harness.run();
     let action = harness.get_by_label("Dismiss notification");
     assert!(action.rect().right() <= 200.0, "{:?}", action.rect());
+    assert!(action.rect().height() >= 44.0);
+    let alert = harness.get_by_role(egui::accesskit::Role::Alert).rect();
+    assert!(
+        action.rect().top() > alert.center().y,
+        "touch dismissal sits below the message"
+    );
     for shape in &harness.output().shapes {
         if let egui::Shape::Text(text) = &shape.shape {
             assert!(
@@ -154,7 +160,7 @@ fn zero_duration_never_exposes_a_toast() {
 fn toast_card(harness: &Harness<'_, ToastState>) -> Option<(egui::Rect, egui::Color32)> {
     fn card(shape: &egui::Shape) -> Option<(egui::Rect, egui::Color32)> {
         match shape {
-            egui::Shape::Rect(rect) if rect.corner_radius.nw == 22 => Some((rect.rect, rect.fill)),
+            egui::Shape::Rect(rect) if rect.corner_radius.nw == 32 => Some((rect.rect, rect.fill)),
             egui::Shape::Path(path) if path.fill != egui::Color32::TRANSPARENT => {
                 Some((egui::Rect::from_points(&path.points), path.fill))
             }
@@ -283,7 +289,7 @@ fn toast_uses_a_rounded_card_and_theme_typography() {
                 return None;
             };
             shapes.iter().find_map(|shape| match shape {
-                egui::Shape::Rect(rect) if rect.fill == card && rect.corner_radius.nw == 22 => {
+                egui::Shape::Rect(rect) if rect.fill == card && rect.corner_radius.nw == 32 => {
                     Some(rect.rect)
                 }
                 _ => None,
@@ -303,11 +309,16 @@ fn toast_uses_a_rounded_card_and_theme_typography() {
         .expect("toast title");
     assert!(title.0 >= card_rect.left() + 14.0);
     assert!(title.0 <= card_rect.center().x);
+    let dismiss = harness.get_by_label("Dismiss").rect();
+    assert!(
+        (dismiss.center().y - card_rect.center().y).abs() <= 1.0,
+        "desktop dismiss action should be centered vertically: {dismiss:?} vs {card_rect:?}"
+    );
     assert_eq!(title.1, body);
 }
 
 #[test]
-fn destructive_variant_paints_the_title_in_the_destructive_colour() {
+fn destructive_variant_accents_the_icon_and_keeps_the_title_neutral() {
     let theme = Theme::light();
     let expected = theme.readable_on(theme.destructive, theme.card, 4.5);
     let mut harness = Harness::builder().build_ui_state(
@@ -325,7 +336,7 @@ fn destructive_variant_paints_the_title_in_the_destructive_colour() {
             .shapes
             .iter()
             .any(|shape| match &shape.shape {
-                egui::Shape::Text(text) => text
+                egui::Shape::Text(text) if text.galley.job.text == "!" => text
                     .galley
                     .job
                     .sections
@@ -333,8 +344,13 @@ fn destructive_variant_paints_the_title_in_the_destructive_colour() {
                     .any(|section| section.format.color == expected),
                 _ => false,
             }),
-        "the destructive title should use the contrast-checked destructive colour"
+        "the warning icon should use the contrast-checked destructive colour"
     );
+    assert!(harness.output().shapes.iter().any(|shape| matches!(
+        &shape.shape,
+        egui::Shape::Text(text) if text.galley.job.text == "Something went wrong"
+            && text.galley.job.sections[0].format.color == Theme::light().foreground
+    )));
 }
 
 #[test]
