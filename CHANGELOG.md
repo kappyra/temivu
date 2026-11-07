@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
+## [0.1.2] - 2026-11-07
+
+- Notification previews show a `+N` count for entries beyond the preview limit.
+  The notification center lists the full queue and supports individual dismissal
+  and clearing multiple entries.
+- Notification cards and the center adapt to desktop and touch layouts. Short
+  messages keep the center compact.
+- Bottom sheets float above the viewport with rounded corners and clearance for
+  keyboard focus rings.
+- Droplet returns to the latest point on the trigger when a second press closes
+  an anchored popup. Single-line fields center text and hints vertically.
+
 ## [0.1.1] - 2026-11-07
 
 - Droplet opens and closes anchored popovers and dialogs at the point where the
@@ -71,3 +83,4 @@ is experimental until 1.0; APIs may change between releases.
 [0.0.0]: https://github.com/kappyra/temivu/releases/tag/v0.0.0
 [0.1.0]: https://github.com/kappyra/temivu/releases/tag/v0.1.0
 [0.1.1]: https://github.com/kappyra/temivu/releases/tag/v0.1.1
+[0.1.2]: https://github.com/kappyra/temivu/releases/tag/v0.1.2
