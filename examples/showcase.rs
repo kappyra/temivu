@@ -19,8 +19,8 @@ use temivu::{
     CircularProgress, Date, DateField, DateFieldState, DateTime, DateTimePicker,
     DateTimePickerState, Dialog, FloatingNavigation, Item, ItemVariant, LineCalendar,
     LineCalendarState, MenuPresentation, Messages, MultiSelect, NavigationItem, NavigationMenu,
-    OtpField, PageTransition, PaginationState, Picker, PickerItem, Popover, PopoverMenu, Progress,
-    Radio, RangeSlider, Resizable, ResizableAxis, Scaffold, Select, SelectGroup, SelectMenuTile,
+    OtpField, PaginationState, Picker, PickerItem, Popover, PopoverMenu, Progress, Radio,
+    RangeSlider, Resizable, ResizableAxis, Scaffold, Select, SelectGroup, SelectMenuTile,
     SelectOption, SelectTile, SelectTileGroup, Sheet, Sidebar, SidebarGroup, SidebarItem,
     SidebarState, Slider, Switch, Tabs, TextField, Theme, Tile, Time, TimeField, TimeFieldState,
     TimePicker, Toast, ToastEntry, ToastState, ToastVariant, ToasterState, context_menu,
@@ -287,8 +287,7 @@ pub(crate) struct Showcase {
     reduced_motion: bool,
     applied_reduced_motion: Option<bool>,
     destination: Option<Id>,
-    gallery_return: Option<Page>,
-    page_motion: PageTransition,
+    gallery_return: Option<(Page, Id)>,
     locale: usize,
     state: DemoState,
 }
@@ -311,7 +310,6 @@ impl Default for Showcase {
             applied_reduced_motion: None,
             destination: None,
             gallery_return: None,
-            page_motion: PageTransition::new(Id::new("demo-page-motion")),
             locale: 0,
             state: DemoState::default(),
         }
@@ -552,11 +550,11 @@ fn motion_controls(
     ui: &mut egui::Ui,
     theme: &Theme,
     gallery_link: bool,
-) -> Option<egui::Response> {
+) -> Option<Id> {
     let mut preview = None;
     let mut gallery = None;
     ui.horizontal_wrapped(|ui| {
-        let anchor = Button::new("Preview", theme)
+        let anchor = Button::new("Preview Droplet from any point", theme)
             .variant(ButtonVariant::Secondary)
             .show(ui);
         if anchor.clicked() {
@@ -568,7 +566,7 @@ fn motion_controls(
                 .variant(ButtonVariant::Outline)
                 .show(ui);
             if link.clicked() {
-                gallery = Some(link);
+                gallery = Some(link.id);
             }
         }
     });
@@ -595,7 +593,7 @@ fn motion_controls(
 }
 
 enum GalleryAction {
-    Open(egui::Response),
+    Open(Id),
     Close,
 }
 
@@ -1920,7 +1918,7 @@ impl eframe::App for Showcase {
                                             .variant(ButtonVariant::Outline)
                                             .show(ui);
                                         if widgets.clicked() {
-                                            open_gallery = Some(widgets);
+                                            open_gallery = Some(widgets.id);
                                         }
                                     },
                                 );
@@ -1929,56 +1927,50 @@ impl eframe::App for Showcase {
                 },
                 |_ui| {},
                 |ui| {
-                    self.page_motion.show(ui, &theme, |ui| {
-                        egui::ScrollArea::vertical()
-                            .id_salt(
-                                current.id().with(
-                                    current == Page::Controls && self.state.show_motion_gallery,
-                                ),
-                            )
-                            .show(ui, |ui| {
-                                let width = ui.available_width().min(1040.0);
-                                ui.horizontal(|ui| {
-                                    ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
-                                    ui.allocate_ui_with_layout(
-                                        egui::vec2(width, 0.0),
-                                        egui::Layout::top_down(egui::Align::Min),
-                                        |ui| match current {
-                                            Page::Overview => overview(
-                                                OverviewOptions {
-                                                    dark: &mut self.dark,
-                                                    neutral: &mut self.neutral,
-                                                    progress: &mut self.progress,
-                                                    upload_started: &mut self.upload_started,
-                                                    high_contrast: &mut self.high_contrast,
-                                                    reduced_motion: &mut self.reduced_motion,
-                                                },
-                                                self.locale,
-                                                ui,
-                                                &theme,
-                                            ),
-                                            Page::Controls => {
-                                                gallery_action = controls(
-                                                    &mut self.state,
-                                                    ui,
-                                                    &theme,
-                                                    can_go_back,
-                                                );
-                                            }
-                                            Page::Overlays => overlays(&mut self.state, ui, &theme),
-                                            Page::Data => data(&mut self.state, ui, &theme),
-                                            Page::Localization => localization(
-                                                &mut self.state,
-                                                &mut self.locale,
-                                                ui,
-                                                &theme,
-                                            ),
-                                        },
-                                    );
-                                });
-                                ui.add_space(FloatingNavigation::BOTTOM_CLEARANCE);
+                    egui::ScrollArea::vertical()
+                        .id_salt(
+                            current
+                                .id()
+                                .with(current == Page::Controls && self.state.show_motion_gallery),
+                        )
+                        .show(ui, |ui| {
+                            let width = ui.available_width().min(1040.0);
+                            ui.horizontal(|ui| {
+                                ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(width, 0.0),
+                                    egui::Layout::top_down(egui::Align::Min),
+                                    |ui| match current {
+                                        Page::Overview => overview(
+                                            OverviewOptions {
+                                                dark: &mut self.dark,
+                                                neutral: &mut self.neutral,
+                                                progress: &mut self.progress,
+                                                upload_started: &mut self.upload_started,
+                                                high_contrast: &mut self.high_contrast,
+                                                reduced_motion: &mut self.reduced_motion,
+                                            },
+                                            self.locale,
+                                            ui,
+                                            &theme,
+                                        ),
+                                        Page::Controls => {
+                                            gallery_action =
+                                                controls(&mut self.state, ui, &theme, can_go_back);
+                                        }
+                                        Page::Overlays => overlays(&mut self.state, ui, &theme),
+                                        Page::Data => data(&mut self.state, ui, &theme),
+                                        Page::Localization => localization(
+                                            &mut self.state,
+                                            &mut self.locale,
+                                            ui,
+                                            &theme,
+                                        ),
+                                    },
+                                );
                             });
-                    });
+                            ui.add_space(FloatingNavigation::BOTTOM_CLEARANCE);
+                        });
                 },
             );
         FloatingNavigation::new(Id::new("demo-navigation"), &theme)
@@ -1988,13 +1980,12 @@ impl eframe::App for Showcase {
             ui.ctx().request_repaint();
         }
         let open_gallery = open_gallery.or(match &gallery_action {
-            Some(GalleryAction::Open(anchor)) => Some(anchor.clone()),
+            Some(GalleryAction::Open(anchor)) => Some(*anchor),
             _ => None,
         });
         if let Some(anchor) = open_gallery {
             if current != Page::Controls || !self.state.show_motion_gallery {
-                self.page_motion.open_from(&anchor, &theme);
-                self.gallery_return = Some(current);
+                self.gallery_return = Some((current, anchor));
                 self.state.show_motion_gallery = true;
             }
             self.destination = Some(Page::Controls.id());
@@ -2003,8 +1994,8 @@ impl eframe::App for Showcase {
             || keyboard_back
             || matches!(gallery_action, Some(GalleryAction::Close))
         {
-            if let Some(previous) = self.gallery_return.take() {
-                self.page_motion.close(ui.ctx(), &theme);
+            if let Some((previous, anchor)) = self.gallery_return.take() {
+                ui.memory_mut(|memory| memory.request_focus(anchor));
                 self.destination = Some(previous.id());
             }
             self.state.show_motion_gallery = false;
@@ -2016,8 +2007,6 @@ impl eframe::App for Showcase {
             if let Some(next) = self.destination.map(Page::from_id)
                 && next != current
             {
-                self.page_motion
-                    .slide(ui.ctx(), (next as u8) > (current as u8), &theme);
                 if self.gallery_return.take().is_some() {
                     self.state.show_motion_gallery = false;
                 }

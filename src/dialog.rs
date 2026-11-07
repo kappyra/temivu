@@ -1,6 +1,9 @@
 //! Modal dialog port; full route and focus parity remain open. A themed dialog
 //! draws Forui's card, border and md radius over the theme barrier color.
-use crate::{Theme, liquid::OverlayTravel};
+use crate::{
+    Theme,
+    liquid::{DropletAnchor, OverlayTravel, trigger_contact},
+};
 use egui::{Context, Frame, Id, Stroke};
 
 #[derive(Clone, Default)]
@@ -26,7 +29,7 @@ pub struct Dialog<'a> {
     padding: egui::Margin,
     frame: Option<Frame>,
     area: Option<egui::Area>,
-    source: Option<egui::Rect>,
+    source: Option<DropletAnchor>,
     source_material: Option<crate::motion::AnchorMaterial>,
     travel: OverlayTravel,
     liquid: Option<crate::liquid::LiquidStyle>,
@@ -88,13 +91,19 @@ impl<'a> Dialog<'a> {
 
     /// Match the entrance/exit to a trigger rectangle.
     pub fn source(mut self, source: egui::Rect) -> Self {
-        self.source = Some(source);
+        self.source = Some(DropletAnchor {
+            rect: source,
+            contact: None,
+        });
         self.source_material = None;
         self
     }
     /// Match the transition to the source control's painted bounds.
     pub fn source_response(mut self, response: &egui::Response) -> Self {
-        self.source = Some(crate::motion::anchor_rect(response));
+        self.source = Some(DropletAnchor {
+            rect: crate::motion::anchor_rect(response),
+            contact: trigger_contact(response),
+        });
         self.source_material = crate::motion::anchor_material(response);
         self
     }
@@ -132,18 +141,19 @@ impl<'a> Dialog<'a> {
                 .data(|data| data.get_temp::<PreviousFocus>(focus_key))
                 .is_none();
         let source_key = self.id.with("transition-source");
-        let stored_source = ctx.data(|data| data.get_temp::<egui::Rect>(source_key));
+        let stored_source = ctx.data(|data| data.get_temp::<DropletAnchor>(source_key));
         let source = if newly_opened {
             self.source
         } else {
             stored_source.or(self.source)
         }
-        .filter(|rect| rect.is_finite() && rect.is_positive())
-        .unwrap_or_else(|| {
-            egui::Rect::from_center_size(
+        .filter(|source| source.rect.is_finite() && source.rect.is_positive())
+        .unwrap_or_else(|| DropletAnchor {
+            rect: egui::Rect::from_center_size(
                 ctx.content_rect().center() + egui::vec2(0.0, 16.0),
                 egui::vec2(48.0, 32.0),
-            )
+            ),
+            contact: None,
         });
         let area = self
             .area

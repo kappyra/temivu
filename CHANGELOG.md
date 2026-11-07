@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
+## [0.1.1] - 2026-11-07
+
+- Droplet opens and closes anchored popovers and dialogs at the point where the
+  trigger was clicked or tapped. Keyboard activation starts at the center.
+- Showcase pages switch immediately. Search keeps its stretch on opening and
+  closes into a round button while the text and close icon fade out.
+- Calendar navigation, date fields, notification cards and bottom sheets
+  adapt to narrow viewports. The sheet supports drag dismissal.
+- The Android Showcase can be built for ARM64 and x86-64.
+
 ## [0.1.0] - 2026-11-05
 
 ### Added
@@ -60,3 +70,4 @@ is experimental until 1.0; APIs may change between releases.
 
 [0.0.0]: https://github.com/kappyra/temivu/releases/tag/v0.0.0
 [0.1.0]: https://github.com/kappyra/temivu/releases/tag/v0.1.0
+[0.1.1]: https://github.com/kappyra/temivu/releases/tag/v0.1.1

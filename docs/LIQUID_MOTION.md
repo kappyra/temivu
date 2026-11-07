@@ -37,7 +37,7 @@ expand.
 
 Bloom uses an ordinary egui frame. Droplet starts with a seed inside the trigger and grows into a single contour with the trigger before separating. The paint over the old trigger border follows its rounded shape and feathers inward to preserve the label. Neighboring mesh segments share the same field normals for antialiasing. The panel's shadow develops near separation. Adaptive tiles skip the regions unaffected by the union and refine the outline. Once the source field is out of range, egui draws the panel with the same fractional bounds and radii.
 
-Droplet moves the contents with the panel and fits them within its rounded outline. The label opacity follows both the spring phase and the available space. Bloom keeps text near its final size and clips the faded contents to the expanding frame. Droplet reveals text after the first stretch and fades it early during collapse. Native popup layout remains at its final bounds. The trigger uses stable layout bounds throughout the transition. Logical close immediately removes live controls while cached paint completes the exit.
+Droplet moves the contents with the panel and fits them within its rounded outline. The label opacity follows both the spring phase and the available space. Bloom keeps text near its final size and clips the faded contents to the expanding frame. Droplet reveals text after the first stretch and fades it early during collapse. Native popup layout remains at its final bounds. The trigger uses stable layout bounds throughout the transition. Pointer and touch activation set the horizontal origin for opening and closing. Keyboard activation starts in the center. Logical close immediately removes live controls while cached paint completes the exit.
 
 First/reopened Area sizing passes request a same-frame egui discard so invisible sizing shapes cannot overwrite the exit snapshot. Settled frame bounds already include padding; painting does not add it twice.
 
@@ -45,8 +45,9 @@ A centered dialog expands from a small rounded surface near the viewport center 
 
 ## Review and limits
 
-In Showcase, use **Widgets** to see the page transition, **Preview** for a
-floating surface, or **Widgets → Motion → Spring resize** for inline resizing.
+In Showcase, click the left, middle or right of **Preview Droplet from any
+point** to choose where the popup grows from. Use **Widgets → Motion → Spring
+resize** for inline resizing. Showcase pages switch immediately.
 Use **Reduced motion** on Overview to compare the accessible snap behavior.
 
 Popup width is viewport-bounded; egui chooses an available side of the trigger. Calendar width includes its padding and the drawer has bounded width and scrolling. The development profile optimizes egui/epaint for responsive layout/tessellation; test executables strip debug symbols to avoid temporary-space exhaustion. No new renderer dependency or unsafe code is added.

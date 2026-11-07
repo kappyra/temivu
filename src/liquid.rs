@@ -175,6 +175,50 @@ fn contact_x(source: Rect, target: Rect, seed: f32) -> f32 {
     source.center().x + ((target.center().x - source.center().x) * 0.36).clamp(-reach, reach)
 }
 
+/// Horizontal position of a real activation in the trigger's local bounds.
+pub(crate) fn trigger_contact(response: &Response) -> Option<f32> {
+    let pointer_activation = response.clicked_by(egui::PointerButton::Primary)
+        || response.secondary_clicked()
+        || response.is_pointer_button_down_on();
+    if pointer_activation
+        && response.rect.width() > 0.0
+        && let Some(pointer) = response.interact_pointer_pos()
+        && pointer.is_finite()
+    {
+        Some(((pointer.x - response.rect.left()) / response.rect.width()).clamp(0.0, 1.0))
+    } else {
+        response.clicked().then_some(0.5)
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct DropletAnchor {
+    pub rect: Rect,
+    pub contact: Option<f32>,
+}
+
+impl DropletAnchor {
+    fn contact_x(self, width: f32, fallback: f32) -> f32 {
+        let half = width.min(self.rect.width()) * 0.5;
+        self.contact.map_or(fallback, |fraction| {
+            egui::lerp(self.rect.x_range(), fraction)
+                .clamp(self.rect.left() + half, self.rect.right() - half)
+        })
+    }
+
+    fn matched_bounds(self) -> Rect {
+        if self.contact.is_none() || self.rect.width() <= 1.55 * self.rect.height() {
+            return self.rect;
+        }
+        let side = self.rect.height();
+        let center = egui::pos2(
+            self.contact_x(side, self.rect.center().x),
+            self.rect.center().y,
+        );
+        Rect::from_center_size(center, Vec2::splat(side))
+    }
+}
+
 fn elongation(target: Rect) -> f32 {
     smoothstep((target.height() / target.width().max(1.0) - 0.75) / 1.35)
 }
@@ -182,6 +226,18 @@ fn elongation(target: Rect) -> f32 {
 /// Moving body of Droplet. It starts inside the trigger and stretches along
 /// its path before reaching the final width.
 pub fn droplet_rect(source: Rect, target: Rect, amount: f32) -> Rect {
+    droplet_body(
+        DropletAnchor {
+            rect: source,
+            contact: None,
+        },
+        target,
+        amount,
+    )
+}
+
+fn droplet_body(anchor: DropletAnchor, target: Rect, amount: f32) -> Rect {
+    let source = anchor.rect;
     let phase = amount.clamp(0.0, 1.0);
     let seed = droplet_seed(source, target);
     let stretch = elongation(target);
@@ -202,7 +258,10 @@ pub fn droplet_rect(source: Rect, target: Rect, amount: f32) -> Rect {
         egui::lerp((source.top() + seed)..=target.bottom(), travel)
     };
     let center = egui::pos2(
-        egui::lerp(contact_x(source, target, seed)..=target.center().x, travel),
+        egui::lerp(
+            anchor.contact_x(seed, contact_x(source, target, seed))..=target.center().x,
+            travel,
+        ),
         near_edge + if below { size.y * 0.5 } else { -size.y * 0.5 },
     );
     let overshoot = (amount - 1.0).clamp(0.0, 0.025);
@@ -296,6 +355,25 @@ pub(crate) fn popup<R>(
     let source = ctx
         .layer_transform_to_global(anchor.layer_id)
         .map_or(anchor.rect, |transform| transform * anchor.rect);
+    let contact_key = id.with("liquid-contact");
+    let mut origin = DropletAnchor {
+        rect: source,
+        contact: None,
+    };
+    if motion.transition == SurfaceTransition::Droplet {
+        let (was_open, contact) = ctx.data(|data| {
+            data.get_temp::<(bool, Option<f32>)>(contact_key)
+                .unwrap_or_default()
+        });
+        origin.contact = if *open && !was_open {
+            trigger_contact(anchor)
+        } else {
+            contact
+        };
+        if *open != was_open {
+            ctx.data_mut(|data| data.insert_temp(contact_key, (*open, origin.contact)));
+        }
+    }
     let amount = surface_progress(ctx, id.with("liquid-progress"), *open, motion, theme);
     let painted_source = if motion.transition == SurfaceTransition::Droplet && amount < 0.96 {
         crate::motion::anchor_rect(anchor)
@@ -313,10 +391,16 @@ pub(crate) fn popup<R>(
             .flatten();
     let surface_shape = |target| {
         if matched {
-            matched_shape(source, target, amount, frame, source_material)
+            matched_shape(
+                origin.matched_bounds(),
+                target,
+                amount,
+                frame,
+                source_material,
+            )
         } else {
             surface_shape(
-                source,
+                origin,
                 painted_source,
                 target,
                 amount,
@@ -328,7 +412,7 @@ pub(crate) fn popup<R>(
     };
     let content_pose = |target| {
         if motion.transition == SurfaceTransition::Droplet {
-            droplet_content_pose(source, target, amount, frame, matched)
+            anchored_content_pose(origin, target, amount, frame, matched)
         } else {
             (
                 content_transform(source, target, amount, motion.transition),
@@ -399,7 +483,11 @@ pub(crate) fn popup<R>(
             ui.ctx().request_discard("liquid surface sizing");
         }
         content(ui)
-    })?;
+    });
+    if !*open && motion.transition == SurfaceTransition::Droplet {
+        ctx.data_mut(|data| data.insert_temp(contact_key, (false, origin.contact)));
+    }
+    let result = result?;
     if sizing {
         return Some(result);
     }
@@ -452,16 +540,36 @@ pub(crate) fn droplet_content_pose(
     frame: Frame,
     matched: bool,
 ) -> (egui::emath::TSTransform, Rect, f32) {
+    anchored_content_pose(
+        DropletAnchor {
+            rect: source,
+            contact: None,
+        },
+        target,
+        amount,
+        frame,
+        matched,
+    )
+}
+
+fn anchored_content_pose(
+    origin: DropletAnchor,
+    target: Rect,
+    amount: f32,
+    frame: Frame,
+    matched: bool,
+) -> (egui::emath::TSTransform, Rect, f32) {
+    let source = origin.rect;
     let phase = amount.min(1.0);
     if phase >= 1.0 {
         return (egui::emath::TSTransform::IDENTITY, target, 1.0);
     }
     let (body, radii, min_scale, reveal) = if matched {
-        let body = matched_rect(source, target, amount);
+        let body = matched_rect(origin.matched_bounds(), target, amount);
         let radii = matched_radii(body, amount, frame.corner_radius);
         (body, radii, 0.80, smoothstep((phase - 0.40) / 0.46))
     } else {
-        let body = droplet_rect(source, target, amount);
+        let body = droplet_body(origin, target, amount);
         let radii = droplet_radii(source, target, body, phase, frame.corner_radius);
         (
             body,
@@ -580,7 +688,7 @@ fn droplet_radii(
 }
 
 fn surface_shape(
-    source: Rect,
+    origin: DropletAnchor,
     painted_source: Rect,
     target: Rect,
     amount: f32,
@@ -594,6 +702,7 @@ fn surface_shape(
     if amount <= 0.001 {
         return Shape::Noop;
     }
+    let source = origin.rect;
     let pose = surface_rect(source, target, amount);
     if motion.transition == SurfaceTransition::Bloom {
         let mut bubble = frame;
@@ -613,7 +722,7 @@ fn surface_shape(
         return bubble.paint(pose.shrink(frame.stroke.width) - frame.inner_margin);
     }
     let phase = amount.clamp(0.0, 1.0);
-    let body = droplet_rect(source, target, amount);
+    let body = droplet_body(origin, target, amount);
     let radii = droplet_radii(source, target, body, phase, frame.corner_radius);
     let stretch = elongation(target);
     let mut body_frame = frame;
@@ -983,7 +1092,7 @@ pub(crate) struct OverlayPass {
     id: Id,
     layer: LayerId,
     amount: f32,
-    source: Rect,
+    source: DropletAnchor,
     source_material: Option<AnchorMaterial>,
     travel: OverlayTravel,
     motion: LiquidStyle,
@@ -995,7 +1104,7 @@ impl OverlayPass {
         ctx: &egui::Context,
         layer: LayerId,
         open: bool,
-        source: (Rect, Option<AnchorMaterial>),
+        source: (DropletAnchor, Option<AnchorMaterial>),
         travel: OverlayTravel,
         motion: LiquidStyle,
         theme: &Theme,
@@ -1064,7 +1173,7 @@ impl OverlayPass {
 
     fn matched_source(&self, rect: Rect) -> bool {
         self.motion.transition == SurfaceTransition::Droplet
-            && (matches!(self.travel, OverlayTravel::Center) || self.source.intersects(rect))
+            && (matches!(self.travel, OverlayTravel::Center) || self.source.rect.intersects(rect))
     }
 
     fn surface(&self, rect: Rect, frame: Frame, clip: Rect) -> Shape {
@@ -1072,7 +1181,7 @@ impl OverlayPass {
             OverlayTravel::Source | OverlayTravel::Center => {
                 if self.matched_source(rect) {
                     return matched_shape(
-                        self.source,
+                        self.source.matched_bounds(),
                         rect,
                         self.amount,
                         frame,
@@ -1087,7 +1196,7 @@ impl OverlayPass {
                 };
                 let mut shape = surface_shape(
                     self.source,
-                    self.source,
+                    self.source.rect,
                     rect,
                     amount,
                     frame,
@@ -1192,7 +1301,7 @@ impl OverlayPass {
             if matches!(self.travel, OverlayTravel::Source | OverlayTravel::Center) {
                 let style = self.motion.transition;
                 if style == SurfaceTransition::Droplet {
-                    droplet_content_pose(
+                    anchored_content_pose(
                         self.source,
                         rect,
                         self.amount,
@@ -1201,8 +1310,8 @@ impl OverlayPass {
                     )
                 } else {
                     (
-                        content_transform(self.source, rect, phase, style),
-                        motion_rect(self.source, rect, phase, style),
+                        content_transform(self.source.rect, rect, phase, style),
+                        motion_rect(self.source.rect, rect, phase, style),
                         content_opacity(phase, style),
                     )
                 }
@@ -1526,7 +1635,16 @@ pub fn paint_surface(
         && source.union(target).size().is_finite()
     {
         painter.add(surface_shape(
-            source, source, target, amount, frame, motion, None,
+            DropletAnchor {
+                rect: source,
+                contact: None,
+            },
+            source,
+            target,
+            amount,
+            frame,
+            motion,
+            None,
         ));
     }
 }

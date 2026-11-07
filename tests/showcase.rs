@@ -572,7 +572,10 @@ fn showcase_uses_droplet_for_the_surface_preview() {
         SurfaceTransition::Droplet
     );
     harness
-        .get_by_role_and_label(egui::accesskit::Role::Button, "Preview")
+        .get_by_role_and_label(
+            egui::accesskit::Role::Button,
+            "Preview Droplet from any point",
+        )
         .click();
     harness.run_steps(3);
     harness.get_by_label("Expand and retract from the same control.");
@@ -719,71 +722,41 @@ fn video_source_can_be_opened_from_the_keyboard() {
 }
 
 #[test]
-fn widgets_morph_from_the_trigger_and_return_to_the_origin_page() {
+fn widgets_opens_and_returns_without_a_page_morph() {
     let mut app = harness();
-    let trigger = app.get_by_label("Widgets").rect();
-    app.get_by_label("Widgets").click();
-    app.input_mut().time = Some(10.0);
-    app.step();
-    app.input_mut().time = Some(10.13);
-    app.step();
-    let surface = |app: &Harness<'_, showcase::Showcase>| {
-        let background = temivu::Theme::light().background.to_srgba_unmultiplied();
-        app.output().shapes.iter().find_map(|entry| {
-            let egui::Shape::Path(path) = &entry.shape else {
-                return None;
-            };
-            let color = path.fill.to_srgba_unmultiplied();
-            let bounds = egui::Rect::from_points(&path.points);
-            (color[3] > 0
-                && (0..3).all(|i| color[i].abs_diff(background[i]) <= 2)
-                && bounds.width() > trigger.width()
-                && bounds.width() < 870.0)
-                .then_some(bounds)
-        })
-    };
-    let growing = surface(&app).expect("intermediate rounded page");
-    assert!(growing.center().x < trigger.center().x && growing.center().x > 450.0);
-    let resize_title = |app: &Harness<'_, showcase::Showcase>| {
+    let title = |app: &Harness<'_, showcase::Showcase>, label: &str| {
         app.output()
             .shapes
             .iter()
             .find_map(|entry| match &entry.shape {
                 egui::Shape::Text(text)
-                    if text.galley.text() == "Spring resize"
-                        && text.opacity_factor > 0.0
+                    if text.galley.text() == label
+                        && text.opacity_factor == 1.0
                         && text.visual_bounding_rect().intersects(entry.clip_rect) =>
                 {
-                    Some(text.galley.size())
+                    Some(text.pos)
                 }
                 _ => None,
             })
     };
-    let moving_title =
-        resize_title(&app).expect("gallery text is visible while the page is opening");
-    app.get_by_label("Motion gallery");
+    let overview = title(&app, "Welcome to Temivu").expect("initial title");
+    app.get_by_label("Widgets").click();
+    app.input_mut().time = Some(10.0);
+    app.step();
+    app.input_mut().time = Some(10.02);
+    app.step();
+    let gallery = title(&app, "Motion gallery").expect("gallery is immediately visible");
     assert!(app.query_by_label("Welcome to Temivu").is_none());
 
     app.input_mut().time = Some(11.0);
     app.step();
-    assert!(
-        surface(&app).is_none(),
-        "settled page uses its normal layout"
-    );
-    assert_eq!(
-        resize_title(&app),
-        Some(moving_title),
-        "text keeps its size throughout the reveal"
-    );
+    assert_eq!(title(&app, "Motion gallery"), Some(gallery));
+
     app.get_by_label("Back").click();
     app.input_mut().time = Some(11.03);
     app.step();
-    app.input_mut().time = Some(11.13);
+    app.input_mut().time = Some(11.05);
     app.step();
-    assert!(
-        surface(&app).is_some(),
-        "outgoing gallery is replayed during the return"
-    );
-    app.get_by_label("Welcome to Temivu");
+    assert_eq!(title(&app, "Welcome to Temivu"), Some(overview));
     assert!(app.query_by_label("Motion gallery").is_none());
 }

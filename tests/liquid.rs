@@ -684,3 +684,85 @@ fn three_droplets_form_one_filled_surface_and_separate_again() {
         matches!(&entry.shape, Shape::Rect(rect) if rect.fill == fill && rect.rect == target)
     }));
 }
+
+#[test]
+fn wide_popup_grows_from_the_click_and_retracts_to_the_same_point() {
+    fn sample(fraction: f32) -> (f32, f32) {
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(500.0, 420.0))
+            .build_ui_state(
+                |ui, open| {
+                    let anchor = ui.add_sized([300.0, 44.0], egui::Button::new("Wide trigger"));
+                    if anchor.clicked() {
+                        *open = true;
+                    }
+                    Popover::new(egui::Id::new("contact"), "Options", open)
+                        .width(200.0)
+                        .show(&anchor, |ui| ui.label("Content"));
+                },
+                false,
+            );
+        harness
+            .ctx
+            .all_styles_mut(|style| style.animation_time = 0.2);
+        let trigger = harness.get_by_label("Wide trigger").rect();
+        let pointer = egui::pos2(egui::lerp(trigger.x_range(), fraction), trigger.center().y);
+        harness.hover_at(pointer);
+        harness.drag_at(pointer);
+        harness.input_mut().time = Some(0.1);
+        harness.step();
+        harness.event(egui::Event::PointerButton {
+            pos: pointer,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        harness.input_mut().time = Some(0.12);
+        harness.step();
+        assert!(*harness.state());
+        let surface_center = |harness: &Harness<'_, bool>| {
+            harness
+                .output()
+                .shapes
+                .iter()
+                .find_map(|entry| {
+                    let egui::Shape::Vec(shapes) = &entry.shape else {
+                        return None;
+                    };
+                    shapes.iter().find_map(|shape| match shape {
+                        egui::Shape::Mesh(mesh) if !mesh.indices.is_empty() => {
+                            Some(mesh.calc_bounds().center().x)
+                        }
+                        egui::Shape::Path(path) if path.fill.a() > 0 => {
+                            Some(egui::Rect::from_points(&path.points).center().x)
+                        }
+                        _ => None,
+                    })
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "visible Droplet contour at {}",
+                        harness.ctx.input(|input| input.time)
+                    )
+                })
+        };
+        harness.input_mut().time = Some(0.19);
+        harness.step();
+        let opening = surface_center(&harness);
+        harness.input_mut().time = Some(1.0);
+        harness.step();
+        *harness.state_mut() = false;
+        harness.hover_at(egui::pos2(480.0, 400.0));
+        harness.input_mut().time = Some(1.02);
+        harness.step();
+        harness.input_mut().time = Some(1.18);
+        harness.step();
+        (opening, surface_center(&harness))
+    }
+
+    let left = sample(0.15);
+    let middle = sample(0.5);
+    let right = sample(0.85);
+    assert!(left.0 + 50.0 < middle.0 && middle.0 + 50.0 < right.0);
+    assert!(left.1 + 50.0 < middle.1 && middle.1 + 50.0 < right.1);
+}
