@@ -19,6 +19,7 @@ pub mod dialog;
 pub mod divider;
 mod generated_localizations;
 mod generated_palette;
+pub mod glass;
 pub mod header;
 pub mod item;
 pub mod label;
@@ -83,6 +84,7 @@ pub use date_time_picker::{
 };
 pub use dialog::Dialog;
 pub use divider::{Divider, DividerAxis, DividerStyle};
+pub use glass::{Glass, GlassBackdrop, GlassMode, GlassProfile, GlassRegion, GlassRenderer};
 pub use header::Header;
 pub use item::{Item, ItemVariant};
 pub use label::{FieldLabel, LabelLayout};

@@ -378,20 +378,30 @@ impl ToasterState {
                         ..egui::Margin::ZERO
                     })
                     .show(ui, |ui| {
-                        let tray = if inset {
+                        let (tray, backdrop) = if inset {
                             let alpha = crate::motion::animate_bool(
                                 ui.ctx(),
                                 id.with("tray-chrome"),
                                 !self.is_empty(),
                                 theme,
                             );
-                            crate::surface::popup_frame(theme, 8)
-                                .corner_radius(28)
-                                .multiply_with_opacity(alpha)
+                            let glass = crate::glass::GlassTransition::new(ui.ctx(), alpha, true);
+                            let base = crate::surface::popup_frame(theme, 8).corner_radius(28);
+                            let tray = if glass.enabled() {
+                                glass.frame(theme, base)
+                            } else {
+                                base.multiply_with_opacity(alpha)
+                            };
+                            (
+                                tray,
+                                glass
+                                    .has_backdrop()
+                                    .then_some(crate::GlassProfile::Floating),
+                            )
                         } else {
-                            egui::Frame::NONE
+                            (egui::Frame::NONE, None)
                         };
-                        tray.show(ui, |ui| {
+                        crate::glass::show_frame(ui, tray, backdrop, |ui| {
                             let overflow = self.len().saturating_sub(self.limit);
                             let action_space = if footer.is_some() {
                                 if compact && width < 350.0 {

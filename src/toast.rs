@@ -1,7 +1,8 @@
 //! Responsive notification card with a paint-only exit.
 use crate::{
     InputMode, Theme,
-    liquid::{self, LiquidStyle, fade_shape},
+    glass::GlassTransition,
+    liquid::{self, DropletAnchor, LiquidStyle, SurfaceTransition, fade_shape},
     motion,
 };
 use egui::{Id, Rect, Response, RichText, Ui, WidgetInfo, WidgetType, vec2};
@@ -196,8 +197,9 @@ impl<'a> Toast<'a> {
         )
         .min(1.0);
         let animate = self.theme.motion.animations_enabled(ui.ctx()) && !ui.is_sizing_pass();
+        let glass = GlassTransition::new(ui.ctx(), reveal, !self.inset);
         let layer = ui.layer_id();
-        let start = animate.then(|| {
+        let start = (animate || glass.has_backdrop()).then(|| {
             ui.ctx()
                 .graphics(|graphics| graphics.get(layer).map_or(0, |list| list.next_idx().0))
         });
@@ -244,35 +246,41 @@ impl<'a> Toast<'a> {
         let layout = toast_layout(ui, response.rect, reveal);
         if let Some(start) = start {
             let clip = ui.clip_rect();
-            let snapshot = self.state.snapshot.get_or_insert_with(|| ToastSnapshot {
-                rect: response.rect,
-                frame,
-                shapes: Vec::new(),
-            });
-            snapshot.rect = response.rect;
-            snapshot.frame = frame;
-            snapshot.shapes.clear();
-            ui.ctx().graphics(|graphics| {
-                if let Some(list) = graphics.get(layer) {
-                    snapshot
-                        .shapes
-                        .extend(list.all_entries().skip(start + 1).cloned());
-                }
-            });
-            if reveal < 1.0 {
-                let pose = toast_pose(response.rect, layout, clip, reveal, frame);
-                let surface = toast_surface(response.rect, layout, reveal, frame);
-                ui.ctx().graphics_mut(|graphics| {
-                    let list = graphics.entry(layer);
-                    list.set(egui::layers::ShapeIdx(start), clip, surface);
-                    for index in start + 1..list.next_idx().0 {
-                        list.mutate_shape(egui::layers::ShapeIdx(index), |entry| {
-                            pose_toast(entry, pose);
-                        });
+            if animate {
+                let snapshot = self.state.snapshot.get_or_insert_with(|| ToastSnapshot {
+                    rect: response.rect,
+                    frame,
+                    shapes: Vec::new(),
+                });
+                snapshot.rect = response.rect;
+                snapshot.frame = frame;
+                snapshot.shapes.clear();
+                ui.ctx().graphics(|graphics| {
+                    if let Some(list) = graphics.get(layer) {
+                        snapshot
+                            .shapes
+                            .extend(list.all_entries().skip(start + 1).cloned());
                     }
                 });
             }
-        } else {
+            if reveal < 1.0 || glass.has_backdrop() {
+                let surface =
+                    toast_surface(response.rect, layout, reveal, frame, self.theme, &glass);
+                ui.ctx().graphics_mut(|graphics| {
+                    let list = graphics.entry(layer);
+                    list.set(egui::layers::ShapeIdx(start), clip, surface);
+                    if reveal < 1.0 {
+                        let pose = toast_pose(response.rect, layout, clip, reveal, frame);
+                        for index in start + 1..list.next_idx().0 {
+                            list.mutate_shape(egui::layers::ShapeIdx(index), |entry| {
+                                pose_toast(entry, pose);
+                            });
+                        }
+                    }
+                });
+            }
+        }
+        if !animate {
             self.state.snapshot = None;
         }
 
@@ -323,8 +331,15 @@ impl<'a> Toast<'a> {
             reveal,
             snapshot.frame,
         );
-        ui.painter()
-            .add(toast_surface(snapshot.rect, layout, reveal, snapshot.frame));
+        let glass = GlassTransition::new(ui.ctx(), reveal, !self.inset);
+        ui.painter().add(toast_surface(
+            snapshot.rect,
+            layout,
+            reveal,
+            snapshot.frame,
+            self.theme,
+            &glass,
+        ));
         for entry in &snapshot.shapes {
             let mut entry = entry.clone();
             pose_toast(&mut entry, pose);
@@ -520,11 +535,42 @@ fn toast_bounds(rect: Rect, layout: Rect) -> (Rect, Rect) {
     (source, target)
 }
 
-fn toast_surface(rect: Rect, layout: Rect, reveal: f32, frame: egui::Frame) -> egui::Shape {
+fn toast_surface(
+    rect: Rect,
+    layout: Rect,
+    reveal: f32,
+    frame: egui::Frame,
+    theme: &Theme,
+    glass: &GlassTransition,
+) -> egui::Shape {
     let (source, target) = toast_bounds(rect, layout);
-    let mut surface = liquid::matched_shape(source, target, reveal, frame, None);
-    fade_shape(&mut surface, reveal);
-    surface
+    let frame = glass.frame(theme, frame);
+    let mut surface = liquid::matched_shape_with_opacity(
+        source,
+        target,
+        reveal,
+        frame,
+        None,
+        glass.seed_opacity(reveal),
+    );
+    if !glass.enabled() {
+        fade_shape(&mut surface, reveal);
+    }
+    if !glass.has_backdrop() {
+        return surface;
+    }
+    let (rect, corners) = liquid::anchored_glass_geometry(
+        DropletAnchor {
+            rect: source,
+            contact: None,
+        },
+        target,
+        reveal,
+        frame,
+        SurfaceTransition::Droplet,
+        true,
+    );
+    glass.with_backdrop(surface, rect, corners)
 }
 
 fn toast_pose(

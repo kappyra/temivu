@@ -375,6 +375,8 @@ pub(crate) fn popup<R>(
         }
     }
     let amount = surface_progress(ctx, id.with("liquid-progress"), *open, motion, theme);
+    let glass = crate::glass::GlassTransition::new(ctx, amount, *open || amount > 0.001);
+    let paint_frame = glass.frame(theme, frame);
     let painted_source = if motion.transition == SurfaceTransition::Droplet && amount < 0.96 {
         crate::motion::anchor_rect(anchor)
     } else {
@@ -390,13 +392,14 @@ pub(crate) fn popup<R>(
             .then(|| crate::motion::anchor_material(anchor))
             .flatten();
     let surface_shape = |target| {
-        if matched {
-            matched_shape(
+        let shape = if matched {
+            matched_shape_with_opacity(
                 origin.matched_bounds(),
                 target,
                 amount,
-                frame,
+                paint_frame,
                 source_material,
+                glass.seed_opacity(amount),
             )
         } else {
             surface_shape(
@@ -404,11 +407,23 @@ pub(crate) fn popup<R>(
                 painted_source,
                 target,
                 amount,
-                frame,
+                paint_frame,
                 motion,
                 source_material,
             )
+        };
+        if !glass.has_backdrop() {
+            return shape;
         }
+        let (rect, corners) = anchored_glass_geometry(
+            origin,
+            target,
+            amount,
+            paint_frame,
+            motion.transition,
+            matched,
+        );
+        glass.with_backdrop(shape, rect, corners)
     };
     let content_pose = |target| {
         if motion.transition == SurfaceTransition::Droplet {
@@ -641,6 +656,24 @@ pub(crate) fn matched_shape(
     frame: Frame,
     source_material: Option<AnchorMaterial>,
 ) -> Shape {
+    matched_shape_with_opacity(
+        source,
+        target,
+        amount,
+        frame,
+        source_material,
+        smoothstep(amount / 0.17),
+    )
+}
+
+pub(crate) fn matched_shape_with_opacity(
+    source: Rect,
+    target: Rect,
+    amount: f32,
+    frame: Frame,
+    source_material: Option<AnchorMaterial>,
+    opacity: f32,
+) -> Shape {
     if amount <= 0.001 {
         return Shape::Noop;
     }
@@ -665,7 +698,7 @@ pub(crate) fn matched_shape(
         egui::StrokeKind::Inside,
     );
     let mut shape = Shape::Vec(vec![shadow.as_shape(body, radii).into(), panel]);
-    fade_shape(&mut shape, smoothstep(amount / 0.17));
+    fade_shape(&mut shape, opacity);
     shape
 }
 
@@ -688,6 +721,52 @@ fn droplet_radii(
     }
 }
 
+fn bloom_corners(source: Rect, amount: f32, corners: egui::CornerRadius) -> egui::CornerRadius {
+    let start = source.size().min_elem() * 0.5;
+    let radius = |end: u8| {
+        egui::lerp(start..=f32::from(end), amount.clamp(0.0, 1.0))
+            .round()
+            .clamp(0.0, 255.0) as u8
+    };
+    egui::CornerRadius {
+        nw: radius(corners.nw),
+        ne: radius(corners.ne),
+        sw: radius(corners.sw),
+        se: radius(corners.se),
+    }
+}
+
+pub(crate) fn anchored_glass_geometry(
+    origin: DropletAnchor,
+    target: Rect,
+    amount: f32,
+    frame: Frame,
+    transition: SurfaceTransition,
+    matched: bool,
+) -> (Rect, egui::epaint::CornerRadiusF32) {
+    if (amount - 1.0).abs() < 0.001 {
+        (target, frame.corner_radius.into())
+    } else if matched {
+        let body = matched_rect(origin.matched_bounds(), target, amount);
+        (body, matched_radii(body, amount, frame.corner_radius))
+    } else if transition == SurfaceTransition::Droplet {
+        let body = droplet_body(origin, target, amount);
+        let radii = droplet_radii(
+            origin.rect,
+            target,
+            body,
+            amount.clamp(0.0, 1.0),
+            frame.corner_radius,
+        );
+        (body, radii)
+    } else {
+        (
+            surface_rect(origin.rect, target, amount),
+            bloom_corners(origin.rect, amount, frame.corner_radius).into(),
+        )
+    }
+}
+
 fn surface_shape(
     origin: DropletAnchor,
     painted_source: Rect,
@@ -707,18 +786,7 @@ fn surface_shape(
     let pose = surface_rect(source, target, amount);
     if motion.transition == SurfaceTransition::Bloom {
         let mut bubble = frame;
-        let start_radius = source.height().min(source.width()) * 0.5;
-        let radius = |end: u8| {
-            egui::lerp(start_radius..=f32::from(end), amount.clamp(0.0, 1.0))
-                .round()
-                .clamp(0.0, 255.0) as u8
-        };
-        bubble.corner_radius = egui::CornerRadius {
-            nw: radius(frame.corner_radius.nw),
-            ne: radius(frame.corner_radius.ne),
-            sw: radius(frame.corner_radius.sw),
-            se: radius(frame.corner_radius.se),
-        };
+        bubble.corner_radius = bloom_corners(source, amount, frame.corner_radius);
         bubble.shadow.color = bubble.shadow.color.gamma_multiply(smoothstep(amount));
         return bubble.paint(pose.shrink(frame.stroke.width) - frame.inner_margin);
     }
@@ -1177,16 +1245,23 @@ impl OverlayPass {
             && (matches!(self.travel, OverlayTravel::Center) || self.source.rect.intersects(rect))
     }
 
-    fn surface(&self, rect: Rect, frame: Frame, clip: Rect) -> Shape {
+    fn surface(
+        &self,
+        rect: Rect,
+        frame: Frame,
+        clip: Rect,
+        glass: &crate::glass::GlassTransition,
+    ) -> Shape {
         match self.travel {
             OverlayTravel::Source | OverlayTravel::Center => {
                 if self.matched_source(rect) {
-                    return matched_shape(
+                    return matched_shape_with_opacity(
                         self.source.matched_bounds(),
                         rect,
                         self.amount,
                         frame,
                         self.source_material,
+                        glass.seed_opacity(self.amount),
                     );
                 }
                 let style = self.motion;
@@ -1205,14 +1280,27 @@ impl OverlayPass {
                     self.source_material,
                 );
                 if matches!(self.travel, OverlayTravel::Center) {
-                    fade_shape(&mut shape, smoothstep(self.phase() / 0.28));
+                    let opacity = if glass.enabled() {
+                        glass.seed_opacity(self.phase())
+                    } else {
+                        smoothstep(self.phase() / 0.28)
+                    };
+                    fade_shape(&mut shape, opacity);
                 }
                 shape
             }
             OverlayTravel::Left | OverlayTravel::Bottom => {
                 if self.motion.transition == SurfaceTransition::Droplet {
                     let source = self.directional_source(rect, clip);
-                    let mut shape = matched_shape(source, rect, self.phase(), frame, None);
+                    let phase = self.phase();
+                    let mut shape = matched_shape_with_opacity(
+                        source,
+                        rect,
+                        phase,
+                        frame,
+                        None,
+                        glass.seed_opacity(phase),
+                    );
                     shape.transform(self.directional_drag());
                     shape
                 } else {
@@ -1225,6 +1313,61 @@ impl OverlayPass {
         }
     }
 
+    fn optical_surface(
+        &self,
+        ctx: &egui::Context,
+        theme: &Theme,
+        rect: Rect,
+        frame: Frame,
+        clip: Rect,
+    ) -> Shape {
+        let glass = crate::glass::GlassTransition::new(ctx, self.phase(), true);
+        let frame = glass.frame(theme, frame);
+        let shape = self.surface(rect, frame, clip, &glass);
+        if !glass.has_backdrop() {
+            return shape;
+        }
+        let style = self.motion.transition;
+        let (bounds, corners) = match self.travel {
+            OverlayTravel::Source | OverlayTravel::Center => {
+                let amount = if style == SurfaceTransition::Droplet {
+                    self.amount
+                } else {
+                    self.phase()
+                };
+                anchored_glass_geometry(
+                    self.source,
+                    rect,
+                    amount,
+                    frame,
+                    style,
+                    self.matched_source(rect),
+                )
+            }
+            OverlayTravel::Left | OverlayTravel::Bottom if style == SurfaceTransition::Droplet => {
+                let source = self.directional_source(rect, clip);
+                let (bounds, corners) = anchored_glass_geometry(
+                    DropletAnchor {
+                        rect: source,
+                        contact: None,
+                    },
+                    rect,
+                    self.phase(),
+                    frame,
+                    style,
+                    true,
+                );
+                (self.directional_drag().mul_rect(bounds), corners)
+            }
+            OverlayTravel::Left | OverlayTravel::Bottom => {
+                let transform = self.slide(rect, clip);
+                let corners = egui::epaint::CornerRadiusF32::from(frame.corner_radius);
+                (transform.mul_rect(rect), corners * transform.scaling)
+            }
+        };
+        glass.with_backdrop(shape, bounds, corners)
+    }
+
     pub fn start(&self, ctx: &egui::Context) -> egui::layers::ShapeIdx {
         ctx.graphics_mut(|graphics| graphics.entry(self.layer).next_idx())
     }
@@ -1232,6 +1375,7 @@ impl OverlayPass {
     pub fn finish(
         &mut self,
         ctx: &egui::Context,
+        theme: &Theme,
         start: egui::layers::ShapeIdx,
         surface: egui::layers::ShapeIdx,
         rect: Rect,
@@ -1270,9 +1414,13 @@ impl OverlayPass {
             );
         });
         if (self.amount - 1.0).abs() < 0.001 && self.drag == 0.0 {
+            if crate::glass::live_enabled(ctx) {
+                let shape = self.optical_surface(ctx, theme, rect, frame, clip);
+                ctx.graphics_mut(|graphics| graphics.entry(self.layer).set(surface, clip, shape));
+            }
             return;
         }
-        let animated_surface = self.surface(rect, frame, clip);
+        let animated_surface = self.optical_surface(ctx, theme, rect, frame, clip);
         let pose = self.content_pose(rect, frame, clip);
         ctx.graphics_mut(|graphics| {
             let list = graphics.entry(self.layer);
@@ -1338,7 +1486,7 @@ impl OverlayPass {
         fade_shape(&mut entry.shape, alpha);
     }
 
-    pub fn paint_exit(&self, ctx: &egui::Context) {
+    pub fn paint_exit(&self, ctx: &egui::Context, theme: &Theme) {
         let key = self.id.with("overlay-snapshot");
         if self.amount <= 0.001 {
             ctx.data_mut(|data| data.remove::<Snapshot>(key));
@@ -1356,7 +1504,7 @@ impl OverlayPass {
                     .with_clip_rect(backdrop.clip_rect)
                     .add(backdrop.shape);
             }
-            painter.add(self.surface(snapshot.rect, snapshot.frame, clip));
+            painter.add(self.optical_surface(ctx, theme, snapshot.rect, snapshot.frame, clip));
             let pose = self.content_pose(snapshot.rect, snapshot.frame, clip);
             for entry in snapshot.shapes.iter() {
                 let mut entry = entry.clone();

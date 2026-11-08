@@ -237,9 +237,28 @@ impl<'a> FloatingNavigation<'a> {
                 })
         });
         let ctx = ui.ctx();
-        let width =
-            (ctx.content_rect().width() - 24.0 - frame.total_margin().sum().x).clamp(1.0, 550.0);
-        let slot = (width / items.len() as f32).clamp(48.0, 110.0);
+        let glass = crate::Glass::context(ctx);
+        let mut frame = crate::glass::floating_frame(ctx, theme, frame);
+        if glass.is_some() && self.frame.is_none() {
+            frame.shadow.offset = [0, 4];
+            frame.shadow.blur = 15;
+        }
+        let max_slot = if glass.is_some() { 88.0 } else { 110.0 };
+        let width = (ctx.content_rect().width() - 24.0 - frame.total_margin().sum().x)
+            .clamp(1.0, 5.0 * max_slot);
+        let slot = (width / items.len() as f32).clamp(48.0, max_slot);
+        let active_fill = if glass.is_some() {
+            theme
+                .foreground
+                .gamma_multiply(if theme.dark { 0.19 } else { 0.12 })
+        } else {
+            theme.secondary
+        };
+        let inactive_ink = if glass.is_some() {
+            theme.foreground.lerp_to_gamma(theme.muted_foreground, 0.48)
+        } else {
+            theme.muted_foreground
+        };
         let strip_width = slot * items.len() as f32;
         let scrolls = strip_width > width + 0.5;
         let can_drag = self.select_on_drag && !scrolls && ui.is_enabled();
@@ -293,8 +312,12 @@ impl<'a> FloatingNavigation<'a> {
                     row.min + egui::vec2(slot * position, 0.0),
                     egui::vec2(slot, row.height()),
                 )
-                .shrink(2.0);
-                ui.painter().rect_filled(indicator, 255, theme.secondary);
+                .shrink2(if glass.is_some() {
+                    egui::vec2(5.0, 4.0)
+                } else {
+                    egui::Vec2::splat(2.0)
+                });
+                ui.painter().rect_filled(indicator, 255, active_fill);
             }
             let mut clicked = None;
             for (index, item) in items.iter().enumerate() {
@@ -322,10 +345,15 @@ impl<'a> FloatingNavigation<'a> {
                 } else if preview == Some(index) || response.hovered() {
                     theme.foreground
                 } else {
-                    theme.muted_foreground
+                    inactive_ink
                 };
                 let press = crate::motion_controls::press_amount(&response, theme);
                 if press > 0.001 && preview == Some(index) {
+                    let pressed_fill = if glass.is_some() {
+                        theme.foreground.gamma_multiply(0.12)
+                    } else {
+                        theme.hover(active_fill)
+                    };
                     let surface = rect
                         .shrink(3.0)
                         .scale_from_center(crate::motion::press_scale(press));
@@ -333,9 +361,7 @@ impl<'a> FloatingNavigation<'a> {
                         egui::epaint::RectShape::filled(
                             surface,
                             24,
-                            theme
-                                .hover(theme.secondary)
-                                .gamma_multiply(press.clamp(0.0, 1.0)),
+                            pressed_fill.gamma_multiply(press.clamp(0.0, 1.0)),
                         ),
                         press,
                     ));
@@ -392,9 +418,18 @@ impl<'a> FloatingNavigation<'a> {
             .order(egui::Order::Middle)
             .fade_in(false)
             .show(ctx, |ui| {
-                frame
-                    .show(ui, |ui| {
-                        if scrolls {
+                if glass.is_some() && ui.is_visible() {
+                    paint_scroll_edge(ui.painter(), ctx.content_rect(), theme.background);
+                }
+                crate::glass::show_frame(
+                    ui,
+                    frame,
+                    glass.map(|_| crate::GlassProfile::Dock),
+                    |ui| {
+                        let rim = glass
+                            .filter(|_| !crate::glass::live_enabled(ui.ctx()))
+                            .map(|_| ui.painter().add(egui::Shape::Noop));
+                        let result = if scrolls {
                             ui.set_width(width);
                             egui::ScrollArea::horizontal()
                                 .max_width(width)
@@ -405,9 +440,18 @@ impl<'a> FloatingNavigation<'a> {
                                 .inner
                         } else {
                             draw(ui)
+                        };
+                        if let (Some(glass), Some(slot)) = (glass, rim) {
+                            let rect = frame.widget_rect(ui.min_rect());
+                            ui.painter().set(
+                                slot,
+                                glass.rim(theme, rect, frame.corner_radius.into(), 0.55),
+                            );
                         }
-                    })
-                    .inner
+                        result
+                    },
+                )
+                .inner
             })
             .inner;
 
@@ -419,4 +463,32 @@ impl<'a> FloatingNavigation<'a> {
             None
         }
     }
+}
+
+// Paint only. The fade sits beneath the dock's backdrop pass and never captures input.
+fn paint_scroll_edge(painter: &egui::Painter, viewport: Rect, background: Color32) {
+    let depth = viewport.height().min(112.0);
+    if depth <= 0.0 {
+        return;
+    }
+    let mut mesh = egui::Mesh::default();
+    for (distance, opacity) in [
+        (1.0, 0.0),
+        (0.75, 0.06),
+        (0.50, 0.28),
+        (0.25, 0.63),
+        (0.0, 0.91),
+    ] {
+        let y = viewport.bottom() - depth * distance;
+        let color = background.gamma_multiply(opacity);
+        mesh.colored_vertex(egui::pos2(viewport.left(), y), color);
+        mesh.colored_vertex(egui::pos2(viewport.right(), y), color);
+    }
+    for top in [0, 2, 4, 6] {
+        mesh.add_triangle(top, top + 1, top + 2);
+        mesh.add_triangle(top + 1, top + 3, top + 2);
+    }
+    painter
+        .with_clip_rect(viewport)
+        .add(egui::Shape::mesh(mesh));
 }

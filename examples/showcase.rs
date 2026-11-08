@@ -1,5 +1,9 @@
 //! An experimental showcase of the migrated components; the library is far
 //! from complete. Run with `cargo run --example showcase --features demo`.
+#[path = "showcase/backdrop_gl.rs"]
+mod backdrop_gl;
+#[path = "showcase/glass_demo.rs"]
+mod glass_demo;
 #[path = "showcase/motion_gallery.rs"]
 mod motion_gallery;
 #[cfg(not(target_os = "android"))]
@@ -285,6 +289,8 @@ pub(crate) struct Showcase {
     progress: f32,
     upload_started: Option<f64>,
     high_contrast: bool,
+    glass: glass_demo::GlassDemo,
+    backdrop: Option<backdrop_gl::BackdropGl>,
     applied_theme: Option<(bool, bool, bool)>,
     reduced_motion: bool,
     applied_reduced_motion: Option<bool>,
@@ -307,6 +313,8 @@ impl Default for Showcase {
             progress: 0.0,
             upload_started: None,
             high_contrast: false,
+            glass: glass_demo::GlassDemo::default(),
+            backdrop: None,
             applied_theme: None,
             reduced_motion: false,
             applied_reduced_motion: None,
@@ -325,6 +333,7 @@ struct OverviewOptions<'a> {
     upload_started: &'a mut Option<f64>,
     high_contrast: &'a mut bool,
     reduced_motion: &'a mut bool,
+    glass: &'a mut glass_demo::GlassDemo,
 }
 
 fn studio_panel<R>(
@@ -360,6 +369,7 @@ fn appearance_panel(
     neutral: &mut bool,
     high_contrast: &mut bool,
     reduced_motion: &mut bool,
+    glass: &mut glass_demo::GlassDemo,
 ) {
     studio_panel(
         ui,
@@ -385,6 +395,7 @@ fn appearance_panel(
             Switch::new(reduced_motion, theme)
                 .label("Reduced motion")
                 .show(ui);
+            glass.settings(ui, theme, *high_contrast);
         },
     );
 }
@@ -488,6 +499,7 @@ fn overview(options: OverviewOptions<'_>, _locale: usize, ui: &mut egui::Ui, the
         upload_started,
         high_contrast,
         reduced_motion,
+        glass,
     } = options;
     ui.set_max_width(ui.available_width().min(1040.0));
     ui.spacing_mut().item_spacing = egui::vec2(20.0, 12.0);
@@ -534,17 +546,28 @@ fn overview(options: OverviewOptions<'_>, _locale: usize, ui: &mut egui::Ui, the
                 neutral,
                 high_contrast,
                 reduced_motion,
+                glass,
             );
         });
     } else {
         activity_panel(ui, theme, progress, upload_started);
         ui.add_space(12.0);
-        appearance_panel(ui, theme, dark, neutral, high_contrast, reduced_motion);
+        appearance_panel(
+            ui,
+            theme,
+            dark,
+            neutral,
+            high_contrast,
+            reduced_motion,
+            glass,
+        );
     }
     ui.add_space(14.0);
     Alert::new("Preview build", theme)
         .subtitle("Explore the Controls page for fields, choices and calendar interactions.")
         .show(ui);
+    ui.add_space(14.0);
+    glass.preview(ui, theme);
 }
 
 fn motion_controls(
@@ -1755,7 +1778,18 @@ fn localization(state: &mut DemoState, locale: &mut usize, ui: &mut egui::Ui, th
 }
 
 impl eframe::App for Showcase {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn on_exit(&mut self, gl: Option<&eframe::glow::Context>) {
+        if let (Some(backdrop), Some(gl)) = (&self.backdrop, gl) {
+            backdrop.destroy(gl);
+        }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        if self.backdrop.is_none() && frame.gl().is_some() {
+            let backdrop = backdrop_gl::BackdropGl::default();
+            temivu::Glass::set_renderer(ui.ctx(), Some(std::sync::Arc::new(backdrop.clone())));
+            self.backdrop = Some(backdrop);
+        }
         if !self.fonts_installed {
             Theme::install_inter(ui.ctx());
             self.fonts_installed = true;
@@ -1776,6 +1810,7 @@ impl eframe::App for Showcase {
         if self.high_contrast {
             theme = theme.high_contrast();
         }
+        self.glass.apply(ui.ctx(), self.high_contrast);
         if self.applied_theme != Some((self.dark, self.high_contrast, self.neutral)) {
             theme.apply(ui.ctx());
             self.applied_theme = Some((self.dark, self.high_contrast, self.neutral));
@@ -1959,6 +1994,7 @@ impl eframe::App for Showcase {
                                                 upload_started: &mut self.upload_started,
                                                 high_contrast: &mut self.high_contrast,
                                                 reduced_motion: &mut self.reduced_motion,
+                                                glass: &mut self.glass,
                                             },
                                             self.locale,
                                             ui,
@@ -2050,6 +2086,7 @@ fn main() -> eframe::Result {
     let overlays = preview_dialog || arguments.iter().any(|argument| argument == "--overlays");
     let data = arguments.iter().any(|argument| argument == "--data");
     let dark = arguments.iter().any(|argument| argument == "--dark");
+    let glass_enabled = arguments.iter().any(|argument| argument == "--glass");
     let menu_open = arguments.iter().any(|argument| argument == "--menu");
     let island_open = arguments.iter().any(|argument| argument == "--island");
     let size = if mobile {
@@ -2079,8 +2116,11 @@ fn main() -> eframe::Result {
             ..Default::default()
         },
         Box::new(move |_| {
+            let mut glass = glass_demo::GlassDemo::default();
+            glass.enabled = glass_enabled;
             Ok(Box::new(Showcase {
                 dark,
+                glass,
                 menu_open,
                 island_open,
                 motion_preview,

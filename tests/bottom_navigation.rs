@@ -189,35 +189,38 @@ fn short_destination_names_wrap_without_visual_truncation_at_zoom() {
 
 #[test]
 fn floating_tabs_stay_inside_viewport_and_can_be_selected_by_keyboard() {
-    let mut harness = Harness::builder()
-        .with_size(egui::vec2(360.0, 500.0))
-        .build_ui_state(
-            |ui, selected: &mut Option<egui::Id>| {
-                let items = ["Home", "Controls", "Overlays", "Data", "Localization"]
-                    .map(|label| NavigationItem::new(egui::Id::new(label), label));
-                temivu::FloatingNavigation::new(egui::Id::new("float-tabs"), &Theme::light())
-                    .show(ui, &items, selected);
-            },
-            Some(egui::Id::new("Home")),
+    for glass in [false, true] {
+        let mut harness = Harness::builder()
+            .with_size(egui::vec2(360.0, 500.0))
+            .build_ui_state(
+                move |ui, selected: &mut Option<egui::Id>| {
+                    temivu::Glass::set_context(ui.ctx(), glass.then(temivu::Glass::default));
+                    let items = ["Home", "Controls", "Overlays", "Data", "Localization"]
+                        .map(|label| NavigationItem::new(egui::Id::new(label), label));
+                    temivu::FloatingNavigation::new(egui::Id::new("float-tabs"), &Theme::light())
+                        .show(ui, &items, selected);
+                },
+                Some(egui::Id::new("Home")),
+            );
+        harness.run_steps(4);
+        let first = harness.get_by_label("Home").rect();
+        let last = harness.get_by_label("Localization");
+        assert!(first.left() >= 12.0 && last.rect().right() <= 348.0);
+        assert_eq!(first.center().y, last.rect().center().y);
+        assert!(first.bottom() < 500.0 && first.top() > 400.0);
+        last.focus();
+        harness.run();
+        harness.key_press(egui::Key::Enter);
+        harness.run_steps(4);
+        assert_eq!(*harness.state(), Some(egui::Id::new("Localization")));
+        assert_eq!(
+            harness
+                .get_by_label("Localization")
+                .accesskit_node()
+                .is_selected(),
+            Some(true)
         );
-    harness.run_steps(4);
-    let first = harness.get_by_label("Home").rect();
-    let last = harness.get_by_label("Localization");
-    assert!(first.left() >= 12.0 && last.rect().right() <= 348.0);
-    assert_eq!(first.center().y, last.rect().center().y);
-    assert!(first.bottom() < 500.0 && first.top() > 400.0);
-    last.focus();
-    harness.run();
-    harness.key_press(egui::Key::Enter);
-    harness.run_steps(4);
-    assert_eq!(*harness.state(), Some(egui::Id::new("Localization")));
-    assert_eq!(
-        harness
-            .get_by_label("Localization")
-            .accesskit_node()
-            .is_selected(),
-        Some(true)
-    );
+    }
 }
 
 #[test]

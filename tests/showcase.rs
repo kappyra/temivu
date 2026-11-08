@@ -763,3 +763,47 @@ fn widgets_opens_and_returns_without_a_page_morph() {
     assert_eq!(title(&app, "Welcome to Temivu"), Some(overview));
     assert!(app.query_by_label("Motion gallery").is_none());
 }
+
+#[test]
+fn showcase_glass_is_optional_and_yields_to_high_contrast() {
+    let mut harness = harness();
+    assert!(temivu::Glass::context(&harness.ctx).is_none());
+    harness.get_by_label("Glass surfaces").click();
+    harness.run_steps(3);
+    assert!(temivu::Glass::context(&harness.ctx).is_some());
+    harness.get_by_label("Glass tint");
+    harness.get_by_label("Frost glassmorphism");
+    harness.get_by_label("Prism optical glass");
+
+    harness.get_by_label("Frost").click();
+    harness.run_steps(3);
+    assert!(
+        harness
+            .get_by_label("Frost")
+            .accesskit_node()
+            .is_selected()
+            .unwrap_or(false)
+    );
+    assert_eq!(
+        temivu::Glass::context(&harness.ctx),
+        Some(temivu::Glass::new(0.28).mode(temivu::GlassMode::Frost))
+    );
+
+    harness.get_by_label("High contrast").click();
+    harness.run_steps(3);
+    assert!(temivu::Glass::context(&harness.ctx).is_none());
+    assert!(harness.query_by_label("Glass studio").is_none());
+    harness.get_by_label("High contrast").click();
+    harness.run_steps(3);
+    assert!(
+        harness
+            .get_by_label("Frost")
+            .accesskit_node()
+            .is_selected()
+            .unwrap_or(false)
+    );
+
+    harness.get_by_label("Glass surfaces").click();
+    harness.run_steps(3);
+    assert!(temivu::Glass::context(&harness.ctx).is_none());
+}

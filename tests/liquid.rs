@@ -687,11 +687,12 @@ fn three_droplets_form_one_filled_surface_and_separate_again() {
 
 #[test]
 fn wide_popup_uses_the_current_click_and_retains_the_contact_on_external_close() {
-    fn sample(fraction: f32, close_at: Option<f32>) -> (f32, f32) {
+    fn sample(fraction: f32, close_at: Option<f32>, glass: bool) -> (f32, f32) {
         let mut harness = Harness::builder()
             .with_size(egui::vec2(500.0, 420.0))
             .build_ui_state(
-                |ui, open| {
+                move |ui, open| {
+                    temivu::Glass::set_context(ui.ctx(), glass.then(temivu::Glass::default));
                     let anchor = ui.add_sized([300.0, 44.0], egui::Button::new("Wide trigger"));
                     if anchor.clicked() {
                         *open = !*open;
@@ -775,12 +776,14 @@ fn wide_popup_uses_the_current_click_and_retains_the_contact_on_external_close()
         (opening, surface_center(&harness))
     }
 
-    let left = sample(0.15, None);
-    let middle = sample(0.5, None);
-    let right = sample(0.85, None);
+    let left = sample(0.15, None, false);
+    let middle = sample(0.5, None, false);
+    let right = sample(0.85, None, false);
     assert!(left.0 + 50.0 < middle.0 && middle.0 + 50.0 < right.0);
     assert!(left.1 + 50.0 < middle.1 && middle.1 + 50.0 < right.1);
-    let left_to_right = sample(0.15, Some(0.85));
-    let right_to_left = sample(0.85, Some(0.15));
+    let left_to_right = sample(0.15, Some(0.85), false);
+    let right_to_left = sample(0.85, Some(0.15), false);
     assert!(right_to_left.1 + 100.0 < left_to_right.1);
+    assert_eq!(sample(0.15, Some(0.85), true), left_to_right);
+    assert_eq!(sample(0.85, Some(0.15), true), right_to_left);
 }

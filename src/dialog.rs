@@ -194,7 +194,7 @@ impl<'a> Dialog<'a> {
         );
         if !*open {
             restore_focus(ctx, focus_key);
-            transition.paint_exit(ctx);
+            transition.paint_exit(ctx, &theme);
             return None;
         }
         if newly_opened {
@@ -246,7 +246,7 @@ impl<'a> Dialog<'a> {
             let rect = frame.widget_rect(prepared.content_ui.min_rect());
             prepared.end(ui);
             if !sizing {
-                transition.finish(ctx, start, surface, rect, frame);
+                transition.finish(ctx, &theme, start, surface, rect, frame);
             }
             inner
         });
