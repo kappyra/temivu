@@ -4,6 +4,8 @@
 mod backdrop_gl;
 #[path = "showcase/glass_demo.rs"]
 mod glass_demo;
+#[path = "showcase/lighting_demo.rs"]
+mod lighting_demo;
 #[path = "showcase/motion_gallery.rs"]
 mod motion_gallery;
 #[cfg(not(target_os = "android"))]
@@ -290,6 +292,7 @@ pub(crate) struct Showcase {
     upload_started: Option<f64>,
     high_contrast: bool,
     glass: glass_demo::GlassDemo,
+    lighting: lighting_demo::LightingDemo,
     backdrop: Option<backdrop_gl::BackdropGl>,
     applied_theme: Option<(bool, bool, bool)>,
     reduced_motion: bool,
@@ -314,6 +317,7 @@ impl Default for Showcase {
             upload_started: None,
             high_contrast: false,
             glass: glass_demo::GlassDemo::default(),
+            lighting: lighting_demo::LightingDemo::default(),
             backdrop: None,
             applied_theme: None,
             reduced_motion: false,
@@ -334,6 +338,7 @@ struct OverviewOptions<'a> {
     high_contrast: &'a mut bool,
     reduced_motion: &'a mut bool,
     glass: &'a mut glass_demo::GlassDemo,
+    lighting: &'a mut lighting_demo::LightingDemo,
 }
 
 fn studio_panel<R>(
@@ -500,6 +505,7 @@ fn overview(options: OverviewOptions<'_>, _locale: usize, ui: &mut egui::Ui, the
         high_contrast,
         reduced_motion,
         glass,
+        lighting,
     } = options;
     ui.set_max_width(ui.available_width().min(1040.0));
     ui.spacing_mut().item_spacing = egui::vec2(20.0, 12.0);
@@ -568,6 +574,12 @@ fn overview(options: OverviewOptions<'_>, _locale: usize, ui: &mut egui::Ui, the
         .show(ui);
     ui.add_space(14.0);
     glass.preview(ui, theme);
+    ui.add_space(14.0);
+    if *high_contrast {
+        ui.label("Vesper lighting is paused in high contrast.");
+    } else {
+        lighting.show(ui, theme);
+    }
 }
 
 fn motion_controls(
@@ -1995,6 +2007,7 @@ impl eframe::App for Showcase {
                                                 high_contrast: &mut self.high_contrast,
                                                 reduced_motion: &mut self.reduced_motion,
                                                 glass: &mut self.glass,
+                                                lighting: &mut self.lighting,
                                             },
                                             self.locale,
                                             ui,

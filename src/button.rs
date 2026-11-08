@@ -1,5 +1,5 @@
 //! A first, intentionally incomplete port of Forui's button.
-use crate::{Sizes, Theme};
+use crate::{Sizes, Theme, Vesper};
 use egui::{Color32, Response, RichText, Stroke, Ui, Vec2};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -70,6 +70,7 @@ pub struct Button<'a> {
     enabled: bool,
     icon: Option<&'a str>,
     radius: Option<u8>,
+    lighting: Option<Option<Vesper>>,
 }
 
 impl<'a> Button<'a> {
@@ -87,6 +88,7 @@ impl<'a> Button<'a> {
             enabled: true,
             icon: None,
             radius: None,
+            lighting: None,
         }
     }
     pub fn variant(mut self, variant: ButtonVariant) -> Self {
@@ -118,6 +120,12 @@ impl<'a> Button<'a> {
         self.radius = Some(radius);
         self
     }
+    /// Override the inherited lighting. Pass `None` to disable it for this button.
+    pub fn lighting(mut self, lighting: Option<Vesper>) -> Self {
+        self.lighting = Some(lighting);
+        self
+    }
+
     pub fn show(self, ui: &mut Ui) -> Response {
         let (fill, foreground, border) = match self.variant {
             ButtonVariant::Primary => (
@@ -244,6 +252,27 @@ impl<'a> Button<'a> {
                 let start = paint_start(ui.ctx(), ui.layer_id());
                 let response = ui.add_enabled(self.enabled, button);
                 deform_paint(ui.ctx(), ui.layer_id(), start, press);
+                if let Some(style) = self.lighting.unwrap_or_else(|| Vesper::context(ui.ctx()))
+                    && let Some(light) = style.interactive_shape(
+                        ui.painter(),
+                        self.theme,
+                        &response,
+                        response.rect,
+                        crate::motion::press_corners(response.rect, radius.into(), press),
+                    )
+                {
+                    // egui paints the button frame first. Keep the label and
+                    // focus treatment above the interaction mesh.
+                    ui.ctx().graphics_mut(|graphics| {
+                        let list = graphics.entry(ui.layer_id());
+                        if start.0 < list.next_idx().0 {
+                            list.mutate_shape(start, |entry| {
+                                let frame = std::mem::replace(&mut entry.shape, egui::Shape::Noop);
+                                entry.shape = egui::Shape::Vec(vec![frame, light]);
+                            });
+                        }
+                    });
+                }
                 response
             })
             .inner;

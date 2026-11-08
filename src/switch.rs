@@ -1,5 +1,5 @@
 //! Capsule and rail switches with spring-driven thumb travel.
-use crate::Theme;
+use crate::{Theme, Vesper};
 use egui::{FontId, Rect, Response, Sense, Stroke, Ui, Vec2, Widget, WidgetInfo, WidgetType};
 
 /// Switch silhouette and thumb behavior.
@@ -22,6 +22,7 @@ pub struct Switch<'a> {
     leading_label: bool,
     active_color: Option<egui::Color32>,
     style: SwitchStyle,
+    lighting: Option<Option<Vesper>>,
 }
 impl<'a> Switch<'a> {
     pub fn new(value: &'a mut bool, theme: &'a Theme) -> Self {
@@ -34,6 +35,7 @@ impl<'a> Switch<'a> {
             leading_label: false,
             active_color: None,
             style: SwitchStyle::Capsule,
+            lighting: None,
         }
     }
     pub fn label(mut self, label: &'a str) -> Self {
@@ -61,6 +63,12 @@ impl<'a> Switch<'a> {
         self.style = style;
         self
     }
+    /// Override inherited lighting. Pass `None` to disable it for this switch.
+    pub fn lighting(mut self, lighting: Option<Vesper>) -> Self {
+        self.lighting = Some(lighting);
+        self
+    }
+
     pub fn show(self, ui: &mut Ui) -> Response {
         ui.add(self)
     }
@@ -169,6 +177,14 @@ impl Widget for Switch<'_> {
             let active = dim(self.active_color.unwrap_or(self.theme.primary));
             let thumb_fill = dim(self.theme.card);
             let painter = ui.painter();
+            let lighting = enabled
+                .then(|| self.lighting.unwrap_or_else(|| Vesper::context(ui.ctx())))
+                .flatten();
+            let light_track = |rect, radius| {
+                if let Some(style) = lighting {
+                    style.paint(painter, self.theme, &response, rect, radius);
+                }
+            };
             match self.style {
                 SwitchStyle::Capsule => {
                     if amount < 1.0 {
@@ -194,6 +210,7 @@ impl Widget for Switch<'_> {
                             .with_clip_rect(clip)
                             .rect_filled(track, track_radius, active);
                     }
+                    light_track(track, (track_radius.round() as u8).into());
                     // Each edge travels separately, so the leading edge pulls
                     // the thumb into a capsule before the trailing edge catches up.
                     let ease = |start: f32, end: f32| {
@@ -244,6 +261,13 @@ impl Widget for Switch<'_> {
                     if amount > 0.0 {
                         rail(x(from), knob, active);
                     }
+                    light_track(
+                        Rect::from_min_max(
+                            egui::pos2(x(from).min(x(to)) - 3.5, track.center().y - 3.5),
+                            egui::pos2(x(from).max(x(to)) + 3.5, track.center().y + 3.5),
+                        ),
+                        4.into(),
+                    );
                     let center = egui::pos2(knob, track.center().y);
                     let radius = 13.0 - 1.3 * pressed;
                     painter.circle_filled(

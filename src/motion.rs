@@ -315,24 +315,31 @@ fn fractional_press_radius(rest: f32, amount: f32) -> f32 {
 
 /// Use egui's own rounded-rectangle path with subpixel corners while pressed.
 pub(crate) fn press_shape(rect: egui::epaint::RectShape, amount: f32) -> egui::Shape {
-    use egui::epaint::CornerRadiusF32;
     if amount <= 0.001 || rect.corner_radius == egui::CornerRadius::ZERO {
         return rect.into();
     }
-    let limit = (rect.rect.size().min_elem() * 0.5).max(0.0);
-    let radius = |r| fractional_press_radius(f32::from(r).min(limit), amount);
     rounded_shape(
         rect.rect,
-        CornerRadiusF32 {
-            nw: radius(rect.corner_radius.nw),
-            ne: radius(rect.corner_radius.ne),
-            sw: radius(rect.corner_radius.sw),
-            se: radius(rect.corner_radius.se),
-        },
+        press_corners(rect.rect, rect.corner_radius, amount),
         rect.fill,
         rect.stroke,
         rect.stroke_kind,
     )
+}
+
+pub(crate) fn press_corners(
+    rect: egui::Rect,
+    corners: egui::CornerRadius,
+    amount: f32,
+) -> egui::epaint::CornerRadiusF32 {
+    let limit = (rect.size().min_elem() * 0.5).max(0.0);
+    let radius = |r| fractional_press_radius(f32::from(r).min(limit), amount);
+    egui::epaint::CornerRadiusF32 {
+        nw: radius(corners.nw),
+        ne: radius(corners.ne),
+        sw: radius(corners.sw),
+        se: radius(corners.se),
+    }
 }
 
 pub(crate) fn rounded_shape(

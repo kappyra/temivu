@@ -88,6 +88,7 @@ pub use glass::{Glass, GlassBackdrop, GlassMode, GlassProfile, GlassRegion, Glas
 pub use header::Header;
 pub use item::{Item, ItemVariant};
 pub use label::{FieldLabel, LabelLayout};
+pub use lighting::{LightEffects, LightQuality, LightTracking, Vesper};
 pub use line_calendar::{
     LineCalendar, LineCalendarLabels, LineCalendarOrientation, LineCalendarResponse,
     LineCalendarState,
@@ -143,6 +144,7 @@ pub use page_transition::PageTransition;
 pub mod navigation_menu;
 pub use navigation_menu::{MenuPresentation, NavigationMenu};
 
+pub mod lighting;
 pub mod liquid;
 
 mod liquid_combo;
