@@ -301,13 +301,12 @@ impl<'a> Autocomplete<'a> {
             vertical_arrows: true,
         };
         let edit = egui::TextEdit::singleline(query)
-            .vertical_align(egui::Align::Center)
-            .margin(egui::Margin::symmetric(10, 8))
             .hint_text(hint)
             .id(field_id)
             .event_filter(event_filter)
             .desired_width(ui.available_width());
-        let field_response = ui.add_enabled(enabled, edit).labelled_by(label_response.id);
+        let field_response =
+            crate::text_field::show_native(ui, theme, enabled, edit).labelled_by(label_response.id);
         let field_focused = field_response.has_focus();
         let restoring = restore_focus;
         restore_focus = false;

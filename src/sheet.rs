@@ -32,6 +32,7 @@ pub struct Sheet<'a> {
     barrier_dismissible: bool,
     max_width: f32,
     input_mode: Option<InputMode>,
+    frame: Option<egui::Frame>,
 }
 
 impl<'a> Sheet<'a> {
@@ -45,6 +46,7 @@ impl<'a> Sheet<'a> {
             barrier_dismissible: true,
             max_width: 560.0,
             input_mode: None,
+            frame: None,
         }
     }
 
@@ -79,6 +81,12 @@ impl<'a> Sheet<'a> {
         self
     }
 
+    /// Override the sheet's corners, padding, colors and shadow.
+    pub fn frame(mut self, frame: egui::Frame) -> Self {
+        self.frame = Some(frame);
+        self
+    }
+
     /// Returns the content's result while open; updates `open` on dismissal.
     pub fn show<R>(
         self,
@@ -109,15 +117,18 @@ impl<'a> Sheet<'a> {
         )
         .x
         .min((viewport.width() - 2.0 * inset).max(0.0));
-        let content_width = (width - 2.0 * f32::from(padding) - 2.0).max(0.0);
-
-        let mut frame =
-            crate::surface::popup_frame(self.theme, padding).inner_margin(egui::Margin {
-                top: 8,
-                ..egui::Margin::same(padding)
-            });
-        frame.shadow.offset = [0, 3];
-        frame.shadow.blur = 12;
+        let frame = self.frame.unwrap_or_else(|| {
+            let mut frame = crate::surface::popup_frame(self.theme, padding)
+                .corner_radius(crate::SurfaceShape::Panel.radius(egui::vec2(width, 220.0)))
+                .inner_margin(egui::Margin {
+                    top: 8,
+                    ..egui::Margin::same(padding)
+                });
+            frame.shadow.offset = [0, 3];
+            frame.shadow.blur = 12;
+            frame
+        });
+        let content_width = (width - frame.total_margin().sum().x).max(0.0);
         let bottom = inset.min(viewport.height() * 0.06);
         let area = egui::Modal::default_area(self.id)
             .anchor(egui::Align2::CENTER_BOTTOM, Vec2::new(0.0, -bottom));

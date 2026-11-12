@@ -137,6 +137,115 @@ pub fn pagination(
     draw_pagination(ui, state, theme, previous_label, next_label, None, id);
 }
 
+/// Draw compact previous and next controls with a caller-formatted page label.
+///
+/// The formatter receives the one-based page number and the total page count.
+/// The arrows have the caller's localized accessible names.
+pub fn pagination_compact(
+    ui: &mut Ui,
+    state: &mut PaginationState,
+    theme: &Theme,
+    previous_label: &str,
+    next_label: &str,
+    current_label: impl FnOnce(usize, usize) -> String,
+) {
+    let input = if theme.touch {
+        crate::InputMode::Touch
+    } else {
+        crate::InputMode::Desktop
+    };
+    let width = ui.available_width().clamp(1.0, 340.0);
+    let size = crate::ButtonSize::Medium.height(input).min(width / 3.0);
+    let lane = size + 8.0;
+    let text = current_label(state.page + 1, state.pages);
+    let rtl = ui.layout().prefer_right_to_left();
+    ui.vertical_centered(|ui| {
+        // Equal side lanes keep the arrows stable when the page number changes.
+        let inline = width - 2.0 * lane >= 80.0;
+        if !inline {
+            ui.add(egui::Label::new(RichText::new(&text).strong()).wrap());
+        }
+        let (row, _) = ui.allocate_exact_size(egui::vec2(width, size), egui::Sense::hover());
+        if inline {
+            let caption = row.shrink2(egui::vec2(lane, 0.0));
+            ui.put(
+                caption,
+                egui::Label::new(RichText::new(&text).strong())
+                    .halign(egui::Align::Center)
+                    .truncate()
+                    .selectable(false),
+            )
+            .on_hover_text(&text);
+        }
+        let inset = if inline {
+            size * 0.5
+        } else {
+            width * 0.5 - size * 0.5 - 4.0
+        };
+        let offset = width * 0.5 - inset;
+        let forward = if rtl { -1.0 } else { 1.0 };
+        let button = |ui: &mut Ui, direction, label, enabled| {
+            let center = row.center() + egui::vec2(offset * direction, 0.0);
+            let slot = egui::Rect::from_center_size(center, egui::Vec2::splat(size));
+            compact_arrow(ui, theme, slot, direction, label, enabled)
+        };
+        let previous = button(ui, -forward, previous_label, state.page > 0);
+        let next = button(ui, forward, next_label, state.page + 1 < state.pages);
+        if previous.clicked() {
+            state.previous();
+            ui.ctx().request_repaint();
+        } else if next.clicked() {
+            state.next();
+            ui.ctx().request_repaint();
+        }
+    });
+}
+
+fn compact_arrow(
+    ui: &mut Ui,
+    theme: &Theme,
+    slot: egui::Rect,
+    direction: f32,
+    label: &str,
+    enabled: bool,
+) -> egui::Response {
+    let mut ui = ui.new_child(
+        egui::UiBuilder::new()
+            .id_salt(("page-arrow", direction.is_sign_positive()))
+            .max_rect(slot)
+            .layout(egui::Layout::centered_and_justified(
+                egui::Direction::LeftToRight,
+            )),
+    );
+    let response = crate::button::press_native(&mut ui, theme, |ui| {
+        let response = ui.add_enabled(
+            enabled,
+            egui::Button::new("")
+                .fill(theme.card)
+                .stroke(Stroke::new(1.0, theme.border))
+                .corner_radius(crate::SurfaceShape::Control.radius(slot.size()))
+                .min_size(slot.size()),
+        );
+        let center = response.rect.center();
+        let radius = (slot.width() * 0.11).min(4.5);
+        let wing = egui::vec2(-direction * radius * 0.45, radius);
+        let tip = center + egui::vec2(direction * radius * 0.45, 0.0);
+        let ink = if response.enabled() {
+            theme.foreground
+        } else {
+            theme.muted_foreground
+        };
+        ui.painter().add(egui::Shape::line(
+            vec![center + wing, tip, center + wing * egui::vec2(1.0, -1.0)],
+            Stroke::new(1.6, ink),
+        ));
+        response
+    });
+    ui.ctx()
+        .accesskit_node_builder(response.id, |node| node.set_label(label));
+    response.on_hover_text(label)
+}
+
 /// Draw pagination with a caller-provided ID that stays stable across layout changes.
 /// The ID must be unique among pagination instances in the context.
 pub fn pagination_with_id(

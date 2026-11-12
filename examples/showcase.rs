@@ -6,6 +6,8 @@ mod backdrop_gl;
 mod glass_demo;
 #[path = "showcase/lighting_demo.rs"]
 mod lighting_demo;
+#[path = "showcase/localization_demo.rs"]
+mod localization_demo;
 #[path = "showcase/motion_gallery.rs"]
 mod motion_gallery;
 #[cfg(not(target_os = "android"))]
@@ -24,30 +26,18 @@ use temivu::{
     BadgeStyle, BadgeVariant, Button, ButtonVariant, Calendar, CalendarState, Checkbox,
     CircularProgress, Date, DateField, DateFieldState, DateTime, DateTimePicker,
     DateTimePickerState, Dialog, FloatingNavigation, Item, ItemVariant, LineCalendar,
-    LineCalendarState, MenuPresentation, Messages, MultiSelect, NavigationItem, NavigationMenu,
-    OtpField, PaginationState, Picker, PickerItem, Popover, PopoverMenu, Progress, Radio,
-    RangeSlider, Resizable, ResizableAxis, Scaffold, Select, SelectGroup, SelectMenuTile,
-    SelectOption, SelectTile, SelectTileGroup, Sheet, Sidebar, SidebarGroup, SidebarItem,
-    SidebarState, Slider, Switch, Tabs, TextField, Theme, Tile, Time, TimeField, TimeFieldState,
-    TimePicker, Toast, ToastEntry, ToastState, ToastVariant, ToasterState, context_menu,
-    pagination, pagination_localized,
+    LineCalendarState, MenuPresentation, MultiSelect, NavigationItem, NavigationMenu, OtpField,
+    PaginationState, Picker, PickerItem, Popover, PopoverMenu, Progress, Radio, RangeSlider,
+    Resizable, ResizableAxis, Scaffold, Select, SelectGroup, SelectMenuTile, SelectOption,
+    SelectTile, SelectTileGroup, Sheet, Sidebar, SidebarGroup, SidebarItem, SidebarState, Slider,
+    Switch, Tabs, TextField, Theme, Tile, Time, TimeField, TimeFieldState, TimePicker, Toast,
+    ToastEntry, ToastState, ToastVariant, ToasterState, context_menu,
 };
 
 /// The constant date used by the calendar, line-calendar and date-field demos.
 fn demo_date() -> Date {
     Date::new(2026, 11, 1).expect("constant date is valid")
 }
-
-/// Locales offered by the localization demo; they cover left-to-right,
-/// right-to-left and non-Latin scripts.
-const LOCALES: [(&str, &str); 6] = [
-    ("en", "English"),
-    ("de", "Deutsch"),
-    ("ar", "العربية"),
-    ("ja", "日本語"),
-    ("zh", "中文"),
-    ("fr", "Français"),
-];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Page {
@@ -201,6 +191,7 @@ struct DemoState {
     tile_selected: bool,
     pagination: Option<PaginationState>,
     split_fraction: f32,
+    time_stepper: bool,
     calendar: Option<CalendarState>,
     line_calendar: Option<LineCalendarState>,
     // Fields and navigation
@@ -260,7 +251,8 @@ impl Default for DemoState {
             item_selected: false,
             tile_selected: false,
             pagination: None,
-            split_fraction: 0.5,
+            split_fraction: 0.36,
+            time_stepper: false,
             calendar: None,
             line_calendar: None,
             date_field: DateFieldState::default(),
@@ -281,6 +273,8 @@ impl Default for DemoState {
 }
 
 pub(crate) struct Showcase {
+    #[cfg(target_os = "android")]
+    android_app: Option<android_activity::AndroidApp>,
     menu_open: bool,
     island_open: bool,
     motion_preview: bool,
@@ -299,13 +293,15 @@ pub(crate) struct Showcase {
     applied_reduced_motion: Option<bool>,
     destination: Option<Id>,
     gallery_return: Option<(Page, Id)>,
-    locale: usize,
+    localization: localization_demo::LocalizationDemo,
     state: DemoState,
 }
 
 impl Default for Showcase {
     fn default() -> Self {
         Self {
+            #[cfg(target_os = "android")]
+            android_app: None,
             menu_open: false,
             island_open: false,
             motion_preview: false,
@@ -324,7 +320,7 @@ impl Default for Showcase {
             applied_reduced_motion: None,
             destination: None,
             gallery_return: None,
-            locale: 0,
+            localization: localization_demo::LocalizationDemo::default(),
             state: DemoState::default(),
         }
     }
@@ -351,8 +347,12 @@ fn studio_panel<R>(
     egui::Frame::new()
         .fill(theme.card)
         .stroke(egui::Stroke::new(1.0, theme.border))
-        .corner_radius(28)
-        .inner_margin(egui::Margin::same(22))
+        .corner_radius(temivu::SurfaceShape::Card.radius(egui::vec2(ui.available_width(), 160.0)))
+        .inner_margin(egui::Margin::same(if ui.available_width() < 480.0 {
+            16
+        } else {
+            22
+        }))
         .show(ui, |ui| {
             ui.set_min_width((ui.available_width() - 1.0).max(0.0));
             ui.label(egui::RichText::new(title).size(18.0).strong());
@@ -496,7 +496,7 @@ fn activity_panel(
     );
 }
 
-fn overview(options: OverviewOptions<'_>, _locale: usize, ui: &mut egui::Ui, theme: &Theme) {
+fn overview(options: OverviewOptions<'_>, ui: &mut egui::Ui, theme: &Theme) {
     let OverviewOptions {
         dark,
         neutral,
@@ -1394,14 +1394,16 @@ fn data(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
         ui,
         theme,
         "COMPONENT STUDIO / DATA",
-        "Data displays",
-        "A compact workspace for records, folders and scheduling.",
+        "Workspace",
+        "Curate a collection, browse a record ledger, and plan what comes next.",
     );
     studio_pair(state, ui, theme, data_collection, data_pagination);
-    studio_pair(state, ui, theme, data_calendar, data_explorer);
+    data_explorer(state, ui, theme);
+    ui.add_space(14.0);
     data_date_strip(state, ui, theme);
     ui.add_space(14.0);
-    studio_pair(state, ui, theme, data_time, data_datetime);
+    studio_pair(state, ui, theme, data_calendar, data_time);
+    data_datetime(state, ui, theme);
 }
 
 fn data_date_strip(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
@@ -1409,7 +1411,7 @@ fn data_date_strip(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
         ui,
         theme,
         "Date strip",
-        "Move through days without leaving the page.",
+        "A compact timeline for moving between dates.",
         |ui| {
             let calendar = state.line_calendar.get_or_insert_with(|| {
                 LineCalendarState::new(
@@ -1417,10 +1419,57 @@ fn data_date_strip(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
                     Some(Date::new(2026, 11, 12).expect("valid date")),
                 )
             });
-            LineCalendar::new(calendar, theme)
-                .today(demo_date())
-                .days(10)
-                .show(ui);
+            let days = ((ui.available_width() + 6.0) / 50.0)
+                .floor()
+                .clamp(1.0, 10.0) as usize;
+            let anchor = calendar.anchor();
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    egui::RichText::new(format!(
+                        "Week of {} {}",
+                        temivu::month_name(anchor.month()),
+                        anchor.day()
+                    ))
+                    .strong(),
+                );
+                for (label, step) in [("‹", -(days as i64)), ("›", days as i64)] {
+                    let response = Button::new(label, theme)
+                        .variant(ButtonVariant::Secondary)
+                        .input_mode(data_input(theme))
+                        .show(ui);
+                    ui.ctx().accesskit_node_builder(response.id, |node| {
+                        node.set_label(if step < 0 {
+                            "Earlier dates"
+                        } else {
+                            "Later dates"
+                        });
+                    });
+                    if response.clicked()
+                        && let Some(next) = calendar.anchor().add_days(step)
+                    {
+                        calendar.set_anchor(next);
+                        calendar.set_focused(Some(next));
+                    }
+                }
+            });
+            ui.add_space(8.0);
+            egui::Frame::new()
+                .fill(theme.muted)
+                .corner_radius(16)
+                .inner_margin(5)
+                .show(ui, |ui| {
+                    LineCalendar::new(calendar, theme)
+                        .today(demo_date())
+                        .item_size(egui::vec2(60.0, 56.0))
+                        .days(days)
+                        .show(ui);
+                });
+            if let Some(selected) = calendar.selected() {
+                ui.label(
+                    egui::RichText::new(format!("Selected · {selected}"))
+                        .color(theme.muted_foreground),
+                );
+            }
         },
     );
 }
@@ -1430,24 +1479,32 @@ fn data_collection(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
         ui,
         theme,
         "Collection",
-        "Choose what stays active in this workspace.",
+        "Choose the tools that belong in your workspace.",
         |ui| {
             let count = usize::from(state.item_selected)
                 + usize::from(state.tile_selected)
                 + state.select_tiles.len();
+            let mut clear = false;
             ui.horizontal_wrapped(|ui| {
-                Badge::new(&format!("{count} selected"), theme).show(ui);
-                ui.label(
-                    egui::RichText::new("WORKSPACE")
-                        .monospace()
-                        .size(11.0)
-                        .color(theme.muted_foreground),
-                );
+                Badge::new(&format!("{count} active"), theme).show(ui);
+                clear = Button::new("Clear selection", theme)
+                    .variant(ButtonVariant::Ghost)
+                    .enabled(count > 0)
+                    .input_mode(data_input(theme))
+                    .show(ui)
+                    .clicked();
             });
+            if clear {
+                state.item_selected = false;
+                state.tile_selected = false;
+                state.select_tiles.clear();
+            }
             ui.add_space(8.0);
-            if Item::new("Example item", theme)
-                .icon("+")
-                .description("Select this row")
+            if Item::new("Project brief", theme)
+                .icon("▤")
+                .flat(true)
+                .radius(12)
+                .description("Planning notes and key decisions")
                 .selected(state.item_selected)
                 .show(ui)
                 .clicked()
@@ -1457,7 +1514,9 @@ fn data_collection(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
             ui.add_space(6.0);
             if Tile::new("Bluetooth", theme)
                 .id(Id::new("demo-bluetooth-tile"))
-                .description("Connect devices")
+                .icon("◈")
+                .radius(14)
+                .description("Nearby devices")
                 .selected(state.tile_selected)
                 .show(ui)
                 .clicked()
@@ -1480,22 +1539,16 @@ fn data_collection(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
             )
             .description("Choose any that apply")
             .show(ui);
-            let has_selection =
-                state.item_selected || state.tile_selected || !state.select_tiles.is_empty();
-            ui.add_space(6.0);
-            if Item::new("Clear selection", theme)
-                .variant(ItemVariant::Destructive)
-                .enabled(has_selection)
-                .show(ui)
-                .clicked()
-            {
-                state.item_selected = false;
-                state.tile_selected = false;
-                state.select_tiles.clear();
-                ui.ctx().request_repaint();
-            }
         },
     );
+}
+
+fn data_input(theme: &Theme) -> temivu::InputMode {
+    if theme.touch {
+        temivu::InputMode::Touch
+    } else {
+        temivu::InputMode::Desktop
+    }
 }
 
 fn data_pagination(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
@@ -1504,58 +1557,55 @@ fn data_pagination(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
         ui,
         theme,
         "Paged records",
-        "Browse a collection in groups of six.",
+        "A ledger with six entries per page.",
         |ui| {
             let pages = state
                 .pagination
                 .get_or_insert_with(|| PaginationState::new(12, 1, 1, true).expect("valid state"));
-            ui.horizontal_wrapped(|ui| {
-                Badge::new(
-                    &format!("Page {} of {}", pages.page() + 1, pages.pages()),
-                    theme,
-                )
-                .show(ui);
-                ui.label(
-                    egui::RichText::new(format!("{} records", pages.pages() * PAGE_SIZE))
-                        .color(theme.muted_foreground),
-                );
-            });
-            ui.add_space(10.0);
+            temivu::pagination::pagination_compact(
+                ui,
+                pages,
+                theme,
+                "Previous",
+                "Next",
+                |page, total| format!("Page {page} of {total}"),
+            );
             let page = pages.page() as f32;
-            let slide = temivu::motion::spring_f32(
+            let phase = temivu::motion::spring_f32(
                 ui.ctx(),
-                ui.make_persistent_id("record-motion"),
+                ui.make_persistent_id("ledger-transition"),
                 page,
                 page,
                 theme,
             );
-            let shift = (slide - page).clamp(-1.0, 1.0);
-            let first = pages.page() * PAGE_SIZE + 1;
-            ui.with_visual_transform(
-                egui::emath::TSTransform::from_translation(egui::vec2(6.0 * shift, 0.0)),
-                |ui| {
-                    ui.multiply_opacity(1.0 - 0.40 * shift.abs());
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new("RECORD / STATUS")
-                                .monospace()
-                                .size(11.0)
-                                .color(theme.muted_foreground),
-                        );
-                    });
-                    for record in first..first + PAGE_SIZE {
-                        egui::Frame::new()
-                            .fill(if record.is_multiple_of(2) {
-                                theme.muted
-                            } else {
-                                theme.card
-                            })
-                            .stroke(egui::Stroke::new(1.0, theme.border))
-                            .corner_radius(13)
-                            .inner_margin(8)
-                            .show(ui, |ui| {
-                                ui.set_min_width(ui.available_width());
-                                egui::Sides::new().height(18.0).show(
+            let offset = (page - phase).clamp(-1.0, 1.0);
+            ui.add_space(8.0);
+            egui::Frame::new()
+                .stroke(egui::Stroke::new(1.0, theme.border))
+                .corner_radius(15)
+                .inner_margin(10)
+                .show(ui, |ui| {
+                    let first = pages.page() * PAGE_SIZE + 1;
+                    ui.label(
+                        egui::RichText::new(format!(
+                            "{first:02}–{:02} OF {:02}",
+                            first + PAGE_SIZE - 1,
+                            pages.pages() * PAGE_SIZE
+                        ))
+                        .monospace()
+                        .size(11.0)
+                        .color(theme.muted_foreground),
+                    );
+                    ui.separator();
+                    ui.with_visual_transform(
+                        egui::emath::TSTransform::from_translation(egui::vec2(0.0, offset * 4.0)),
+                        |ui| {
+                            ui.multiply_opacity(1.0 - 0.25 * offset.abs());
+                            for record in first..first + PAGE_SIZE {
+                                if record != first {
+                                    ui.separator();
+                                }
+                                egui::Sides::new().height(25.0).show(
                                     ui,
                                     |ui| {
                                         ui.label(
@@ -1564,23 +1614,22 @@ fn data_pagination(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
                                         );
                                     },
                                     |ui| {
+                                        let pending = record.is_multiple_of(3);
                                         ui.label(
-                                            egui::RichText::new(if record.is_multiple_of(3) {
+                                            egui::RichText::new(if pending {
                                                 "In review"
                                             } else {
                                                 "Ready"
                                             })
-                                            .size(11.0)
+                                            .size(theme.typography.caption.size)
                                             .color(theme.muted_foreground),
                                         );
                                     },
                                 );
-                            });
-                    }
-                },
-            );
-            ui.add_space(12.0);
-            pagination(ui, pages, theme, "Previous", "Next");
+                            }
+                        },
+                    );
+                });
         },
     );
 }
@@ -1616,99 +1665,91 @@ fn data_explorer(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
         ui,
         theme,
         "Navigation sidebar",
-        "Explore folders and resize the work area.",
+        "Browse folders in a split workspace with an adjustable divider on wide screens.",
         |ui| {
-            let wide = ui.available_width() >= 360.0;
-            let axis = if wide {
-                ResizableAxis::Horizontal
-            } else {
-                ResizableAxis::Vertical
-            };
-            let (rect, _) = ui.allocate_exact_size(
-                egui::vec2(ui.available_width(), if wide { 244.0 } else { 330.0 }),
-                egui::Sense::hover(),
-            );
-            let mut split = ui.new_child(egui::UiBuilder::new().max_rect(rect));
-            split.set_clip_rect(split.clip_rect().intersect(rect));
             let inbox = [
-                SidebarItem::new(Id::new("demo-inbox"), "Inbox"),
-                SidebarItem::new(Id::new("demo-sent"), "Sent"),
+                SidebarItem::new(Id::new("demo-inbox"), "Inbox").icon("▣"),
+                SidebarItem::new(Id::new("demo-sent"), "Sent").icon("↗"),
             ];
-            let history = [SidebarItem::new(Id::new("demo-archive"), "Archive")];
+            let history = [SidebarItem::new(Id::new("demo-archive"), "Archive").icon("▤")];
             let groups = [
-                SidebarGroup::new(Id::new("demo-mail"), &inbox).label("Mail"),
+                SidebarGroup::new(Id::new("demo-mail"), &inbox).label("Workspace"),
                 SidebarGroup::new(Id::new("demo-history"), &history).label("History"),
             ];
             let previous = state.sidebar_selected;
-            Resizable::new(
-                Id::new("demo-split"),
-                axis,
-                &mut state.split_fraction,
-                theme,
-            )
-            .label("Resizable panes")
-            .min_extents(156.0, 100.0)
-            .show(
-                &mut split,
-                |ui| {
+            let folder = inbox
+                .iter()
+                .chain(&history)
+                .find(|item| Some(item.id) == previous);
+            let mut folders = |ui: &mut egui::Ui| {
+                data_pane(ui, theme, "Folders", |ui| {
+                    Sidebar::new(
+                        Id::new("demo-sidebar"),
+                        "Demo navigation",
+                        theme,
+                        &mut state.sidebar,
+                    )
+                    .width(ui.available_width())
+                    .framed(false)
+                    .show(ui, &groups, &mut state.sidebar_selected);
+                });
+            };
+            let detail = |ui: &mut egui::Ui| {
+                data_pane(ui, theme, "Folder contents", |ui| {
                     ui.label(
-                        egui::RichText::new("Left pane")
-                            .size(12.0)
-                            .color(theme.muted_foreground),
+                        egui::RichText::new(folder.map_or("Select a folder", |entry| entry.label))
+                            .size(20.0)
+                            .strong(),
                     );
-                    egui::ScrollArea::vertical()
-                        .id_salt("demo-folders")
-                        .show(ui, |ui| {
-                            Sidebar::new(
-                                Id::new("demo-sidebar"),
-                                "Demo navigation",
-                                theme,
-                                &mut state.sidebar,
-                            )
-                            .title("Workspace")
-                            .show(
-                                ui,
-                                &groups,
-                                &mut state.sidebar_selected,
-                            );
-                        });
-                },
-                |ui| {
-                    ui.add_space(4.0);
-                    ui.label(
-                        egui::RichText::new("Right pane")
-                            .size(12.0)
-                            .color(theme.muted_foreground),
-                    );
-                    if let Some(folder) = inbox
-                        .iter()
-                        .chain(&history)
-                        .find(|item| Some(item.id) == previous)
-                    {
-                        ui.label(egui::RichText::new(folder.label).size(20.0).strong());
-                        Badge::new(
-                            if folder.label == "Inbox" {
-                                "2 items"
-                            } else {
-                                "0 items"
-                            },
-                            theme,
-                        )
-                        .show(ui);
-                        ui.add_space(6.0);
-                        if folder.label == "Inbox" {
-                            ui.label("Project brief");
-                            ui.label("Design notes");
-                        } else {
-                            ui.label(
-                                egui::RichText::new("No items yet").color(theme.muted_foreground),
-                            );
+                    if folder.is_some_and(|entry| entry.id == inbox[0].id) {
+                        ui.add_space(4.0);
+                        for (title, caption) in [
+                            ("Workspace plan", "Planning document"),
+                            ("Design notes", "Review document"),
+                        ] {
+                            Item::new(title, theme)
+                                .description(caption)
+                                .flat(true)
+                                .radius(12)
+                                .show(ui);
                         }
                     } else {
-                        ui.label("Select a folder");
+                        ui.label(
+                            egui::RichText::new(if folder.is_some() {
+                                "No items in this folder"
+                            } else {
+                                "Your documents will appear here"
+                            })
+                            .color(theme.muted_foreground),
+                        );
                     }
-                },
-            );
+                });
+            };
+            if ui.available_width() >= 460.0 {
+                let width = ui.available_width();
+                ui.allocate_ui_with_layout(
+                    egui::vec2(width, 286.0),
+                    egui::Layout::top_down(egui::Align::Min),
+                    |ui| {
+                        ui.set_max_size(egui::vec2(width, 286.0));
+                        Resizable::new(
+                            Id::new("demo-split"),
+                            ResizableAxis::Horizontal,
+                            &mut state.split_fraction,
+                            theme,
+                        )
+                        .label("Resizable panes")
+                        .min_extents(150.0, 186.0)
+                        .divider_extent(20.0)
+                        .track(false)
+                        .show(ui, folders, detail);
+                    },
+                );
+            } else {
+                folders(ui);
+                ui.add_space(8.0);
+                detail(ui);
+            }
             if previous != state.sidebar_selected {
                 ui.ctx().request_repaint();
             }
@@ -1716,22 +1757,67 @@ fn data_explorer(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
     );
 }
 
+fn data_pane(ui: &mut egui::Ui, theme: &Theme, title: &str, content: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new()
+        .fill(theme.muted)
+        .corner_radius(15)
+        .inner_margin(12)
+        .show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            ui.label(
+                egui::RichText::new(title.to_uppercase())
+                    .monospace()
+                    .size(theme.typography.caption.size)
+                    .color(theme.muted_foreground),
+            );
+            ui.add_space(6.0);
+            content(ui);
+        });
+}
+
 fn data_time(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
+    use temivu::time_picker::TimePickerLayout;
     studio_panel(
         ui,
         theme,
         "Time picker",
-        "Set the time with scroll, touch or the arrow keys.",
+        "Switch between scrolling wheels and editable time fields.",
         |ui| {
+            ui.horizontal_wrapped(|ui| {
+                for (label, stepper) in [("Wheels", false), ("Stepper", true)] {
+                    let selected = stepper == state.time_stepper;
+                    let choice = Button::new(label, theme)
+                        .variant(if selected {
+                            ButtonVariant::Secondary
+                        } else {
+                            ButtonVariant::Ghost
+                        })
+                        .input_mode(data_input(theme))
+                        .show(ui);
+                    ui.ctx()
+                        .accesskit_node_builder(choice.id, |node| node.set_selected(selected));
+                    if choice.clicked() {
+                        state.time_stepper = stepper;
+                    }
+                }
+            });
+            ui.add_space(8.0);
             ui.label(
-                egui::RichText::new(state.time_picker_time.to_string())
+                egui::RichText::new(state.time_picker_time.format_hm())
                     .monospace()
                     .size(30.0)
                     .strong(),
             );
             ui.add_space(8.0);
+            let layout = if state.time_stepper {
+                TimePickerLayout::Stepper
+            } else {
+                TimePickerLayout::Wheels
+            };
             TimePicker::new(&mut state.time_picker_time, theme)
                 .id(Id::new("demo-time-picker"))
+                .sizes(theme.sizes)
+                .layout(layout)
                 .show(ui);
         },
     );
@@ -1760,36 +1846,27 @@ fn data_datetime(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
     );
 }
 
-fn localization(state: &mut DemoState, locale: &mut usize, ui: &mut egui::Ui, theme: &Theme) {
-    let messages = Messages::for_locale(LOCALES[*locale].0);
-    ui.heading("Localization and themes");
-    ui.label("Strings generated from the 113 pinned Forui ARB locale files.");
-    ui.horizontal_wrapped(|ui| {
-        for (index, (code, name)) in LOCALES.iter().enumerate() {
-            if ui
-                .selectable_label(*locale == index, format!("{name} ({code})"))
-                .clicked()
-            {
-                *locale = index;
-            }
-        }
-    });
-    ui.add_space(8.0);
-    ui.label(format!("progressSemanticsLabel = {}", messages.progress));
-    ui.label(format!(
-        "paginationPreviousSemanticsLabel = {}",
-        messages.previous
-    ));
-    ui.add_space(8.0);
-    let pagination_state = state
-        .pagination
-        .get_or_insert_with(|| PaginationState::new(12, 1, 1, true).expect("valid state"));
-    pagination_localized(ui, pagination_state, theme, &messages);
-    ui.add_space(8.0);
-    ui.label("The page buttons expose localized labels to assistive technology.");
+#[cfg(target_os = "android")]
+impl Showcase {
+    pub(crate) fn for_android(app: android_activity::AndroidApp) -> Self {
+        let mut showcase = Self {
+            android_app: Some(app),
+            ..Self::default()
+        };
+        showcase.glass.enabled = true;
+        showcase.lighting.enable_surfaces();
+        showcase
+    }
 }
 
 impl eframe::App for Showcase {
+    #[cfg(target_os = "android")]
+    fn raw_input_hook(&mut self, ctx: &egui::Context, input: &mut egui::RawInput) {
+        if let Some(app) = &self.android_app {
+            input.safe_area_insets = super::safe_area(app, ctx, input);
+        }
+    }
+
     fn on_exit(&mut self, gl: Option<&eframe::glow::Context>) {
         if let (Some(backdrop), Some(gl)) = (&self.backdrop, gl) {
             backdrop.destroy(gl);
@@ -1804,6 +1881,7 @@ impl eframe::App for Showcase {
         }
         if !self.fonts_installed {
             Theme::install_inter(ui.ctx());
+            localization_demo::install_fonts(ui.ctx());
             self.fonts_installed = true;
         }
         let mut theme = if self.neutral && self.dark {
@@ -1823,6 +1901,12 @@ impl eframe::App for Showcase {
             theme = theme.high_contrast();
         }
         self.glass.apply(ui.ctx(), self.high_contrast);
+        temivu::Vesper::set_context(
+            ui.ctx(),
+            (!self.high_contrast)
+                .then(|| self.lighting.surface_lighting(theme.touch))
+                .flatten(),
+        );
         if self.applied_theme != Some((self.dark, self.high_contrast, self.neutral)) {
             theme.apply(ui.ctx());
             self.applied_theme = Some((self.dark, self.high_contrast, self.neutral));
@@ -1883,107 +1967,104 @@ impl eframe::App for Showcase {
             NavigationItem::new(page.id(), page.label()).icon(icon)
         });
         Scaffold::new(Id::new("demo-scaffold"), &theme)
-            .header(true)
+            .floating_header(true)
             .show(
                 ui,
                 |_ui| {},
                 |ui| {
-                    egui::Frame::new()
-                        .inner_margin(egui::Margin::symmetric(12, 10))
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                let navigation = ui.add_sized(
-                                    [44.0, 44.0],
-                                    egui::Button::new("")
-                                        .fill(theme.card)
-                                        .stroke(egui::Stroke::new(1.0, theme.border))
-                                        .corner_radius(255),
-                                );
-                                let center = navigation.rect.center();
-                                let navigation_label = if can_go_back {
-                                    let stroke = egui::Stroke::new(1.8, theme.foreground);
-                                    let tip = center - egui::vec2(4.0, 0.0);
-                                    for y in [-6.0, 6.0] {
-                                        ui.painter().line_segment(
-                                            [tip, center + egui::vec2(2.0, y)],
-                                            stroke,
-                                        );
-                                    }
-                                    header_back = navigation.clicked();
-                                    "Back"
-                                } else {
-                                    controls_icon(
-                                        ui.painter(),
-                                        egui::Rect::from_center_size(
-                                            center,
-                                            egui::Vec2::splat(20.0),
-                                        ),
-                                        theme.foreground,
-                                    );
-                                    "Menu"
-                                };
-                                ui.ctx().accesskit_node_builder(navigation.id, |node| {
-                                    node.set_label(navigation_label);
-                                });
-                                ui.label(
-                                    egui::RichText::new("Temivu")
-                                        .size(22.0)
-                                        .strong()
-                                        .color(theme.foreground),
-                                );
-                                if !can_go_back
-                                    && let Some(destination) = NavigationMenu::new(
-                                        Id::new("demo-full-menu"),
-                                        "Temivu",
-                                        &mut self.menu_open,
-                                        &theme,
-                                    )
-                                    .presentation(MenuPresentation::Drawer)
-                                    .show(&navigation, &items, &mut menu_selected)
-                                {
-                                    menu_choice = Some(destination);
-                                }
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::Center),
-                                    |ui| {
-                                        let island = Button::new("", &theme)
-                                            .variant(ButtonVariant::Outline)
-                                            .show(ui)
-                                            .on_hover_text("Quick menu");
-                                        for x in [-5.0, 0.0, 5.0] {
-                                            ui.painter().circle_filled(
-                                                island.rect.center() + egui::vec2(x, 0.0),
-                                                1.5,
-                                                theme.foreground,
-                                            );
-                                        }
-                                        ui.ctx().accesskit_node_builder(island.id, |node| {
-                                            node.set_label("Quick menu");
-                                        });
-                                        if let Some(destination) = NavigationMenu::new(
-                                            Id::new("demo-island-menu"),
-                                            "Quick navigation",
-                                            &mut self.island_open,
-                                            &theme,
-                                        )
-                                        .presentation(MenuPresentation::Floating)
-                                        .show(&island, &items, &mut menu_selected)
-                                        {
-                                            menu_choice = Some(destination);
-                                        }
-                                        let widgets = Button::new("Widgets", &theme)
-                                            .variant(ButtonVariant::Outline)
-                                            .show(ui);
-                                        if widgets.clicked() {
-                                            open_gallery = Some(widgets.id);
-                                        }
-                                    },
-                                );
-                            });
+                    let narrow_header = ui.available_width() < 275.0;
+                    ui.horizontal(|ui| {
+                        let navigation = Button::new("", &theme)
+                            .variant(ButtonVariant::Ghost)
+                            .show(ui);
+                        let center = navigation.rect.center();
+                        let navigation_label = if can_go_back {
+                            let stroke = egui::Stroke::new(1.8, theme.foreground);
+                            let tip = center - egui::vec2(4.0, 0.0);
+                            for y in [-6.0, 6.0] {
+                                ui.painter()
+                                    .line_segment([tip, center + egui::vec2(2.0, y)], stroke);
+                            }
+                            header_back = navigation.clicked();
+                            "Back"
+                        } else {
+                            controls_icon(
+                                ui.painter(),
+                                egui::Rect::from_center_size(center, egui::Vec2::splat(20.0)),
+                                theme.foreground,
+                            );
+                            "Menu"
+                        };
+                        ui.ctx().accesskit_node_builder(navigation.id, |node| {
+                            node.set_label(navigation_label);
                         });
+                        if !narrow_header {
+                            ui.label(
+                                egui::RichText::new("Temivu")
+                                    .size(18.0)
+                                    .strong()
+                                    .color(theme.foreground),
+                            );
+                        }
+                        if !can_go_back
+                            && let Some(destination) = NavigationMenu::new(
+                                Id::new("demo-full-menu"),
+                                "Temivu",
+                                &mut self.menu_open,
+                                &theme,
+                            )
+                            .presentation(MenuPresentation::Drawer)
+                            .width(360.0)
+                            .show(
+                                &navigation,
+                                &items,
+                                &mut menu_selected,
+                            )
+                        {
+                            menu_choice = Some(destination);
+                        }
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let island = Button::new("", &theme)
+                                .variant(ButtonVariant::Ghost)
+                                .show(ui)
+                                .on_hover_text("Quick menu");
+                            for x in [-5.0, 0.0, 5.0] {
+                                ui.painter().circle_filled(
+                                    island.rect.center() + egui::vec2(x, 0.0),
+                                    1.5,
+                                    theme.foreground,
+                                );
+                            }
+                            ui.ctx().accesskit_node_builder(island.id, |node| {
+                                node.set_label("Quick menu");
+                            });
+                            if let Some(destination) = NavigationMenu::new(
+                                Id::new("demo-island-menu"),
+                                "Quick navigation",
+                                &mut self.island_open,
+                                &theme,
+                            )
+                            .presentation(MenuPresentation::Floating)
+                            .show(&island, &items, &mut menu_selected)
+                            {
+                                menu_choice = Some(destination);
+                            }
+                            let widgets = Button::new("Widgets", &theme)
+                                .variant(ButtonVariant::Ghost)
+                                .show(ui);
+                            if widgets.clicked() {
+                                open_gallery = Some(widgets.id);
+                            }
+                        });
+                    });
                 },
                 |_ui| {},
                 |ui| {
+                    // The floating Area anchors to the system safe rectangle. Reserve
+                    // space from the scroll area's unscrolled origin in the same coordinates.
+                    let header_bottom =
+                        ui.ctx().content_rect().top() + if theme.touch { 76.0 } else { 68.0 };
+                    let header_clearance = (header_bottom - ui.next_widget_position().y).max(0.0);
                     egui::ScrollArea::vertical()
                         .id_salt(
                             current
@@ -1991,6 +2072,7 @@ impl eframe::App for Showcase {
                                 .with(current == Page::Controls && self.state.show_motion_gallery),
                         )
                         .show(ui, |ui| {
+                            ui.add_space(header_clearance);
                             let width = ui.available_width().min(1040.0);
                             ui.horizontal(|ui| {
                                 ui.add_space(((ui.available_width() - width) / 2.0).max(0.0));
@@ -2009,7 +2091,6 @@ impl eframe::App for Showcase {
                                                 glass: &mut self.glass,
                                                 lighting: &mut self.lighting,
                                             },
-                                            self.locale,
                                             ui,
                                             &theme,
                                         ),
@@ -2019,12 +2100,7 @@ impl eframe::App for Showcase {
                                         }
                                         Page::Overlays => overlays(&mut self.state, ui, &theme),
                                         Page::Data => data(&mut self.state, ui, &theme),
-                                        Page::Localization => localization(
-                                            &mut self.state,
-                                            &mut self.locale,
-                                            ui,
-                                            &theme,
-                                        ),
+                                        Page::Localization => self.localization.show(ui, &theme),
                                     },
                                 );
                             });
@@ -2100,6 +2176,7 @@ fn main() -> eframe::Result {
     let data = arguments.iter().any(|argument| argument == "--data");
     let dark = arguments.iter().any(|argument| argument == "--dark");
     let glass_enabled = arguments.iter().any(|argument| argument == "--glass");
+    let light_enabled = arguments.iter().any(|argument| argument == "--light");
     let menu_open = arguments.iter().any(|argument| argument == "--menu");
     let island_open = arguments.iter().any(|argument| argument == "--island");
     let size = if mobile {
@@ -2131,9 +2208,14 @@ fn main() -> eframe::Result {
         Box::new(move |_| {
             let mut glass = glass_demo::GlassDemo::default();
             glass.enabled = glass_enabled;
+            let mut lighting = lighting_demo::LightingDemo::default();
+            if light_enabled {
+                lighting.enable_surfaces();
+            }
             Ok(Box::new(Showcase {
                 dark,
                 glass,
+                lighting,
                 menu_open,
                 island_open,
                 motion_preview,

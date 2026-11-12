@@ -153,6 +153,43 @@ fn stable_id_preserves_focus_when_a_preceding_sibling_appears() {
 }
 
 #[test]
+fn touch_field_paints_one_outline_at_the_same_bounds_after_focus() {
+    let mut harness = Harness::builder().build_ui(|ui| {
+        let mut theme = Theme::light().touch();
+        theme.motion.reduced_motion = true;
+        let mut value = String::new();
+        TextField::new(&mut value, &theme, "Name")
+            .radius(19)
+            .focus_stroke(egui::Stroke::new(3.0, egui::Color32::RED))
+            .show(ui);
+    });
+    harness.run();
+    let node = harness.get_by_role_and_label(egui::accesskit::Role::TextInput, "Name");
+    let bounds = node.rect();
+    assert!(bounds.height() >= 48.0);
+    node.focus();
+    harness.run();
+    let focused = harness.get_by_role_and_label(egui::accesskit::Role::TextInput, "Name");
+    assert_eq!(focused.rect(), bounds);
+    let outlines: Vec<_> = harness
+        .output()
+        .shapes
+        .iter()
+        .filter_map(|entry| match &entry.shape {
+            egui::Shape::Rect(rect) if rect.rect == bounds && rect.stroke.width > 0.0 => Some(rect),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(outlines.len(), 1);
+    assert_eq!(outlines[0].corner_radius.nw, 19);
+    assert_eq!(
+        outlines[0].stroke,
+        egui::Stroke::new(3.0, egui::Color32::RED)
+    );
+    assert_eq!(outlines[0].stroke_kind, egui::StrokeKind::Inside);
+}
+
+#[test]
 fn single_line_hint_and_value_share_the_configured_alignment() {
     let mut harness = Harness::builder()
         .with_size(egui::vec2(320.0, 240.0))

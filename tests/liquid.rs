@@ -221,15 +221,17 @@ fn droplet_join_tracks_the_trigger_and_panel_colors_in_both_directions() {
     };
 
     render(0.0, false);
-    let open = (1..=50).fold(false, |found, i| {
-        joined_colors(render(f64::from(i) / 120.0, true)) || found
-    });
+    let mut open = false;
+    for i in 1..=50 {
+        open |= joined_colors(render(f64::from(i) / 120.0, true));
+    }
     assert!(open, "opening must blend the button and popup in one mesh");
 
     render(1.0, true);
-    let close = (1..=50).fold(false, |found, i| {
-        joined_colors(render(1.0 + f64::from(i) / 120.0, false)) || found
-    });
+    let mut close = false;
+    for i in 1..=50 {
+        close |= joined_colors(render(1.0 + f64::from(i) / 120.0, false));
+    }
     assert!(close, "closing must blend back into the trigger");
 }
 

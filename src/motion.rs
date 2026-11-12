@@ -72,7 +72,8 @@ pub fn scale_around(pivot: egui::Pos2, scale: f32) -> egui::emath::TSTransform {
     }
 }
 
-pub(crate) fn spring_f32_with_damping(
+/// A spring with custom damping using the theme duration.
+pub fn spring_f32_with_damping(
     ctx: &Context,
     id: Id,
     initial: f32,
@@ -83,7 +84,8 @@ pub(crate) fn spring_f32_with_damping(
     spring_f32_with_settings(ctx, id, initial, target, damping, theme.motion)
 }
 
-pub(crate) fn spring_f32_with_settings(
+/// A spring with custom damping and duration that respects reduced motion.
+pub fn spring_f32_with_settings(
     ctx: &Context,
     id: Id,
     initial: f32,
@@ -304,13 +306,20 @@ pub(crate) fn press(ctx: &Context, id: Id, held: bool, clicked: bool, theme: &Th
     .clamp(-0.13, 1.06)
 }
 
-pub(crate) fn press_scale(amount: f32) -> f32 {
+/// Convert the shared press phase into its visual scale.
+pub fn press_scale(amount: f32) -> f32 {
     1.0 - 0.064 * amount
 }
 
-fn fractional_press_radius(rest: f32, amount: f32) -> f32 {
-    let compressed = (rest * 0.44).clamp(0.0, 13.0);
-    egui::lerp(rest..=compressed, amount.clamp(0.0, 1.0))
+fn fractional_press_radius(rest: f32, limit: f32, amount: f32) -> f32 {
+    let target = if rest == 0.0 {
+        0.0
+    } else if rest <= (limit * 0.57).min(12.0) {
+        limit * 0.9
+    } else {
+        (rest * 0.57).min(14.0)
+    };
+    egui::lerp(rest..=target, amount.clamp(0.0, 1.0))
 }
 
 /// Use egui's own rounded-rectangle path with subpixel corners while pressed.
@@ -327,13 +336,14 @@ pub(crate) fn press_shape(rect: egui::epaint::RectShape, amount: f32) -> egui::S
     )
 }
 
-pub(crate) fn press_corners(
+/// Interpolate the corner radii of a custom control using the shared press phase.
+pub fn press_corners(
     rect: egui::Rect,
     corners: egui::CornerRadius,
     amount: f32,
 ) -> egui::epaint::CornerRadiusF32 {
     let limit = (rect.size().min_elem() * 0.5).max(0.0);
-    let radius = |r| fractional_press_radius(f32::from(r).min(limit), amount);
+    let radius = |r| fractional_press_radius(f32::from(r).min(limit), limit, amount);
     egui::epaint::CornerRadiusF32 {
         nw: radius(corners.nw),
         ne: radius(corners.ne),
@@ -429,4 +439,22 @@ pub(crate) fn anchor_rect(response: &egui::Response) -> egui::Rect {
         .ctx
         .layer_transform_to_global(response.layer_id)
         .map_or(rect, |transform| transform * rect)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::press_corners;
+
+    #[test]
+    fn press_rounds_compact_corners_and_softens_capsules() {
+        let rect = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(120.0, 40.0));
+        for (radius, grows) in [(7, true), (20, false)] {
+            let resting = f32::from(radius);
+            let halfway = press_corners(rect, radius.into(), 0.5).nw;
+            let pressed = press_corners(rect, radius.into(), 1.0).nw;
+            assert!((pressed > resting) == grows);
+            assert_eq!(halfway, egui::lerp(resting..=pressed, 0.5));
+            assert!(pressed > 0.0 && pressed <= rect.height() * 0.5);
+        }
+    }
 }

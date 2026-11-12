@@ -377,7 +377,7 @@ impl<'a> DateField<'a> {
         };
         state.value = parsed;
 
-        let height = theme.sizes.field.md;
+        let height = theme.sizes.field.lg;
         let button_size = Vec2::splat(height);
         let spacing = ui.spacing().item_spacing.x;
         let edit_id = id.with("text");
@@ -397,15 +397,14 @@ impl<'a> DateField<'a> {
             ui.horizontal(|ui| {
                 let available = ui.available_width();
                 let edit_width = (available - button_size.x - spacing).max(0.0);
-                let edit = ui.add_enabled(
+                let edit = crate::text_field::show_native(
+                    ui,
+                    theme,
                     enabled,
                     egui::TextEdit::singleline(&mut state.text)
-                        .vertical_align(egui::Align::Center)
                         .hint_text(hint)
                         .id(edit_id)
-                        .margin(egui::Margin::symmetric(10, 8))
-                        .desired_width(edit_width)
-                        .min_size(Vec2::new(edit_width, height)),
+                        .desired_width(edit_width),
                 );
                 let button = crate::button::press_native(ui, theme, |ui| {
                     let button = ui.add_enabled(

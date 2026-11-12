@@ -157,10 +157,18 @@ fn zero_duration_never_exposes_a_toast() {
     assert!(harness.query_by_label("Invisible").is_none());
 }
 
+fn toast_radius() -> egui::CornerRadius {
+    temivu::SurfaceShape::Menu
+        .radius(egui::vec2(280.0, 160.0))
+        .into()
+}
+
 fn toast_card(harness: &Harness<'_, ToastState>) -> Option<(egui::Rect, egui::Color32)> {
     fn card(shape: &egui::Shape) -> Option<(egui::Rect, egui::Color32)> {
         match shape {
-            egui::Shape::Rect(rect) if rect.corner_radius.nw == 32 => Some((rect.rect, rect.fill)),
+            egui::Shape::Rect(rect) if rect.corner_radius == toast_radius() => {
+                Some((rect.rect, rect.fill))
+            }
             egui::Shape::Path(path) if path.fill != egui::Color32::TRANSPARENT => {
                 Some((egui::Rect::from_points(&path.points), path.fill))
             }
@@ -289,7 +297,9 @@ fn toast_uses_a_rounded_card_and_theme_typography() {
                 return None;
             };
             shapes.iter().find_map(|shape| match shape {
-                egui::Shape::Rect(rect) if rect.fill == card && rect.corner_radius.nw == 32 => {
+                egui::Shape::Rect(rect)
+                    if rect.fill == card && rect.corner_radius == toast_radius() =>
+                {
                     Some(rect.rect)
                 }
                 _ => None,

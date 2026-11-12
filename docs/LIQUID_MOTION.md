@@ -105,3 +105,30 @@ fn preview(ui: &mut egui::Ui, theme: &Theme, expanded: bool) {
 `motion::spring_size` remains available for layout-only changes. Press
 feedback, direct drag tracking and continuous indicators use their existing
 interaction motion.
+
+
+## Animate your own widget
+
+Use `LiquidStyle::progress` with a stable ID to drive a custom surface from
+the same reversible spring as a popup. Save `DropletAnchor::from_response`
+when the trigger toggles the surface so a new click or tap can set its origin.
+For a programmatic origin, use `DropletAnchor::new` with a rectangle and an
+optional horizontal contact fraction. `DropletAnchor::body` gives the animated
+body bounds and corner radii for your foreground or backdrop.
+
+```rust
+use temivu::{DropletAnchor, LiquidStyle, Theme};
+
+fn paint_panel(ui: &egui::Ui, origin: DropletAnchor, target: egui::Rect, open: bool, theme: &Theme) {
+    let style = LiquidStyle::droplet();
+    let phase = style.progress(ui.ctx(), ui.make_persistent_id("panel-motion"), open, theme);
+    let frame = egui::Frame::new().fill(theme.card).corner_radius(18);
+    origin.paint(ui.painter(), target, phase, frame, style);
+}
+```
+
+For press feedback use `motion_controls::press_amount` with the widget's
+response, then apply `motion::press_scale` and `motion::press_corners` to its
+paint. Keep the interaction bounds stable. `motion::spring_f32_with_settings`
+accepts a custom duration, damping, and reduced-motion preferences.
+See [Floating surfaces](FLOATING_SURFACES.md) for animated foreground placement.

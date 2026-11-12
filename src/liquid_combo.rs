@@ -8,6 +8,7 @@ pub(crate) struct LiquidCombo<'a> {
     width: f32,
     motion: Option<crate::liquid::LiquidStyle>,
     theme: Option<&'a crate::Theme>,
+    frame: Option<egui::Frame>,
 }
 pub(crate) struct ComboOutput {
     pub response: Response,
@@ -20,6 +21,7 @@ impl<'a> LiquidCombo<'a> {
             width,
             motion: None,
             theme: None,
+            frame: None,
         }
     }
     pub fn liquid(mut self, motion: Option<crate::liquid::LiquidStyle>) -> Self {
@@ -28,6 +30,10 @@ impl<'a> LiquidCombo<'a> {
     }
     pub fn theme(mut self, theme: Option<&'a crate::Theme>) -> Self {
         self.theme = theme;
+        self
+    }
+    pub fn frame(mut self, frame: Option<egui::Frame>) -> Self {
+        self.frame = frame;
         self
     }
     pub fn show_ui<R>(self, ui: &mut Ui, content: impl FnOnce(&mut Ui) -> R) -> ComboOutput {
@@ -101,7 +107,9 @@ impl<'a> LiquidCombo<'a> {
             crate::liquid::PopupSurface {
                 match_compact_trigger: false,
                 width: Some(response.rect.width()),
-                frame: crate::surface::popup_frame(&theme, 12),
+                frame: self
+                    .frame
+                    .unwrap_or_else(|| crate::surface::popup_frame(&theme, 12)),
                 motion: self
                     .motion
                     .unwrap_or_else(|| crate::liquid::LiquidStyle::context_default(ui.ctx())),

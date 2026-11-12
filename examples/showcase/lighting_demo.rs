@@ -1,14 +1,20 @@
 use egui::{Align2, Color32, CornerRadius, FontId, Rect, Sense, Stroke, StrokeKind, Ui, Vec2};
-use temivu::{Button, ButtonVariant, LightQuality, LightTracking, Slider, Switch, Theme, Vesper};
+use temivu::{
+    Button, ButtonVariant, EffectSurface, Glass, LightQuality, LightSpill, LightTracking, Slider,
+    Switch, Theme, Vesper,
+};
 
-const PEARL: Color32 = Color32::from_rgb(176, 193, 255);
-const AMBER: Color32 = Color32::from_rgb(255, 193, 145);
-const STAGE: Color32 = Color32::from_rgb(22, 27, 44);
-const INK: Color32 = Color32::from_rgb(228, 233, 251);
-const SECONDARY_INK: Color32 = Color32::from_rgb(166, 179, 216);
+const AMBER: Color32 = Color32::from_rgb(252, 219, 180);
+const STAGE: Color32 = Color32::from_gray(34);
+const INK: Color32 = Color32::from_gray(237);
 
 pub(super) struct LightingDemo {
     enabled: bool,
+    surfaces_enabled: bool,
+    spread_enabled: bool,
+    spill: LightSpill,
+    custom_text: String,
+    floating: bool,
     style: Vesper,
     switch_value: bool,
     stress: bool,
@@ -17,11 +23,14 @@ pub(super) struct LightingDemo {
 
 impl Default for LightingDemo {
     fn default() -> Self {
-        let mut style = Vesper::expressive();
-        style.color = Some(PEARL);
         Self {
             enabled: true,
-            style,
+            surfaces_enabled: false,
+            spread_enabled: true,
+            spill: LightSpill::default(),
+            custom_text: String::new(),
+            floating: false,
+            style: Vesper::expressive(),
             switch_value: false,
             stress: false,
             sweep_started: None,
@@ -30,29 +39,82 @@ impl Default for LightingDemo {
 }
 
 impl LightingDemo {
+    pub(super) fn enable_surfaces(&mut self) {
+        self.surfaces_enabled = true;
+    }
+
+    pub(super) fn surface_lighting(&self, touch: bool) -> Option<Vesper> {
+        self.surfaces_enabled.then_some(Vesper {
+            color: None,
+            quality: if touch && self.style.quality == LightQuality::Balanced {
+                LightQuality::Low
+            } else {
+                self.style.quality
+            },
+            ..self.preview_style()
+        })
+    }
+
+    fn preview_style(&self) -> Vesper {
+        Vesper {
+            spill: self.spread_enabled.then_some(self.spill),
+            ..self.style
+        }
+    }
+
     pub fn show(&mut self, ui: &mut Ui, theme: &Theme) {
         super::studio_panel(
             ui,
             theme,
             "Vesper lighting",
-            "A light that follows interaction, with a soft surface wash and a sharper contour.",
+            "A white highlight follows your touch, spreads across the surface and catches its edge.",
             |ui| {
                 Switch::new(&mut self.enabled, theme)
                     .label("Enable lighting preview")
                     .show(ui);
+                if Switch::new(&mut self.surfaces_enabled, theme)
+                    .label("Light interactive controls")
+                    .description("Apply Vesper to supported controls throughout Showcase")
+                    .show(ui)
+                    .changed()
+                {
+                    ui.ctx().request_repaint();
+                }
+                Switch::new(&mut self.spread_enabled, theme)
+                    .label("Spread light to nearby surfaces")
+                    .description("Turn off sharing while keeping the local highlight")
+                    .show(ui);
                 self.surface(ui, theme);
+                ui.add_space(12.0);
+                self.neighbors(ui, theme);
+                ui.add_space(12.0);
+                let glass = Glass::context(ui.ctx());
+                let lighting = self.enabled.then(|| self.preview_style());
+                EffectSurface::new(theme)
+                    .id_salt("custom-effect-surface")
+                    .glass(glass)
+                    .lighting(lighting)
+                    .show(ui, |ui| {
+                        ui.label("Your own content, the same material");
+                        ui.label("Glass and lighting also work around ordinary egui content.");
+                        ui.add(
+                            egui::TextEdit::singleline(&mut self.custom_text)
+                                .hint_text("Try a custom field")
+                                .desired_width(ui.available_width()),
+                        );
+                    });
+                ui.add_space(8.0);
+                self.floating_preview(ui, theme, glass, lighting);
                 ui.add_space(8.0);
                 ui.horizontal_wrapped(|ui| {
-                    Button::new("Lit action", theme)
-                        .lighting(self.enabled.then_some(self.style))
-                        .show(ui);
+                    Button::new("Lit action", theme).lighting(lighting).show(ui);
                     Button::new("Without lighting", theme)
                         .variant(ButtonVariant::Outline)
                         .lighting(None)
                         .show(ui);
                     Switch::new(&mut self.switch_value, theme)
                         .label("Lit switch")
-                        .lighting(self.enabled.then_some(self.style))
+                        .lighting(lighting)
                         .show(ui);
                 });
                 ui.add_space(12.0);
@@ -68,6 +130,46 @@ impl LightingDemo {
                 } else {
                     self.sweep_started = None;
                 }
+            },
+        );
+    }
+
+    fn floating_preview(
+        &mut self,
+        ui: &mut Ui,
+        theme: &Theme,
+        glass: Option<Glass>,
+        light: Option<Vesper>,
+    ) {
+        if Button::new("Launch floating preview", theme)
+            .variant(ButtonVariant::Outline)
+            .show(ui)
+            .clicked()
+        {
+            self.floating = !self.floating;
+        }
+        let id = ui.make_persistent_id("custom-flight");
+        let surface = EffectSurface::new(theme)
+            .elevated()
+            .glass(glass)
+            .lighting(light);
+        temivu::FloatingMotion::flight(egui::vec2(-54.0, 34.0)).show(
+            ui.ctx(),
+            id,
+            (Align2::RIGHT_TOP, egui::vec2(-16.0, 90.0)),
+            self.floating,
+            surface,
+            |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Floating preview");
+                    if Button::new("Close", theme)
+                        .variant(ButtonVariant::Ghost)
+                        .show(ui)
+                        .clicked()
+                    {
+                        self.floating = false;
+                    }
+                })
             },
         );
     }
@@ -103,47 +205,129 @@ impl LightingDemo {
         };
         let surface = rect.scale_from_center(1.0 - 0.016 * press);
         let corners = CornerRadius::same(24);
+        let fill = if theme.dark {
+            STAGE
+        } else {
+            Color32::from_gray(250)
+        };
+        let text = if theme.dark { INK } else { theme.foreground };
         let painter = ui.painter();
         painter.rect(
             surface,
             corners,
-            STAGE,
-            Stroke::new(1.0, Color32::from_rgb(52, 62, 88)),
+            fill,
+            Stroke::new(1.0, theme.border),
             StrokeKind::Inside,
         );
         if self.enabled {
-            self.style
-                .paint(painter, theme, &response, surface, corners);
+            self.preview_style()
+                .paint_on(painter, theme, &response, surface, corners, fill);
         }
 
-        let center = surface.center() - egui::vec2(0.0, 11.0);
-        let mark_radius = 24.0 - press * 2.0;
-        for scale in [1.0, 1.34, 1.70] {
-            painter.circle_stroke(
-                center,
-                mark_radius * scale,
-                Stroke::new(
-                    0.85,
-                    SECONDARY_INK.gamma_multiply(0.34 - 0.13 * (scale - 1.0)),
-                ),
-            );
-        }
-        painter.circle_filled(center, 3.2, INK);
         painter.text(
-            center + egui::vec2(0.0, 55.0),
+            surface.center(),
             Align2::CENTER_CENTER,
-            "Hover, press or drag",
+            "Hover, hold or drag",
             FontId::proportional(13.0),
-            INK,
+            text,
         );
         if response.has_focus() {
             painter.rect_stroke(
                 surface.shrink(3.0),
                 22,
-                Stroke::new(1.5, INK),
+                Stroke::new(1.5, text),
                 StrokeKind::Inside,
             );
         }
+    }
+
+    fn neighbors(&self, ui: &mut Ui, theme: &Theme) {
+        ui.label(egui::RichText::new("Connected surfaces").strong());
+        ui.label("Move across the dark tile. Nearby edges catch the same light.");
+        let (stage, _) =
+            ui.allocate_exact_size(egui::vec2(ui.available_width(), 192.0), Sense::hover());
+        if !ui.is_rect_visible(stage) {
+            return;
+        }
+        let painter = ui.painter();
+        let base = if theme.dark {
+            Color32::from_gray(22)
+        } else {
+            Color32::from_gray(225)
+        };
+        painter.rect_filled(stage, 20, base);
+        let style = self.preview_style();
+        if self.enabled {
+            style.receive(
+                painter,
+                theme,
+                ui.id().with("lit-environment"),
+                stage,
+                20.into(),
+                base,
+            );
+        }
+        let inner = stage.shrink(14.0);
+        let gap = 12.0;
+        let left_width = ((inner.width() - gap) * 0.48).max(1.0);
+        let emitter = Rect::from_min_size(inner.min, egui::vec2(left_width, inner.height()));
+        let right = Rect::from_min_max(egui::pos2(emitter.right() + gap, inner.top()), inner.max);
+        // Register the receiving objects first to demonstrate same-frame sharing
+        // independent of the source's drawing order.
+        for (index, (label, fill)) in [
+            ("Nearby card", Color32::from_gray(248)),
+            ("Another object", Color32::from_gray(72)),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let height = (right.height() - gap) * 0.5;
+            let rect = Rect::from_min_size(
+                right.min + egui::vec2(0.0, index as f32 * (height + gap)),
+                egui::vec2(right.width(), height),
+            );
+            painter.rect_filled(rect, 16, fill);
+            if self.enabled {
+                style.receive(
+                    painter,
+                    theme,
+                    ui.id().with(("neighbor", index)),
+                    rect,
+                    16.into(),
+                    fill,
+                );
+            }
+            painter.text(
+                rect.center(),
+                Align2::CENTER_CENTER,
+                label,
+                FontId::proportional(if right.width() < 150.0 { 11.0 } else { 14.0 }),
+                if index == 0 {
+                    Color32::from_gray(30)
+                } else {
+                    INK
+                },
+            );
+        }
+        let response = ui.interact(
+            emitter,
+            ui.id().with("spill-source"),
+            Sense::click_and_drag(),
+        );
+        response.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Shared light source")
+        });
+        painter.rect_filled(emitter, 20, STAGE);
+        if self.enabled {
+            style.paint_on(painter, theme, &response, emitter, 20.into(), STAGE);
+        }
+        painter.text(
+            emitter.center(),
+            Align2::CENTER_CENTER,
+            "Move the light",
+            FontId::proportional(13.0),
+            INK,
+        );
     }
 
     fn settings(&mut self, ui: &mut Ui, theme: &Theme) {
@@ -155,7 +339,6 @@ impl LightingDemo {
                 .clicked()
             {
                 self.style = Vesper::subtle();
-                self.style.color = Some(PEARL);
             }
             if Button::new("Expressive", theme)
                 .variant(ButtonVariant::Outline)
@@ -163,7 +346,6 @@ impl LightingDemo {
                 .clicked()
             {
                 self.style = Vesper::expressive();
-                self.style.color = Some(AMBER);
             }
         });
         ui.horizontal_wrapped(|ui| {
@@ -192,9 +374,9 @@ impl LightingDemo {
         });
         ui.horizontal_wrapped(|ui| {
             ui.label("Color");
-            for (color, label) in [(PEARL, "Pearl"), (AMBER, "Amber")] {
-                if option(ui, theme, label, self.style.color == Some(color)) {
-                    self.style.color = Some(color);
+            for (color, label) in [(None, "White"), (Some(AMBER), "Warm")] {
+                if option(ui, theme, label, self.style.color == color) {
+                    self.style.color = color;
                 }
             }
         });
@@ -214,6 +396,22 @@ impl LightingDemo {
             }
         });
         ui.add_space(8.0);
+        if self.spread_enabled {
+            normalized(
+                ui,
+                theme,
+                "Light spread reach",
+                &mut self.spill.radius,
+                48.0..=280.0,
+            );
+            normalized(
+                ui,
+                theme,
+                "Light spread strength",
+                &mut self.spill.intensity,
+                0.0..=1.0,
+            );
+        }
         normalized(
             ui,
             theme,
@@ -363,7 +561,7 @@ mod tests {
     #[test]
     fn lighting_studio_controls_work_in_a_narrow_viewport() {
         let mut harness = Harness::builder()
-            .with_size(egui::vec2(390.0, 1600.0))
+            .with_size(egui::vec2(390.0, 2400.0))
             .build_ui_state(
                 |ui, demo: &mut LightingDemo| demo.show(ui, &Theme::light().touch()),
                 LightingDemo::default(),

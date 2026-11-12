@@ -5,7 +5,7 @@ pub(crate) fn popup_frame(theme: &Theme, padding: i8) -> egui::Frame {
     egui::Frame::new()
         .fill(theme.card)
         .stroke(egui::Stroke::new(1.0, theme.border))
-        .corner_radius(32)
+        .corner_radius(crate::SurfaceShape::Menu.radius(egui::vec2(280.0, 160.0)))
         .inner_margin(padding)
         .shadow(egui::epaint::Shadow {
             offset: [0, 6],

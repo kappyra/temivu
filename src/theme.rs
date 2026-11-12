@@ -12,6 +12,32 @@ use egui::{Color32, FontId, TextStyle as EguiTextStyle};
 
 use crate::tokens::{Breakpoints, Sizes};
 
+/// Corner rules shared by Temivu controls and floating surfaces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SurfaceShape {
+    Control,
+    Field,
+    Card,
+    Menu,
+    Panel,
+}
+
+impl SurfaceShape {
+    /// Select a radius for a surface size in logical points. Narrow surfaces
+    /// use more of their available curvature than large content containers.
+    pub fn radius(self, size: egui::Vec2) -> u8 {
+        let half_side = (size.min_elem() * 0.5).max(0.0);
+        let radius = match self {
+            Self::Control => half_side,
+            Self::Field => half_side.min(26.0),
+            Self::Card => (half_side * 0.58).min(18.0),
+            Self::Menu => (half_side * 0.62).min(18.0),
+            Self::Panel => (half_side * 0.50).min(20.0),
+        };
+        radius.round() as u8
+    }
+}
+
 /// Logical font weights used by Forui's semantic text styles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FontWeight {

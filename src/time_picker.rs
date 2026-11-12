@@ -326,6 +326,16 @@ pub struct TimePickerResponse {
     pub changed: bool,
 }
 
+/// Presentation used to edit the same caller-owned time.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum TimePickerLayout {
+    /// Scrollable wheels with keyboard navigation.
+    #[default]
+    Wheels,
+    /// Numeric fields with separate touch-friendly decrement and increment controls.
+    Stepper,
+}
+
 /// An hour/minute(/second) wheel picker bound to caller-owned [`Time`] state.
 ///
 /// ```
@@ -348,6 +358,7 @@ pub struct TimePicker<'a> {
     sizes: Sizes,
     enabled: bool,
     id: Option<Id>,
+    layout: TimePickerLayout,
 }
 
 impl<'a> TimePicker<'a> {
@@ -361,6 +372,7 @@ impl<'a> TimePicker<'a> {
             sizes: Sizes::desktop(),
             enabled: true,
             id: None,
+            layout: TimePickerLayout::Wheels,
         }
     }
 
@@ -394,7 +406,13 @@ impl<'a> TimePicker<'a> {
         self
     }
 
-    /// Draw the wheels and return their responses.
+    /// Choose the wheel or stepper presentation.
+    pub fn layout(mut self, layout: TimePickerLayout) -> Self {
+        self.layout = layout;
+        self
+    }
+
+    /// Draw the time controls and return their responses.
     pub fn show(self, ui: &mut Ui) -> TimePickerResponse {
         let Self {
             time,
@@ -404,9 +422,55 @@ impl<'a> TimePicker<'a> {
             sizes,
             enabled,
             id,
+            layout,
         } = self;
         let id = id.unwrap_or_else(|| ui.next_auto_id().with("temivu-time-picker"));
         ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
+            if layout == TimePickerLayout::Stepper {
+                let before = *time;
+                let mut values = [time.hour(), time.minute(), time.second()];
+                let units = [labels.hour, labels.minute, labels.second];
+                let count = if show_seconds { 3 } else { 2 };
+                let inner = ui.scope(|ui| {
+                    let mut draw = |ui: &mut Ui, index: usize| {
+                        stepper(
+                            ui,
+                            theme,
+                            units[index],
+                            &mut values[index],
+                            if index == 0 { 23 } else { 59 },
+                            enabled,
+                        )
+                    };
+                    if ui.available_width() < count as f32 * 70.0 {
+                        let hour = draw(ui, 0);
+                        let minute = draw(ui, 1);
+                        let second = show_seconds.then(|| draw(ui, 2));
+                        (hour, minute, second)
+                    } else {
+                        ui.columns(count, |columns| {
+                            let hour = draw(&mut columns[0], 0);
+                            let minute = draw(&mut columns[1], 1);
+                            let second = show_seconds.then(|| draw(&mut columns[2], 2));
+                            (hour, minute, second)
+                        })
+                    }
+                });
+                *time = Time {
+                    hour: values[0],
+                    minute: values[1],
+                    second: values[2],
+                };
+                return time_picker_response(
+                    ui,
+                    inner,
+                    labels,
+                    *time,
+                    show_seconds,
+                    enabled,
+                    *time != before,
+                );
+            }
             // A picker's focusable wheel response uses its own ID with the
             // "wheel" salt; the IDs below are the picker IDs.
             let hour_id = id.with("hour");
@@ -493,8 +557,6 @@ impl<'a> TimePicker<'a> {
                     second.map(|second| second.response),
                 )
             });
-            let mut response = inner.response;
-            let (hour_response, minute_response, second_response) = inner.inner;
             let mut changed = false;
 
             if let Some(hour) = index_of(hours(), &hour_selection)
@@ -526,28 +588,98 @@ impl<'a> TimePicker<'a> {
                 ui.memory_mut(|memory| memory.request_focus(target));
                 ui.ctx().request_repaint();
             }
-            ui.ctx().accesskit_node_builder(response.id, |node| {
-                node.set_role(egui::accesskit::Role::Group);
-                node.set_label(labels.group);
-                node.set_value(format_time(*time, show_seconds));
-                node.set_bounds(accesskit_rect(response.rect));
-                if !enabled {
-                    node.set_disabled();
-                }
-            });
-            if changed {
-                response.mark_changed();
-            }
-            TimePickerResponse {
-                response,
-                hour: hour_response,
-                minute: minute_response,
-                second: second_response,
-                changed,
-            }
+            time_picker_response(ui, inner, labels, *time, show_seconds, enabled, changed)
         })
         .inner
     }
+}
+
+fn time_picker_response(
+    ui: &Ui,
+    inner: egui::InnerResponse<(Response, Response, Option<Response>)>,
+    labels: TimePickerLabels<'_>,
+    time: Time,
+    show_seconds: bool,
+    enabled: bool,
+    changed: bool,
+) -> TimePickerResponse {
+    let mut response = inner.response;
+    let (hour, minute, second) = inner.inner;
+    ui.ctx().accesskit_node_builder(response.id, |node| {
+        node.set_role(egui::accesskit::Role::Group);
+        node.set_label(labels.group);
+        node.set_value(format_time(time, show_seconds));
+        node.set_bounds(accesskit_rect(response.rect));
+        if !enabled {
+            node.set_disabled();
+        }
+    });
+    if changed {
+        response.mark_changed();
+    }
+    TimePickerResponse {
+        response,
+        hour,
+        minute,
+        second,
+        changed,
+    }
+}
+
+fn stepper(
+    ui: &mut Ui,
+    theme: &Theme,
+    unit: &str,
+    value: &mut u8,
+    max: u8,
+    enabled: bool,
+) -> Response {
+    ui.vertical_centered(|ui| {
+        ui.label(
+            egui::RichText::new(unit)
+                .size(theme.typography.caption.size)
+                .color(theme.muted_foreground),
+        );
+        let input = if theme.touch {
+            crate::InputMode::Touch
+        } else {
+            crate::InputMode::Desktop
+        };
+        let change = |ui: &mut Ui, symbol: &str, can_change| {
+            let response = crate::Button::new(symbol, theme)
+                .variant(crate::ButtonVariant::Secondary)
+                .size(crate::ButtonSize::Small)
+                .input_mode(input)
+                .enabled(enabled && can_change)
+                .show(ui);
+            ui.ctx().accesskit_node_builder(response.id, |node| {
+                node.set_label(format!("{unit} {symbol}"));
+            });
+            response.clicked()
+        };
+        if change(ui, "+", *value < max) {
+            *value += 1;
+        }
+        let response = ui
+            .scope(|ui| {
+                ui.spacing_mut().interact_size =
+                    egui::vec2(48.0, if theme.touch { 44.0 } else { 36.0 });
+                ui.add_enabled(
+                    enabled,
+                    egui::DragValue::new(value)
+                        .range(0..=max)
+                        .custom_formatter(|n, _| format!("{n:02.0}")),
+                )
+            })
+            .inner;
+        ui.ctx()
+            .accesskit_node_builder(response.id, |node| node.set_label(unit));
+        if change(ui, "−", *value > 0) {
+            *value -= 1;
+        }
+        response
+    })
+    .inner
 }
 
 fn separator(ui: &mut Ui) {

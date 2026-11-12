@@ -2,7 +2,29 @@ use egui_kittest::{
     Harness,
     kittest::{NodeT, Queryable},
 };
+use temivu::time_picker::TimePickerLayout;
 use temivu::{Theme, Time, TimePicker, TimePickerLabels};
+
+#[test]
+fn stepper_edits_units_independently_and_respects_limits() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(280.0, 400.0))
+        .build_ui_state(
+            |ui, time: &mut Time| {
+                TimePicker::new(time, &Theme::light())
+                    .seconds(true)
+                    .layout(TimePickerLayout::Stepper)
+                    .show(ui);
+            },
+            Time::with_seconds(23, 31, 0).unwrap(),
+        );
+    harness.run();
+    harness.get_by_label("Hour +").click();
+    harness.get_by_label("Minute −").click();
+    harness.get_by_label("Second +").click();
+    harness.run();
+    assert_eq!(*harness.state(), Time::with_seconds(23, 30, 1).unwrap());
+}
 
 #[test]
 fn keyboard_changes_time_and_announces_wheel_values() {

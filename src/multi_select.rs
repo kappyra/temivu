@@ -21,6 +21,7 @@ pub struct MultiSelect<'a> {
     search_hint: &'a str,
     no_results: &'a str,
     count_summary: Option<&'a dyn Fn(usize) -> String>,
+    menu_frame: Option<egui::Frame>,
 }
 
 impl<'a> MultiSelect<'a> {
@@ -43,6 +44,7 @@ impl<'a> MultiSelect<'a> {
             search_hint: "Search",
             no_results: "No results",
             count_summary: None,
+            menu_frame: None,
         }
     }
 
@@ -53,6 +55,12 @@ impl<'a> MultiSelect<'a> {
     }
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    /// Override the dropdown's corners, colors, padding and shadow.
+    pub fn menu_frame(mut self, frame: egui::Frame) -> Self {
+        self.menu_frame = Some(frame);
         self
     }
 
@@ -142,6 +150,7 @@ impl<'a> MultiSelect<'a> {
                 let just_opened = !was_open;
                 crate::liquid_combo::LiquidCombo::new(id, &summary, width)
                     .liquid(self.liquid)
+                    .frame(self.menu_frame)
                     .show_ui(ui, |ui| {
                         let mut query = if self.searchable {
                             ui.ctx().data(|data| {

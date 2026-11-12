@@ -20,6 +20,12 @@ It is copyright 2020 The Inter Project Authors and remains under SIL Open Font
 License 1.1. The [copyright and full license](third_party/inter/OFL.txt) are
 included with the font.
 
+## Showcase script fonts
+
+Showcase embeds renamed, reduced glyph sets for its Japanese, Simplified Chinese,
+and Arabic previews. The [source credits and SIL Open Font License 1.1 texts](third_party/showcase-fonts/)
+accompany the subsets and are included in the Android package.
+
 ## egui default fonts
 
 The locked dependency `epaint_default_fonts` 0.36.2 bundles Hack, Noto Emoji, Ubuntu Light and an emoji icon font. Its font license and attribution text files are reproduced in `third_party/egui-fonts/` from the published crate. These fonts are subject to their own terms; they are not relicensed as MIT. The complete transitive dependency and asset notice review is still outstanding.

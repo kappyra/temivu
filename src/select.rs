@@ -37,6 +37,7 @@ pub struct Select<'a> {
     no_results: &'a str,
     width: Option<f32>,
     theme: Option<&'a crate::Theme>,
+    menu_frame: Option<egui::Frame>,
 }
 impl<'a> Select<'a> {
     pub fn new(
@@ -59,6 +60,7 @@ impl<'a> Select<'a> {
             no_results: "No results",
             width: None,
             theme: None,
+            menu_frame: None,
         }
     }
     /// Configure popup motion and trigger separation without replacing egui input.
@@ -73,6 +75,11 @@ impl<'a> Select<'a> {
     /// Apply the library's semantic colors to this control and its popup.
     pub fn theme(mut self, theme: &'a crate::Theme) -> Self {
         self.theme = Some(theme);
+        self
+    }
+    /// Override the dropdown's corners, colors, padding and shadow.
+    pub fn menu_frame(mut self, frame: egui::Frame) -> Self {
+        self.menu_frame = Some(frame);
         self
     }
     /// Set a preferred width in logical points; it is capped by available space.
@@ -177,6 +184,7 @@ impl<'a> Select<'a> {
                 crate::liquid_combo::LiquidCombo::new(id, current, width)
                     .liquid(self.liquid)
                     .theme(self.theme)
+                    .frame(self.menu_frame)
                     .show_ui(ui, |ui| {
                         let mut query = if self.searchable {
                             ui.ctx().data(|data| {

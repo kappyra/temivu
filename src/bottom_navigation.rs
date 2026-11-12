@@ -1,5 +1,5 @@
 //! Preliminary bottom navigation; icons, localized position semantics and parity remain open.
-use crate::Theme;
+use crate::{Theme, Vesper};
 use egui::{Color32, Id, Painter, Rect, RichText, Ui};
 
 /// Draw an icon inside the supplied rectangle using the current foreground.
@@ -185,10 +185,11 @@ pub struct FloatingNavigation<'a> {
     theme: &'a Theme,
     frame: Option<egui::Frame>,
     select_on_drag: bool,
+    lighting: Option<Option<Vesper>>,
 }
 
 impl<'a> FloatingNavigation<'a> {
-    pub const BOTTOM_CLEARANCE: f32 = 84.0;
+    pub const BOTTOM_CLEARANCE: f32 = 92.0;
 
     pub fn new(id: Id, theme: &'a Theme) -> Self {
         Self {
@@ -196,6 +197,7 @@ impl<'a> FloatingNavigation<'a> {
             theme,
             frame: None,
             select_on_drag: false,
+            lighting: None,
         }
     }
 
@@ -209,6 +211,12 @@ impl<'a> FloatingNavigation<'a> {
     /// When the destinations overflow, dragging is reserved for scrolling the bar.
     pub fn select_on_drag(mut self, enabled: bool) -> Self {
         self.select_on_drag = enabled;
+        self
+    }
+
+    /// Override the inherited Vesper material for dock destinations.
+    pub fn lighting(mut self, lighting: Option<Vesper>) -> Self {
+        self.lighting = Some(lighting);
         self
     }
 
@@ -238,15 +246,21 @@ impl<'a> FloatingNavigation<'a> {
         });
         let ctx = ui.ctx();
         let glass = crate::Glass::context(ctx);
+        let lighting = self.lighting.unwrap_or_else(|| Vesper::context(ctx));
         let mut frame = crate::glass::floating_frame(ctx, theme, frame);
         if glass.is_some() && self.frame.is_none() {
             frame.shadow.offset = [0, 4];
             frame.shadow.blur = 15;
         }
-        let max_slot = if glass.is_some() { 88.0 } else { 110.0 };
-        let width = (ctx.content_rect().width() - 24.0 - frame.total_margin().sum().x)
+        let viewport = ctx.content_rect();
+        let max_slot = if glass.is_some() { 90.0 } else { 104.0 };
+        let margin = (viewport.width() * 0.038).clamp(8.0, 20.0);
+        let width = (viewport.width() - 2.0 * margin - frame.total_margin().sum().x)
             .clamp(1.0, 5.0 * max_slot);
-        let slot = (width / items.len() as f32).clamp(48.0, max_slot);
+        let slot = (width / items.len() as f32)
+            .clamp(48.0, max_slot)
+            .min(width);
+        let icon_only = slot < 61.0;
         let active_fill = if glass.is_some() {
             theme
                 .foreground
@@ -297,8 +311,16 @@ impl<'a> FloatingNavigation<'a> {
             } else {
                 None
             };
-            let preview = drag_target.or(active);
-            if let Some(preview) = preview {
+            let pressed = items.iter().position(|item| {
+                item.enabled
+                    && ctx
+                        .read_response(self.id.with(item.id))
+                        .is_some_and(|response| response.is_pointer_button_down_on())
+            });
+            let preview = drag_target.or(pressed).or(active);
+            let indicator_slot = ui.painter().add(egui::Shape::Noop);
+            let light_slot = lighting.map(|_| ui.painter().add(egui::Shape::Noop));
+            let indicator = preview.map(|preview| {
                 let target = visual_index(preview) as f32;
                 let position = crate::motion::spring_f32(
                     ctx,
@@ -308,17 +330,14 @@ impl<'a> FloatingNavigation<'a> {
                     theme,
                 )
                 .clamp(0.0, (items.len() - 1) as f32);
-                let indicator = Rect::from_min_size(
+                Rect::from_min_size(
                     row.min + egui::vec2(slot * position, 0.0),
                     egui::vec2(slot, row.height()),
                 )
-                .shrink2(if glass.is_some() {
-                    egui::vec2(5.0, 4.0)
-                } else {
-                    egui::Vec2::splat(2.0)
-                });
-                ui.painter().rect_filled(indicator, 255, active_fill);
-            }
+                .shrink2(egui::vec2(if glass.is_some() { 4.0 } else { 2.0 }, 3.0))
+            });
+            let mut indicator_press = if drag_target.is_some() { 0.35 } else { 0.0 };
+            let mut light = None;
             let mut clicked = None;
             for (index, item) in items.iter().enumerate() {
                 let rect = Rect::from_min_size(
@@ -348,23 +367,43 @@ impl<'a> FloatingNavigation<'a> {
                     inactive_ink
                 };
                 let press = crate::motion_controls::press_amount(&response, theme);
-                if press > 0.001 && preview == Some(index) {
-                    let pressed_fill = if glass.is_some() {
-                        theme.foreground.gamma_multiply(0.12)
+                if preview == Some(index) {
+                    indicator_press = f32::max(indicator_press, press);
+                }
+                if let Some(style) = lighting {
+                    let surface = if preview == Some(index) {
+                        indicator.map(|rect| dock_indicator(rect, indicator_press))
                     } else {
-                        theme.hover(active_fill)
+                        None
                     };
-                    let surface = rect
-                        .shrink(3.0)
-                        .scale_from_center(crate::motion::press_scale(press));
-                    ui.painter().add(crate::motion::press_shape(
-                        egui::epaint::RectShape::filled(
+                    let (surface, radius) = surface.unwrap_or((rect.shrink(5.0), 20));
+                    if let Some(shape) = style.interactive_shape(
+                        ui.painter(),
+                        theme,
+                        &response,
+                        surface,
+                        f32::from(radius).into(),
+                    ) {
+                        // At most the hovered destination and the focused one
+                        // can produce lighting. The hovered light takes priority.
+                        if light.is_none() || response.hovered() {
+                            light = Some(shape);
+                        }
+                    }
+                    if enabled {
+                        crate::lighting::spill::receive(
+                            ui.painter(),
+                            response.id,
                             surface,
-                            24,
-                            pressed_fill.gamma_multiply(press.clamp(0.0, 1.0)),
-                        ),
-                        press,
-                    ));
+                            f32::from(radius).into(),
+                            &style,
+                            theme.secondary,
+                            theme.card,
+                        );
+                    }
+                }
+                if scrolls && response.gained_focus() {
+                    response.scroll_to_me(None);
                 }
                 if response.has_focus() {
                     ui.painter().rect_stroke(
@@ -374,7 +413,8 @@ impl<'a> FloatingNavigation<'a> {
                         egui::StrokeKind::Inside,
                     );
                 }
-                let icon_y = rect.center().y - 7.0;
+                let compact = icon_only && item.icon.is_some();
+                let icon_y = rect.center().y - if compact { 0.0 } else { 7.0 };
                 let label_y = if let Some(icon) = item.icon {
                     let size = 20.0 - 2.5 * press;
                     icon(
@@ -389,23 +429,36 @@ impl<'a> FloatingNavigation<'a> {
                 } else {
                     rect.center().y
                 };
-                let mut job = egui::text::LayoutJob::simple(
-                    item.label.to_owned(),
-                    egui::FontId::proportional(10.5),
-                    color,
-                    (slot - 8.0).max(1.0),
-                );
-                job.wrap.max_rows = 1;
-                job.wrap.break_anywhere = true;
-                let label = ui.painter().layout_job(job);
-                ui.painter().galley(
-                    egui::pos2(rect.center().x, label_y) - label.size() * 0.5,
-                    label,
-                    color,
-                );
+                if !compact {
+                    let mut job = egui::text::LayoutJob::simple(
+                        item.label.to_owned(),
+                        egui::FontId::proportional(11.0),
+                        color,
+                        (slot - 6.0).max(1.0),
+                    );
+                    job.wrap.max_rows = 1;
+                    job.wrap.break_anywhere = true;
+                    let label = ui.painter().layout_job(job);
+                    ui.painter().galley(
+                        egui::pos2(rect.center().x, label_y) - label.size() * 0.5,
+                        label,
+                        color,
+                    );
+                }
+                response.clone().on_hover_text(item.label);
                 if enabled && response.clicked() {
                     clicked = Some(item.id);
                 }
+            }
+            if let Some(indicator) = indicator {
+                let (surface, radius) = dock_indicator(indicator, indicator_press);
+                ui.painter().set(
+                    indicator_slot,
+                    egui::epaint::RectShape::filled(surface, radius, active_fill),
+                );
+            }
+            if let (Some(slot), Some(light)) = (light_slot, light) {
+                ui.painter().set(slot, light);
             }
             if released && let Some(index) = drag_target {
                 Some(items[index].id)
@@ -413,13 +466,19 @@ impl<'a> FloatingNavigation<'a> {
                 clicked
             }
         };
+        let bottom_gap = if viewport.width() < 520.0 { 16.0 } else { 12.0 };
         let next = egui::Area::new(self.id)
-            .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -12.0))
+            .anchor(egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -bottom_gap))
             .order(egui::Order::Middle)
             .fade_in(false)
             .show(ctx, |ui| {
                 if glass.is_some() && ui.is_visible() {
-                    paint_scroll_edge(ui.painter(), ctx.content_rect(), theme.background);
+                    paint_scroll_edge(
+                        ui.painter(),
+                        ctx.viewport_rect(),
+                        viewport,
+                        theme.background,
+                    );
                 }
                 crate::glass::show_frame(
                     ui,
@@ -433,6 +492,7 @@ impl<'a> FloatingNavigation<'a> {
                             ui.set_width(width);
                             egui::ScrollArea::horizontal()
                                 .max_width(width)
+                                .auto_shrink([false, true])
                                 .scroll_bar_visibility(
                                     egui::scroll_area::ScrollBarVisibility::AlwaysHidden,
                                 )
@@ -465,30 +525,51 @@ impl<'a> FloatingNavigation<'a> {
     }
 }
 
+fn dock_indicator(rect: Rect, press: f32) -> (Rect, u8) {
+    let press = press.clamp(0.0, 1.0);
+    let surface = Rect::from_center_size(
+        rect.center(),
+        rect.size() * egui::vec2(1.0 - 0.085 * press, 1.0 - 0.04 * press),
+    );
+    let radius = (surface.size().min_elem() * (0.5 - 0.14 * press))
+        .max(0.0)
+        .round() as u8;
+    (surface, radius)
+}
+
 // Paint only. The fade sits beneath the dock's backdrop pass and never captures input.
-fn paint_scroll_edge(painter: &egui::Painter, viewport: Rect, background: Color32) {
-    let depth = viewport.height().min(112.0);
+fn paint_scroll_edge(painter: &egui::Painter, viewport: Rect, safe: Rect, background: Color32) {
+    if !viewport.is_positive() {
+        return;
+    }
+    // Finish the fade above the safe edge and carry the same color to the
+    // actual window edge, including any area beneath the OS gesture control.
+    let end = (safe.bottom() - 8.0).clamp(viewport.top(), viewport.bottom());
+    let depth = (end - viewport.top()).min(104.0);
     if depth <= 0.0 {
         return;
     }
     let mut mesh = egui::Mesh::default();
-    for (distance, opacity) in [
-        (1.0, 0.0),
-        (0.75, 0.06),
-        (0.50, 0.28),
-        (0.25, 0.63),
-        (0.0, 0.91),
-    ] {
-        let y = viewport.bottom() - depth * distance;
+    let mut row = |y, opacity| {
         let color = background.gamma_multiply(opacity);
         mesh.colored_vertex(egui::pos2(viewport.left(), y), color);
         mesh.colored_vertex(egui::pos2(viewport.right(), y), color);
+    };
+    for (distance, opacity) in [
+        (1.0, 0.0),
+        (0.75, 0.04),
+        (0.50, 0.18),
+        (0.25, 0.46),
+        (0.0, 1.0),
+    ] {
+        row(end - depth * distance, opacity);
     }
-    for top in [0, 2, 4, 6] {
+    row(viewport.bottom(), 1.0);
+    for top in [0, 2, 4, 6, 8] {
         mesh.add_triangle(top, top + 1, top + 2);
         mesh.add_triangle(top + 1, top + 3, top + 2);
     }
-    painter
-        .with_clip_rect(viewport)
-        .add(egui::Shape::mesh(mesh));
+    let mut painter = painter.clone();
+    painter.set_clip_rect(viewport);
+    painter.add(egui::Shape::mesh(mesh));
 }

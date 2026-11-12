@@ -1,7 +1,6 @@
-//! Modal dialog port; full route and focus parity remain open. A themed dialog
-//! draws Forui's card, border and md radius over the theme barrier color.
+//! Modal dialogs with customizable surface and layout.
 use crate::{
-    Theme,
+    SurfaceShape, Theme,
     liquid::{DropletAnchor, OverlayTravel, trigger_contact},
 };
 use egui::{Context, Frame, Id, Stroke};
@@ -25,8 +24,9 @@ pub struct Dialog<'a> {
     label: &'a str,
     barrier_dismissible: bool,
     theme: Option<&'a Theme>,
-    radius: u8,
-    padding: egui::Margin,
+    radius: Option<u8>,
+    padding: Option<egui::Margin>,
+    max_width: Option<f32>,
     frame: Option<Frame>,
     area: Option<egui::Area>,
     source: Option<DropletAnchor>,
@@ -42,8 +42,9 @@ impl<'a> Dialog<'a> {
             label,
             barrier_dismissible: true,
             theme: None,
-            radius: 32,
-            padding: egui::Margin::same(24),
+            radius: None,
+            padding: None,
+            max_width: None,
             frame: None,
             area: None,
             source: None,
@@ -67,13 +68,20 @@ impl<'a> Dialog<'a> {
 
     /// Set the corner radius of the themed surface.
     pub fn radius(mut self, radius: u8) -> Self {
-        self.radius = radius;
+        self.radius = Some(radius);
         self
     }
 
     /// Set the inner spacing of the themed surface.
     pub fn padding(mut self, padding: egui::Margin) -> Self {
-        self.padding = padding;
+        self.padding = Some(padding);
+        self
+    }
+
+    /// Set the preferred maximum content width in logical points. The dialog
+    /// also accounts for available window space and its frame margins.
+    pub fn max_width(mut self, width: f32) -> Self {
+        self.max_width = Some(width);
         self
     }
 
@@ -170,6 +178,7 @@ impl<'a> Dialog<'a> {
                 None,
             )
         });
+        let default_area = self.area.is_none();
         let area = self
             .area
             .unwrap_or_else(|| egui::Modal::default_area(self.id))
@@ -210,19 +219,30 @@ impl<'a> Dialog<'a> {
                 data.insert_temp(focus_key, PreviousFocus(previous));
             });
         }
+        let viewport = ctx.content_rect();
         let frame = self.frame.unwrap_or_else(|| {
+            let radius = self
+                .radius
+                .unwrap_or_else(|| SurfaceShape::Panel.radius(viewport.size()));
+            let padding = self.padding.unwrap_or_else(|| {
+                egui::Margin::same(if viewport.width() < 500.0 { 18 } else { 24 })
+            });
             if let Some(theme) = self.theme {
                 Frame::new()
                     .fill(theme.card)
                     .stroke(Stroke::new(1.0, theme.border))
-                    .corner_radius(self.radius)
-                    .inner_margin(self.padding)
+                    .corner_radius(radius)
+                    .inner_margin(padding)
             } else {
                 Frame::popup(&ctx.global_style())
-                    .corner_radius(self.radius)
-                    .inner_margin(self.padding)
+                    .corner_radius(radius)
+                    .inner_margin(padding)
             }
         });
+        let max_width = self
+            .max_width
+            .filter(|width| width.is_finite() && *width > 0.0)
+            .or(default_area.then_some(540.0));
         let mut modal = egui::Modal::new(self.id).area(area).frame(Frame::NONE);
         if let Some(theme) = self.theme {
             modal = modal.backdrop_color(theme.barrier);
@@ -235,6 +255,12 @@ impl<'a> Dialog<'a> {
             }
             let surface = transition.start(ctx);
             let mut prepared = frame.begin(ui);
+            if let Some(max_width) = max_width {
+                let available = viewport.width() - frame.total_margin().sum().x - 24.0;
+                prepared
+                    .content_ui
+                    .set_max_width(max_width.min(available.max(1.0)));
+            }
             let alpha = prepared.content_ui.opacity();
             let inner = prepared
                 .content_ui

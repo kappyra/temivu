@@ -1,0 +1,18 @@
+Temivu Showcase script font subsets
+
+ja.otf and zh.otf derive from Noto Sans CJK JP and SC Regular, version 2.004.
+Copyright 2014–2021 Adobe (http://www.adobe.com/).
+Source project https://github.com/notofonts/noto-cjk
+License OFL-CJK.txt
+
+ar.ttf derives from Noto Sans Arabic Regular, version 2.005.
+Copyright 2015–2020 Google LLC. All Rights Reserved.
+Source project https://github.com/notofonts/arabic
+License OFL-Arabic.txt
+
+The source fonts were obtained from the system fonts-noto-cjk and
+fonts-noto-core packages. Temivu subsets the three fonts with FontTools 4.61.1
+using the characters in the corresponding Messages entry in
+src/generated_localizations.rs and the preview's native language name.
+The subsets keep the layout features and use distinct family names
+Temivu Showcase JA, Temivu Showcase ZH, and Temivu Showcase AR.

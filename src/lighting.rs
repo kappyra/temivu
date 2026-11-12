@@ -1,8 +1,10 @@
-//! Optional interaction lighting. Vesper paints inside a widget's silhouette.
+//! Optional interaction lighting with opt-in sharing between nearby surfaces.
 use crate::Theme;
 use egui::{Color32, Context, CornerRadius, Id, Painter, Pos2, Rect, Response, Shape, Vec2};
 
 mod render;
+pub(crate) mod spill;
+pub use spill::LightSpill;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LightQuality {
@@ -43,7 +45,7 @@ pub struct Vesper {
     pub effects: LightEffects,
     pub quality: LightQuality,
     pub tracking: LightTracking,
-    /// Defaults to a theme-aware color.
+    /// An optional tint. The default is white with a neutral shadow on pale surfaces.
     pub color: Option<Color32>,
     pub intensity: f32,
     pub opacity: f32,
@@ -56,6 +58,9 @@ pub struct Vesper {
     /// Strength of pointer lag.
     pub inertia: f32,
     pub elevation: f32,
+    /// Share light with nearby participating surfaces. Independent of local lighting.
+    /// `None` disables emission and reception for this material.
+    pub spill: Option<LightSpill>,
 }
 
 impl Default for Vesper {
@@ -71,7 +76,7 @@ struct Sample {
     pulse_point: Pos2,
     pulse: f32,
     velocity: Vec2,
-    flow_phase: f32,
+    flow: Vec2,
 }
 
 #[derive(Clone, Copy)]
@@ -81,11 +86,10 @@ struct Interaction {
     energy: f32,
     time: f64,
     held: bool,
-    active: bool,
+    press_start: Option<f64>,
+    keyboard_focus: bool,
     pulse: Option<(f64, Pos2, Vec2)>,
     activated: Option<f64>,
-    flow_until: f64,
-    flow_phase: f32,
     velocity: Vec2,
     tracking: LightTracking,
 }
@@ -104,14 +108,15 @@ impl Vesper {
             quality: LightQuality::Balanced,
             tracking: LightTracking::Smooth,
             color: None,
-            intensity: 0.72,
-            opacity: 0.34,
-            radius: 92.0,
-            softness: 0.67,
+            intensity: 0.78,
+            opacity: 0.41,
+            radius: 84.0,
+            softness: 0.56,
             propagation: 1.0,
             attenuation: 1.6,
             inertia: 0.32,
             elevation: 0.35,
+            spill: None,
         }
     }
 
@@ -119,15 +124,19 @@ impl Vesper {
         let mut style = Self::subtle();
         style.effects.flow = true;
         style.tracking = LightTracking::Spring;
-        style.opacity = 0.47;
-        style.radius = 132.0;
-        style.elevation = 0.60;
+        style.intensity = 0.86;
+        style.opacity = 0.56;
+        style.radius = 108.0;
+        style.elevation = 0.53;
         style
     }
 
     /// Set an inherited material for Temivu buttons and switches in this context.
     /// The default is disabled.
     pub fn set_context(ctx: &Context, style: Option<Self>) {
+        if style.is_some_and(|style| style.spill.is_some()) {
+            spill::install(ctx);
+        }
         let id = Id::new("temivu-vesper-default");
         if Self::context(ctx) == style {
             return;
@@ -156,9 +165,53 @@ impl Vesper {
         rect: Rect,
         corners: CornerRadius,
     ) {
-        if let Some(shape) = self.interactive_shape(painter, theme, response, rect, corners.into())
+        self.paint_on(painter, theme, response, rect, corners, theme.card);
+    }
+
+    /// Paint lighting over a known surface color. This lets a default white
+    /// highlight adapt to both dark controls and pale controls in one theme.
+    pub fn paint_on(
+        &self,
+        painter: &Painter,
+        theme: &Theme,
+        response: &Response,
+        rect: Rect,
+        corners: CornerRadius,
+        surface: Color32,
+    ) {
+        if let Some(shape) =
+            self.interactive_shape_on(painter, theme, response, rect, corners.into(), surface)
         {
             painter.add(shape);
+        }
+        if response.enabled() {
+            self.receive(painter, theme, response.id, rect, corners, surface);
+        }
+    }
+
+    /// Receive nearby interaction light on an arbitrary painted object.
+    /// Call after its fill and before its text/icons. This does not capture input.
+    /// Both this material and the emitter must opt in through [`Self::spill`].
+    /// Illumination stays within the object's silhouette and the parent's clip.
+    pub fn receive(
+        &self,
+        painter: &Painter,
+        theme: &Theme,
+        id: Id,
+        rect: Rect,
+        corners: CornerRadius,
+        surface: Color32,
+    ) {
+        if self.spill.is_some() && self.can_paint(painter, rect) {
+            spill::receive(
+                painter,
+                id,
+                rect,
+                corners.into(),
+                &self.bounded(),
+                surface,
+                theme.card,
+            );
         }
     }
 
@@ -183,9 +236,11 @@ impl Vesper {
             pulse_point: point,
             pulse: 1.0,
             velocity: Vec2::ZERO,
-            flow_phase: 0.0,
+            flow: Vec2::ZERO,
         };
-        painter.add(style.shape(theme, rect, corners.into(), sample));
+        if let Some(shape) = style.shape(theme, rect, corners.into(), theme.card, sample) {
+            painter.add(shape);
+        }
     }
 
     pub(crate) fn interactive_shape(
@@ -196,12 +251,33 @@ impl Vesper {
         rect: Rect,
         corners: egui::epaint::CornerRadiusF32,
     ) -> Option<Shape> {
+        self.interactive_shape_on(painter, theme, response, rect, corners, theme.card)
+    }
+
+    pub(crate) fn interactive_shape_on(
+        &self,
+        painter: &Painter,
+        theme: &Theme,
+        response: &Response,
+        rect: Rect,
+        corners: egui::epaint::CornerRadiusF32,
+        surface: Color32,
+    ) -> Option<Shape> {
         if !response.enabled() || !self.can_paint(painter, rect) {
             return None;
         }
         let style = self.bounded();
         let sample = style.sample(response, theme, rect)?;
-        Some(style.shape(theme, rect, corners, sample))
+        // Keyboard focus keeps its local cue; only pointer-driven light travels.
+        if style.spill.is_some()
+            && response.ctx.data(|data| {
+                data.get_temp::<Interaction>(response.id.with("vesper"))
+                    .is_some_and(|state| !state.keyboard_focus)
+            })
+        {
+            spill::emit(painter, response.id, rect, &style, sample);
+        }
+        style.shape(theme, rect, corners, surface, sample)
     }
 
     fn can_paint(&self, painter: &Painter, rect: Rect) -> bool {
@@ -222,16 +298,12 @@ impl Vesper {
         theme: &Theme,
         rect: Rect,
         corners: egui::epaint::CornerRadiusF32,
+        surface: Color32,
         sample: Sample,
-    ) -> Shape {
-        let color = self.color.unwrap_or_else(|| {
-            if theme.dark {
-                Color32::from_rgb(153, 206, 248)
-            } else {
-                Color32::from_rgb(57, 117, 170)
-            }
-        });
-        Shape::mesh(render::mesh(rect, corners, self, color, sample))
+    ) -> Option<Shape> {
+        let ink = render::Ink::new(self.color, surface, theme.card);
+        let mesh = render::mesh(rect, corners, self, ink, sample);
+        (!mesh.is_empty()).then(|| Shape::mesh(mesh))
     }
 
     fn bounded(self) -> Self {
@@ -252,18 +324,56 @@ impl Vesper {
     fn sample(&self, response: &Response, theme: &Theme, rect: Rect) -> Option<Sample> {
         let ctx = &response.ctx;
         let id = response.id.with("vesper");
-        let held = response.is_pointer_button_down_on() || response.dragged();
         let activated = response.clicked();
-        let active = held || response.hovered() || response.has_focus();
-        let now = ctx.input(|input| input.time);
+        let (now, primary_press) = ctx.input(|input| {
+            let pointer = &input.pointer;
+            let press = if pointer.primary_down() && !input.key_pressed(egui::Key::Escape) {
+                pointer
+                    .press_start_time()
+                    .zip(pointer.press_origin())
+                    .map(|(start, origin)| (start, origin, pointer.interact_pos()))
+            } else {
+                None
+            };
+            (input.time, press)
+        });
         if !now.is_finite() {
             return None;
         }
+        let press_start = primary_press.map(|(start, _, _)| start);
+        let same_press =
+            |state: &Interaction| press_start.is_some() && state.press_start == press_start;
         let previous = ctx
             .data(|data| data.get_temp::<Interaction>(id))
             .filter(|state| {
-                (0.0..=1.0).contains(&(now - state.time)) && state.tracking == self.tracking
+                let age = now - state.time;
+                age >= 0.0 && (age <= 1.0 || same_press(state)) && state.tracking == self.tracking
             });
+        let to_local = |point| {
+            ctx.layer_transform_from_global(response.layer_id)
+                .map_or(point, |transform| transform * point)
+        };
+        // A hover-only surface can observe a contact without capturing its
+        // child's click. egui can also hand an owned touch to its long-press
+        // handling. Preserve the original contact until that press ends.
+        let passive_hold = !response.sense.interactive()
+            && response.contains_pointer()
+            && primary_press.is_some_and(|(_, origin, _)| {
+                response
+                    .interact_rect
+                    .intersect(rect)
+                    .contains(to_local(origin))
+            });
+        let held = response.is_pointer_button_down_on()
+            || response.dragged()
+            || previous.as_ref().is_some_and(same_press)
+            || passive_hold;
+        let pointer_pressed = held || (activated && response.interact_pointer_pos().is_some());
+        let keyboard_focus = response.has_focus()
+            && !pointer_pressed
+            && (previous.is_some_and(|state| state.keyboard_focus)
+                || (response.gained_focus() && !response.hovered()));
+        let active = held || response.hovered() || keyboard_focus;
         if !active && !activated && previous.is_none() {
             return None;
         }
@@ -274,7 +384,11 @@ impl Vesper {
 
         // Track normalized widget coordinates so a resize does not move the light
         // into an unrelated part of the next frame.
-        let pointer = if held || activated {
+        let pointer = if held {
+            response
+                .interact_pointer_pos()
+                .or_else(|| primary_press.and_then(|(_, _, position)| position.map(to_local)))
+        } else if activated {
             response
                 .interact_pointer_pos()
                 .or_else(|| response.hover_pos())
@@ -284,7 +398,7 @@ impl Vesper {
         let target = pointer.filter(|p| p.is_finite()).map_or_else(
             || {
                 previous
-                    .filter(|_| !active)
+                    .filter(|_| !active || held)
                     .map_or(Pos2::new(0.5, 0.5), |state| state.target)
             },
             |p| {
@@ -295,8 +409,10 @@ impl Vesper {
         );
         let target_energy = if held {
             1.0
-        } else if active {
-            0.65
+        } else if response.hovered() {
+            0.48
+        } else if keyboard_focus {
+            0.36
         } else {
             0.0
         };
@@ -307,11 +423,10 @@ impl Vesper {
             energy: target_energy,
             time: now,
             held: false,
-            active: false,
+            press_start: None,
+            keyboard_focus: false,
             pulse: None,
             activated: None,
-            flow_until: now,
-            flow_phase: 0.0,
             velocity: Vec2::ZERO,
             tracking: self.tracking,
         });
@@ -326,24 +441,15 @@ impl Vesper {
         let has_pulse = self.effects.scatter || self.effects.particles;
         if animated
             && has_pulse
-            && ((held && !state.held) || (activated && !state.held && state.activated != Some(now)))
+            && ((held && (!state.held || state.press_start != press_start))
+                || (activated && !state.held && state.activated != Some(now)))
         {
             state.pulse = Some((now, target, state.velocity));
         }
         if activated {
             state.activated = Some(now);
         }
-        if self.effects.flow
-            && animated
-            && (moved || (active && !state.active) || (held && !state.held))
-        {
-            state.flow_until = now + f64::from(0.36 / self.propagation.sqrt());
-        }
-        let flowing = animated && self.effects.flow && now < state.flow_until;
-        if flowing {
-            state.flow_phase =
-                (state.flow_phase + dt * self.propagation * 2.7).rem_euclid(std::f32::consts::TAU);
-        }
+        let flowing = animated && self.effects.flow && state.velocity.length_sq() > 1.0;
         if animated {
             let smoothing = 1.0 - (-dt / (0.012 + 0.095 * self.inertia)).exp();
             state.position = match self.tracking {
@@ -375,7 +481,14 @@ impl Vesper {
                     )
                 }
             };
-            let fade = 1.0 - (-dt * 22.0).exp();
+            let fade = 1.0
+                - (-dt
+                    * if target_energy > state.energy {
+                        35.0
+                    } else {
+                        19.0
+                    })
+                .exp();
             state.energy = if (state.energy - target_energy).abs() < 0.004 {
                 target_energy
             } else {
@@ -385,14 +498,13 @@ impl Vesper {
             state.position = target;
             state.energy = target_energy;
             state.pulse = None;
-            state.flow_phase = 0.0;
         }
         let (pulse, pulse_point, velocity) =
             state
                 .pulse
                 .map_or((1.0, target, Vec2::ZERO), |(start, point, velocity)| {
                     (
-                        ((now - start) as f32 * self.propagation.sqrt() / 0.48).clamp(0.0, 1.0),
+                        ((now - start) as f32 * self.propagation.sqrt() / 0.36).clamp(0.0, 1.0),
                         point,
                         velocity,
                     )
@@ -417,17 +529,28 @@ impl Vesper {
         }
         state.target = target;
         state.held = held;
-        state.active = active;
+        state.press_start = press_start.filter(|_| held);
+        state.keyboard_focus = keyboard_focus;
         state.time = now;
         ctx.data_mut(|data| data.insert_temp(id, state));
         let project = |point: Pos2| rect.min + point.to_vec2() * rect.size();
         Some(Sample {
-            point: project(state.position),
-            energy: state.energy.max(0.74 * (1.0 - pulse)),
+            point: project(if held {
+                state.position.lerp(target, 0.90)
+            } else {
+                state.position
+            }),
+            energy: state
+                .energy
+                .max(if held { 0.94 } else { 0.77 * (1.0 - pulse) }),
             pulse_point: project(pulse_point),
             pulse,
             velocity,
-            flow_phase: state.flow_phase,
+            flow: if flowing {
+                state.velocity * (0.028 / self.propagation.sqrt())
+            } else {
+                Vec2::ZERO
+            },
         })
     }
 }

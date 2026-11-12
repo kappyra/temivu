@@ -29,7 +29,8 @@ def collect_notices(destination):
         shutil.copyfile(ROOT / name, destination / name)
     third_party = ROOT / "third_party"
     for directory, pattern in (
-        ("forui", "LICENSE*"), ("inter", "OFL.txt"), ("egui-fonts", "*.txt")
+        ("forui", "LICENSE*"), ("inter", "OFL.txt"), ("egui-fonts", "*.txt"),
+        ("showcase-fonts", "*.txt"),
     ):
         out = destination / "third_party" / directory
         out.mkdir(parents=True)

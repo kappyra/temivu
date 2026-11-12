@@ -70,6 +70,12 @@ impl LiquidStyle {
             ..Self::bloom()
         }
     }
+    /// Advance a custom surface using the same reversible spring as Temivu popups.
+    /// Call each frame with a stable, dedicated ID, including during dismissal.
+    pub fn progress(self, ctx: &egui::Context, id: Id, open: bool, theme: &Theme) -> f32 {
+        surface_progress(ctx, id, open, self, theme)
+    }
+
     /// Set the default for this egui context; widget overrides take precedence.
     pub fn set_context_default(self, ctx: &egui::Context) {
         ctx.data_mut(|data| data.insert_temp(Id::new("temivu-surface-motion-default"), self));
@@ -191,13 +197,92 @@ pub(crate) fn trigger_contact(response: &Response) -> Option<f32> {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct DropletAnchor {
-    pub rect: Rect,
-    pub contact: Option<f32>,
+/// An opening or closing origin for a custom surface.
+#[derive(Clone, Copy, Debug)]
+pub struct DropletAnchor {
+    pub(crate) rect: Rect,
+    pub(crate) contact: Option<f32>,
 }
 
 impl DropletAnchor {
+    /// Optional horizontal contact fraction. Use None for automatic placement.
+    pub fn new(rect: Rect, contact: Option<f32>) -> Self {
+        Self {
+            rect,
+            contact: contact
+                .filter(|value| value.is_finite())
+                .map(|v| v.clamp(0.0, 1.0)),
+        }
+    }
+
+    /// Sample the visible trigger and its current click, tap or keyboard activation.
+    /// Store the result when toggling visibility, including on an anchor-driven close.
+    pub fn from_response(response: &Response) -> Self {
+        Self::new(
+            crate::motion::anchor_rect(response),
+            trigger_contact(response),
+        )
+    }
+
+    /// Paint the same source-connected silhouette as a Temivu popup.
+    /// Use the full outer destination bounds, including padding and stroke.
+    pub fn paint(
+        self,
+        painter: &egui::Painter,
+        target: Rect,
+        amount: f32,
+        frame: Frame,
+        style: LiquidStyle,
+    ) {
+        if self.valid(target, amount)
+            && painter.is_visible()
+            && painter
+                .clip_rect()
+                .intersects(self.rect.union(target).expand(32.0))
+        {
+            painter.add(surface_shape(
+                self,
+                self.rect,
+                target,
+                amount.clamp(0.0, 1.025),
+                frame,
+                style,
+                None,
+            ));
+        }
+    }
+
+    /// The current rounded body geometry, without the temporary connecting neck.
+    /// Use it to align custom content or a backdrop with the animated surface.
+    pub fn body(
+        self,
+        target: Rect,
+        amount: f32,
+        frame: Frame,
+        style: LiquidStyle,
+    ) -> Option<(Rect, egui::epaint::CornerRadiusF32)> {
+        self.valid(target, amount).then(|| {
+            anchored_glass_geometry(
+                self,
+                target,
+                amount.clamp(0.0, 1.025),
+                frame,
+                style.transition,
+                false,
+            )
+        })
+    }
+
+    fn valid(self, target: Rect, amount: f32) -> bool {
+        amount.is_finite()
+            && self.rect.is_finite()
+            && target.is_finite()
+            && self.rect.width() >= 0.0
+            && self.rect.height() >= 0.0
+            && target.is_positive()
+            && self.rect.union(target).size().is_finite()
+    }
+
     fn contact_x(self, width: f32, fallback: f32) -> f32 {
         let half = width.min(self.rect.width()) * 0.5;
         self.contact.map_or(fallback, |fraction| {
@@ -1537,6 +1622,7 @@ pub struct DropletResize {
     pub phase: f32,
     collapsed: Vec2,
     expanded: Vec2,
+    blend_radius: f32,
 }
 
 impl DropletResize {
@@ -1549,6 +1635,27 @@ impl DropletResize {
         open: bool,
         theme: &Theme,
     ) -> Self {
+        Self::with_style(
+            ctx,
+            id,
+            collapsed,
+            expanded,
+            open,
+            LiquidStyle::droplet(),
+            theme,
+        )
+    }
+
+    /// Override the spring, damping and blending radius for a custom resize.
+    pub fn with_style(
+        ctx: &egui::Context,
+        id: Id,
+        collapsed: Vec2,
+        expanded: Vec2,
+        open: bool,
+        style: LiquidStyle,
+        theme: &Theme,
+    ) -> Self {
         let dimension = |value: f32| {
             if value.is_finite() {
                 value.max(0.0)
@@ -1558,12 +1665,13 @@ impl DropletResize {
         };
         let collapsed = egui::vec2(dimension(collapsed.x), dimension(collapsed.y));
         let expanded = egui::vec2(dimension(expanded.x), dimension(expanded.y));
-        let phase = droplet_group_progress(ctx, id, open, LiquidStyle::droplet(), theme).min(1.0);
+        let phase = droplet_group_progress(ctx, id, open, style, theme).min(1.0);
         Self {
             size: collapsed + (expanded - collapsed) * phase,
             phase,
             collapsed,
             expanded,
+            blend_radius: blend_radius(style),
         }
     }
 
@@ -1603,15 +1711,14 @@ impl DropletResize {
                 corners: matched_radii(lobe, phase, frame.corner_radius).into(),
             },
         ];
-        let style = LiquidStyle::droplet();
         let envelope = Rect::from_min_size(rect.min, self.collapsed.max(self.expanded))
-            .expand(style.blend_radius * 0.25 + 2.0);
+            .expand(self.blend_radius * 0.25 + 2.0);
         paint_joined_parts(
             painter,
             parts,
             envelope,
             frame,
-            style.blend_radius * phase * (1.0 - phase),
+            self.blend_radius * phase * (1.0 - phase),
         );
     }
 }
@@ -1773,27 +1880,5 @@ pub fn paint_surface(
     frame: Frame,
     motion: LiquidStyle,
 ) {
-    if amount.is_finite()
-        && source.is_finite()
-        && target.is_finite()
-        && source.width() >= 0.0
-        && source.height() >= 0.0
-        && target.is_positive()
-        && source.size().is_finite()
-        && target.size().is_finite()
-        && source.union(target).size().is_finite()
-    {
-        painter.add(surface_shape(
-            DropletAnchor {
-                rect: source,
-                contact: None,
-            },
-            source,
-            target,
-            amount,
-            frame,
-            motion,
-            None,
-        ));
-    }
+    DropletAnchor::new(source, None).paint(painter, target, amount, frame, motion);
 }

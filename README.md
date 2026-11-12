@@ -73,6 +73,7 @@ Create a theme such as `Theme::light()` in the host, apply it to the egui contex
 - [Navigation menus and responsive presentation](docs/NAVIGATION_MENU.md)
 - [Droplet motion](docs/LIQUID_MOTION.md)
 - [Optional glass surfaces](docs/GLASS.md)
+- [Floating surfaces and responsive geometry](docs/FLOATING_SURFACES.md)
 - [Vesper interaction lighting](docs/VESPER.md)
 - [Calendar API and keyboard behavior](docs/CALENDAR.md)
 - [Accessibility and verification scope](docs/ACCESSIBILITY.md)

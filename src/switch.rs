@@ -180,9 +180,10 @@ impl Widget for Switch<'_> {
             let lighting = enabled
                 .then(|| self.lighting.unwrap_or_else(|| Vesper::context(ui.ctx())))
                 .flatten();
-            let light_track = |rect, radius| {
+            let light_track = |rect, radius, base: egui::Color32| {
                 if let Some(style) = lighting {
-                    style.paint(painter, self.theme, &response, rect, radius);
+                    let surface = base.lerp_to_gamma(active, amount);
+                    style.paint_on(painter, self.theme, &response, rect, radius, surface);
                 }
             };
             match self.style {
@@ -210,7 +211,11 @@ impl Widget for Switch<'_> {
                             .with_clip_rect(clip)
                             .rect_filled(track, track_radius, active);
                     }
-                    light_track(track, (track_radius.round() as u8).into());
+                    light_track(
+                        track,
+                        (track_radius.round() as u8).into(),
+                        dim(self.theme.secondary),
+                    );
                     // Each edge travels separately, so the leading edge pulls
                     // the thumb into a capsule before the trailing edge catches up.
                     let ease = |start: f32, end: f32| {
@@ -267,6 +272,7 @@ impl Widget for Switch<'_> {
                             egui::pos2(x(from).max(x(to)) + 3.5, track.center().y + 3.5),
                         ),
                         4.into(),
+                        dim(self.theme.muted_foreground.gamma_multiply(0.65)),
                     );
                     let center = egui::pos2(knob, track.center().y);
                     let radius = 13.0 - 1.3 * pressed;

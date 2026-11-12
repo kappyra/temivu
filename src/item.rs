@@ -1,5 +1,5 @@
 //! Textual item port; rich content, grouping and full style parity remain open.
-use crate::Theme;
+use crate::{Theme, Vesper};
 use egui::{
     Color32, FontId, Galley, Response, Sense, Stroke, StrokeKind, TextFormat, Ui, Vec2, WidgetInfo,
     WidgetType, text::LayoutJob,
@@ -76,6 +76,9 @@ pub struct Item<'a> {
     enabled: bool,
     id: Option<egui::Id>,
     appearance: Option<ItemAppearance>,
+    flat: bool,
+    radius: Option<u8>,
+    lighting: Option<Option<Vesper>>,
 }
 
 impl<'a> Item<'a> {
@@ -90,6 +93,9 @@ impl<'a> Item<'a> {
             enabled: true,
             id: None,
             appearance: None,
+            flat: false,
+            radius: None,
+            lighting: None,
         }
     }
     pub fn description(mut self, description: &'a str) -> Self {
@@ -121,6 +127,23 @@ impl<'a> Item<'a> {
         self.id = Some(id);
         self
     }
+    /// Draw an inset interaction surface only when the row is active.
+    pub fn flat(mut self, flat: bool) -> Self {
+        self.flat = flat;
+        self
+    }
+
+    /// Set the resting corner radius in logical points.
+    pub fn radius(mut self, radius: u8) -> Self {
+        self.radius = Some(radius);
+        self
+    }
+
+    /// Override inherited lighting. Pass `None` to disable it for this row.
+    pub fn lighting(mut self, lighting: Option<Vesper>) -> Self {
+        self.lighting = Some(lighting);
+        self
+    }
     /// Whether this item is enabled. Unlike [`Response::enabled`], this is
     /// accurate during egui's invisible popup sizing pass.
     pub fn is_enabled(&self) -> bool {
@@ -148,9 +171,14 @@ impl<'a> Item<'a> {
 
     fn show_inner(self, ui: &mut Ui) -> Response {
         let theme = self.theme;
-        let appearance = self
+        let mut appearance = self
             .appearance
             .unwrap_or_else(|| ItemAppearance::item(theme));
+        if self.flat {
+            appearance.idle_fill = Color32::TRANSPARENT;
+            appearance.stroke = Stroke::NONE;
+            appearance.outer_margin = 0.0;
+        }
         let ui_enabled = ui.is_enabled();
         let enabled = self.enabled && ui_enabled;
         let base_title_color = match self.variant {
@@ -242,7 +270,7 @@ impl<'a> Item<'a> {
             .clamp(0.0, 1.0);
             let press = crate::motion_controls::press_amount(&response, theme);
             let visual = container.scale_from_center(1.0 - 0.028 * press);
-            let radius = appearance.corner_radius as u8;
+            let radius = self.radius.unwrap_or(appearance.corner_radius as u8);
             let fill = egui::Color32::from(
                 egui::Rgba::from(appearance.idle_fill) * (1.0 - amount)
                     + egui::Rgba::from(appearance.active_fill) * amount,
@@ -267,6 +295,30 @@ impl<'a> Item<'a> {
                 ),
                 press,
             ));
+            if enabled
+                && let Some(style) = self.lighting.unwrap_or_else(|| Vesper::context(ui.ctx()))
+            {
+                let corners = crate::motion::press_corners(visual, radius.into(), press);
+                if let Some(light) = style.interactive_shape_on(
+                    ui.painter(),
+                    theme,
+                    &response,
+                    visual,
+                    corners,
+                    fill,
+                ) {
+                    ui.painter().add(light);
+                }
+                crate::lighting::spill::receive(
+                    ui.painter(),
+                    response.id,
+                    visual,
+                    corners,
+                    &style,
+                    fill,
+                    theme.card,
+                );
+            }
             crate::motion::remember_anchor(&response, visual);
             if response.has_focus() {
                 ui.painter().add(crate::motion::press_shape(

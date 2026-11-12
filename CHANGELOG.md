@@ -3,6 +3,17 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
+## [0.1.3] - 2026-11-12
+
+- Improved Vesper contrast on pale surfaces and maintained pointer and touch
+  feedback throughout a hold. Nearby light can be disabled separately.
+- Added reusable effect surfaces, configurable Droplet and press primitives,
+  and spring-driven foreground placement for custom egui content.
+- Added Soft Prism alongside Prism, refined Frost, and made the glass samples
+  draggable with adjustable tint, blur, refraction, and rim.
+- Refined safe-area navigation, focus outlines, calendar and time controls,
+  paging, and multilingual display in Showcase.
+
 ## [0.1.2] - 2026-11-07
 
 - Notification previews show a `+N` count for entries beyond the preview limit.
@@ -84,3 +95,4 @@ is experimental until 1.0; APIs may change between releases.
 [0.1.0]: https://github.com/kappyra/temivu/releases/tag/v0.1.0
 [0.1.1]: https://github.com/kappyra/temivu/releases/tag/v0.1.1
 [0.1.2]: https://github.com/kappyra/temivu/releases/tag/v0.1.2
+[0.1.3]: https://github.com/kappyra/temivu/releases/tag/v0.1.3

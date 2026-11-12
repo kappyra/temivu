@@ -11,12 +11,13 @@ use std::sync::Arc;
 pub struct Glass {
     tint: f32,
     mode: GlassMode,
+    tuning: GlassTuning,
 }
 
 /// Optical treatment of the live backdrop.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum GlassMode {
-    /// Glassmorphism with diffuse blur, a matte tint and a soft rim.
+    /// Even backdrop diffusion with a translucent matte tint.
     Frost,
     /// Optical glass with a clearer core and a refracting bevel.
     #[default]
@@ -32,6 +33,27 @@ pub enum GlassProfile {
     Dock,
 }
 
+/// Multipliers for the selected material. Values are bounded to `0.0..=2.0`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GlassTuning {
+    /// Strength of the live backdrop blur.
+    pub blur: f32,
+    /// Distance light bends at Prism's bevel.
+    pub refraction: f32,
+    /// Visibility of the glass edge. Frost uses a fine outline.
+    pub rim: f32,
+}
+
+impl Default for GlassTuning {
+    fn default() -> Self {
+        Self {
+            blur: 1.0,
+            refraction: 1.0,
+            rim: 1.0,
+        }
+    }
+}
+
 /// Paint parameters passed to an application's graphics backend.
 #[derive(Clone, Copy, Debug)]
 pub struct GlassRegion {
@@ -41,6 +63,7 @@ pub struct GlassRegion {
     pub profile: GlassProfile,
     pub tint: f32,
     pub strength: f32,
+    pub tuning: GlassTuning,
 }
 
 /// A renderer adapter that samples content already painted beneath a surface.
@@ -66,6 +89,7 @@ impl Default for Glass {
         Self {
             tint: 0.4,
             mode: GlassMode::Prism,
+            tuning: GlassTuning::default(),
         }
     }
 }
@@ -73,14 +97,45 @@ impl Default for Glass {
 impl Glass {
     /// Use a tint between zero and one. Out-of-range values are clamped.
     pub fn new(tint: f32) -> Self {
+        Self::default().with_tint(tint)
+    }
+
+    /// Prism with the softer diffusion and restrained bevel of the earlier material.
+    pub fn soft_prism() -> Self {
+        Self::new(0.28).with_tuning(GlassTuning {
+            blur: 1.4,
+            refraction: 0.60,
+            rim: 0.68,
+        })
+    }
+
+    /// Set the tint between zero and one while retaining the current material.
+    pub fn with_tint(mut self, tint: f32) -> Self {
         if tint.is_finite() {
-            Self {
-                tint: tint.clamp(0.0, 1.0),
-                ..Self::default()
-            }
-        } else {
-            Self::default()
+            self.tint = tint.clamp(0.0, 1.0);
         }
+        self
+    }
+
+    /// Adjust blur, refraction and rim independently.
+    pub fn with_tuning(mut self, tuning: GlassTuning) -> Self {
+        let multiplier = |value: f32| {
+            if value.is_finite() {
+                value.clamp(0.0, 2.0)
+            } else {
+                1.0
+            }
+        };
+        self.tuning = GlassTuning {
+            blur: multiplier(tuning.blur),
+            refraction: multiplier(tuning.refraction),
+            rim: multiplier(tuning.rim),
+        };
+        self
+    }
+
+    pub fn tuning(self) -> GlassTuning {
+        self.tuning
     }
 
     pub fn mode(mut self, mode: GlassMode) -> Self {
@@ -128,6 +183,53 @@ impl Glass {
         ctx.data(|data| data.get_temp(Id::new("temivu-glass-material")))
     }
 
+    /// Wrap arbitrary content in a glass frame. Use an egui `Area` or overlay
+    /// to float the frame above other content. The caller owns placement,
+    /// spacing, shape, and interaction.
+    pub fn show<R>(
+        self,
+        ui: &mut egui::Ui,
+        theme: &Theme,
+        frame: Frame,
+        profile: GlassProfile,
+        add: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> egui::InnerResponse<R> {
+        let live = (ui.is_visible() && self.tint < 0.999)
+            .then(|| Self::renderer(ui.ctx()))
+            .flatten();
+        let frame = self.tinted_frame(theme, frame, live.is_some());
+        if let Some(renderer) = live {
+            return self.show_live_frame(ui, frame, profile, renderer.as_ref(), add);
+        }
+        frame.show(ui, add)
+    }
+
+    fn show_live_frame<R>(
+        self,
+        ui: &mut egui::Ui,
+        frame: Frame,
+        profile: GlassProfile,
+        renderer: &dyn GlassRenderer,
+        add: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> egui::InnerResponse<R> {
+        let slot = ui.painter().add(Shape::Noop);
+        let response = frame.show(ui, add);
+        let rect = response.response.rect - frame.outer_margin;
+        if ui.is_rect_visible(rect) {
+            ui.painter().set(
+                slot,
+                self.live_shape(
+                    renderer,
+                    rect,
+                    frame.corner_radius.into(),
+                    ui.painter().opacity(),
+                    profile,
+                ),
+            );
+        }
+        response
+    }
+
     /// Paint a glass surface at its outer bounds. Without a supplied texture,
     /// regular alpha blending shows the underlying UI through the material.
     pub fn paint(
@@ -151,7 +253,7 @@ impl Glass {
                 renderer.as_ref(),
                 rect,
                 corners,
-                1.0,
+                painter.opacity(),
                 GlassProfile::Floating,
             ));
         }
@@ -162,16 +264,16 @@ impl Glass {
             backdrop.filter(|_| live.is_none() && has_backdrop && frame.fill.a() < 255)
         {
             let mut mesh = Mesh::with_texture(backdrop.texture);
-            let band = (rect.size().min_elem() * 0.2).min(12.0);
+            let band = (rect.size().min_elem() * 0.26).min(18.0);
             let bend = match self.mode {
                 GlassMode::Frost => 0.0,
-                GlassMode::Prism => band * (1.0 - self.tint) * 0.65,
+                GlassMode::Prism => band * (1.0 - 0.5 * self.tint) * 1.10 * self.tuning.refraction,
             };
             let feather = (band * 0.25).min(1.0);
             for (inset, offset, alpha) in [
                 (0.0, bend, 0),
                 (feather, bend, 255),
-                (band * 0.46, bend * 0.8, 255),
+                (band * 0.46, bend * 0.48, 255),
                 (band, 0.0, 255),
             ] {
                 for (position, normal) in outline(rect, corners, inset) {
@@ -227,6 +329,7 @@ impl Glass {
             profile,
             tint: self.tint,
             strength: strength.clamp(0.0, 1.0),
+            tuning: self.tuning,
         }))
     }
 
@@ -236,8 +339,8 @@ impl Glass {
         }
         let [r, g, b, alpha] = frame.fill.to_srgba_unmultiplied();
         let minimum = match (self.mode, has_backdrop) {
-            (GlassMode::Frost, true) => 0.70,
-            (GlassMode::Prism, true) => 0.47,
+            (GlassMode::Frost, true) => 0.57,
+            (GlassMode::Prism, true) => 0.44,
             (GlassMode::Frost, false) => 0.91,
             (GlassMode::Prism, false) => 0.85,
         };
@@ -246,12 +349,12 @@ impl Glass {
             Color32::from_rgba_unmultiplied(r, g, b, (f32::from(alpha) * opacity).round() as u8);
         if frame.stroke.width > 0.0 {
             let edge = match (self.mode, theme.dark) {
-                (GlassMode::Frost, true) => Color32::from_white_alpha(32),
+                (GlassMode::Frost, true) => Color32::from_white_alpha(16),
                 (GlassMode::Prism, true) => Color32::from_white_alpha(49),
-                (GlassMode::Frost, false) => Color32::from_black_alpha(21),
+                (GlassMode::Frost, false) => Color32::from_black_alpha(12),
                 (GlassMode::Prism, false) => Color32::from_black_alpha(30),
             };
-            frame.stroke = Stroke::new(frame.stroke.width, edge);
+            frame.stroke = Stroke::new(frame.stroke.width, edge.gamma_multiply(self.tuning.rim));
         }
         let shadow = match self.mode {
             GlassMode::Frost => 0.55,
@@ -268,17 +371,17 @@ impl Glass {
         corners: CornerRadiusF32,
         polish: f32,
     ) -> Shape {
-        if !rect.is_finite() || !rect.is_positive() {
+        if !rect.is_finite()
+            || !rect.is_positive()
+            || self.mode == GlassMode::Frost
+            || self.tuning.rim == 0.0
+        {
             return Shape::Noop;
         }
         let outer = 1.0_f32.min(rect.size().min_elem() * 0.15);
         let inner = (outer + 2.5).min(rect.size().min_elem() * 0.4);
         let mut mesh = Mesh::default();
-        let strength = match (self.mode, theme.dark) {
-            (GlassMode::Frost, _) => 44.0,
-            (GlassMode::Prism, true) => 105.0,
-            (GlassMode::Prism, false) => 176.0,
-        };
+        let strength = if theme.dark { 105.0 } else { 176.0 } * self.tuning.rim;
         for (inset, weight) in [(outer, 1.0), (inner, 0.0)] {
             for (position, normal) in outline(rect, corners, inset) {
                 let sheen = (-normal.y * 0.82 - normal.x * 0.45).max(0.0);
@@ -450,18 +553,5 @@ pub(crate) fn show_frame<R>(
     let Some(renderer) = Glass::renderer(ui.ctx()) else {
         return frame.show(ui, add);
     };
-    let slot = ui.painter().add(Shape::Noop);
-    let response = frame.show(ui, add);
-    let rect = response.response.rect - frame.outer_margin;
-    ui.painter().set(
-        slot,
-        glass.live_shape(
-            renderer.as_ref(),
-            rect,
-            frame.corner_radius.into(),
-            1.0,
-            profile,
-        ),
-    );
-    response
+    glass.show_live_frame(ui, frame, profile, renderer.as_ref(), add)
 }

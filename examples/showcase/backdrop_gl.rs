@@ -40,7 +40,7 @@ impl GlassRenderer for BackdropGl {
 
 impl BackdropGl {
     fn paint(&self, info: PaintCallbackInfo, painter: &egui_glow::Painter, region: GlassRegion) {
-        let Some(capture) = Capture::new(&info, region.profile) else {
+        let Some(capture) = Capture::new(&info, region) else {
             return;
         };
         let Ok(mut backend) = self.state.lock() else {
@@ -96,16 +96,17 @@ struct Capture {
 }
 
 impl Capture {
-    fn new(info: &PaintCallbackInfo, profile: GlassProfile) -> Option<Self> {
+    fn new(info: &PaintCallbackInfo, region: GlassRegion) -> Option<Self> {
         let visible = info.viewport.intersect(info.clip_rect);
         if !visible.is_positive() {
             return None;
         }
-        let padding = if profile == GlassProfile::Dock {
+        let padding = if region.profile == GlassProfile::Dock {
             36.0
         } else {
             26.0
-        };
+        } + (region.tuning.blur - 1.0).max(0.0) * 12.0
+            + (region.tuning.refraction - 1.0).max(0.0) * 20.0;
         let capture = egui::epaint::ViewportInPixels::from_points(
             &visible.expand(padding),
             info.pixels_per_point,
@@ -206,18 +207,27 @@ impl Gpu {
         unsafe {
             let [w, h] = capture.samples;
             let scale = info.pixels_per_point;
-            let (sigma, lens, polish) = match (region.mode, region.profile) {
-                (GlassMode::Frost, GlassProfile::Dock) => ([9.0, 12.0], 0.0, 0.0),
-                (GlassMode::Frost, GlassProfile::Floating) => ([8.0, 8.0], 0.0, 0.0),
-                (GlassMode::Prism, GlassProfile::Dock) => ([5.0, 9.0], 8.5, 0.68),
-                (GlassMode::Prism, GlassProfile::Floating) => ([4.5, 4.5], 12.5, 1.0),
+            let (sigma, lens, bevel, polish) = match (region.mode, region.profile) {
+                (GlassMode::Frost, GlassProfile::Dock) => ([12.0, 15.0], 0.0, 0.0, 0.0),
+                (GlassMode::Frost, GlassProfile::Floating) => ([12.0, 12.0], 0.0, 0.0, 0.0),
+                (GlassMode::Prism, GlassProfile::Dock) => ([4.0, 6.5], 15.0, 16.0, 0.78),
+                (GlassMode::Prism, GlassProfile::Floating) => ([3.5, 3.5], 19.0, 20.0, 1.0),
             };
             let scene_scale = [
                 w as f32 / capture.width as f32,
                 h as f32 / capture.height as f32,
             ];
-            let kernels: [Kernel; 2] =
-                std::array::from_fn(|axis| Kernel::new(sigma[axis] * scale * scene_scale[axis]));
+            let kernels: [(Kernel, f32); 2] = std::array::from_fn(|axis| {
+                let sigma = sigma[axis] * scale * scene_scale[axis] * region.tuning.blur;
+                // Wider sampling supports soft materials at high pixel densities
+                // without increasing the number of texture reads.
+                let stride = if region.mode == GlassMode::Frost || region.tuning.blur > 1.0 {
+                    (sigma / 3.0).max(1.0)
+                } else {
+                    1.0
+                };
+                (Kernel::new(sigma / stride), stride)
+            });
 
             gl.active_texture(glow::TEXTURE0);
             gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(self.target));
@@ -268,16 +278,19 @@ impl Gpu {
                 glow::LINEAR,
             );
             let succeeded = gl.get_error() == glow::NO_ERROR;
-            if succeeded {
+            if succeeded && region.tuning.blur > 0.001 {
                 // Each low-resolution pass samples only the other texture.
                 gl.disable(glow::BLEND);
                 gl.viewport(0, 0, w, h);
                 gl.bind_vertex_array(Some(self.vao));
                 self.filter.prepare(gl, capture.samples, self.size);
                 self.attach(gl, self.scratch);
-                self.filter.pass(gl, self.texture, [1.0, 0.0], kernels[0]);
+                let [(horizontal, x_stride), (vertical, y_stride)] = kernels;
+                self.filter
+                    .pass(gl, self.texture, [x_stride, 0.0], horizontal);
                 self.attach(gl, self.texture);
-                self.filter.pass(gl, self.scratch, [0.0, 1.0], kernels[1]);
+                self.filter
+                    .pass(gl, self.scratch, [0.0, y_stride], vertical);
                 gl.enable(glow::BLEND);
             }
             gl.bind_framebuffer(glow::FRAMEBUFFER, destination);
@@ -328,9 +341,9 @@ impl Gpu {
             );
             gl.uniform_3_f32(
                 effect.as_ref(),
-                lens * scale * (1.0 - 0.5 * region.tint),
-                16.0 * scale,
-                polish,
+                lens * scale * (1.0 - 0.5 * region.tint) * region.tuning.refraction,
+                bevel * scale,
+                polish * region.tuning.rim,
             );
             gl.uniform_1_f32(strength.as_ref(), region.strength);
             gl.bind_vertex_array(Some(self.vao));

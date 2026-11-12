@@ -68,6 +68,41 @@ fn navigation_remains_usable_in_a_narrow_viewport() {
 }
 
 #[test]
+fn phone_safe_area_keeps_both_floating_menus_and_dock_reachable() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(320.0, 640.0))
+        .build_ui_state(
+            |ui, app: &mut showcase::Showcase| {
+                app.ui(ui, &mut eframe::Frame::_new_kittest());
+            },
+            showcase::Showcase::default(),
+        );
+    harness.input_mut().safe_area_insets = Some(egui::SafeAreaInsets(egui::epaint::MarginF32 {
+        left: 8.0,
+        right: 8.0,
+        top: 28.0,
+        bottom: 24.0,
+    }));
+    harness.run_steps(4);
+    let first_heading = harness.get_by_label("TEMIVU / COMPONENT STUDIO").rect();
+    let header_button = harness.get_by_label("Menu").rect();
+    assert!(first_heading.top() >= header_button.bottom() + 8.0);
+    for label in ["Menu", "Quick menu"] {
+        let trigger = harness.get_by_label(label);
+        assert!(trigger.rect().top() >= 36.0);
+        trigger.click();
+        harness.run_steps(4);
+        let row = harness.get_by_role_and_label(egui::accesskit::Role::MenuItem, "Localization");
+        assert!(row.rect().left() >= 8.0 && row.rect().right() <= 312.0);
+        assert!(row.rect().top() >= 28.0 && row.rect().bottom() <= 616.0);
+        harness.key_press(egui::Key::Escape);
+        harness.run_steps(4);
+    }
+    let dock = harness.get_by_label("Localization");
+    assert!(dock.rect().bottom() <= 600.0);
+}
+
+#[test]
 fn showcase_pages_theme_and_controls_work() {
     let mut harness = harness();
     harness.get_by_label("Thoughtful components for beautiful, accessible interfaces.");
@@ -396,13 +431,13 @@ fn showcase_overlays_open_and_close() {
 fn showcase_data_and_localization_work() {
     let mut harness = harness();
     navigate(&mut harness, "Data");
-    let item = harness.get_by_label("Example item");
+    let item = harness.get_by_label("Project brief");
     assert_eq!(item.accesskit_node().is_selected(), Some(false));
     item.click();
     harness.run_steps(3);
     assert_eq!(
         harness
-            .get_by_label("Example item")
+            .get_by_label("Project brief")
             .accesskit_node()
             .is_selected(),
         Some(true)
@@ -416,19 +451,13 @@ fn showcase_data_and_localization_work() {
             .is_selected(),
         Some(true)
     );
-    assert_eq!(
-        harness.get_by_label("2").accesskit_node().is_selected(),
-        Some(true)
-    );
+    harness.get_by_label("Page 2 of 12");
     harness.get_by_label("Next").click();
     harness.run_steps(3);
-    assert_eq!(
-        harness.get_by_label("3").accesskit_node().is_selected(),
-        Some(true)
-    );
+    harness.get_by_label("Page 3 of 12");
 
-    harness.get_by_label("Left pane");
-    harness.get_by_label("Right pane");
+    harness.get_by_label("FOLDERS");
+    harness.get_by_label("FOLDER CONTENTS");
     harness.get_by_label("November 2026");
     harness.get_by_label_contains("November 1, 2026").click();
     harness.run_steps(3);
@@ -480,21 +509,48 @@ fn showcase_data_and_localization_work() {
             .is_selected(),
         Some(true)
     );
+}
 
+#[test]
+fn localization_preview_renders_scripts_and_pages_at_phone_width() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(390.0, 844.0))
+        .build_ui_state(
+            |ui, app: &mut showcase::Showcase| {
+                let mut frame = eframe::Frame::_new_kittest();
+                app.ui(ui, &mut frame);
+            },
+            showcase::Showcase::default(),
+        );
+    harness.run_steps(3);
     navigate(&mut harness, "Localization");
+    for label in [
+        "English (en)",
+        "Deutsch (de)",
+        "العربية (ar)",
+        "日本語 (ja)",
+        "中文 (zh)",
+        "Français (fr)",
+    ] {
+        assert!(harness.get_by_label(label).rect().right() <= 390.0);
+    }
     harness.get_by_label("Deutsch (de)").click();
     harness.run_steps(3);
-    harness.get_by_label("progressSemanticsLabel = Wird geladen");
+    harness.get_by_label("Wird geladen");
     harness.get_by_label("Zurück");
     harness.get_by_label("Weiter").click();
     harness.run_steps(3);
-    assert_eq!(
-        harness
-            .get_by_label("Seite 4")
-            .accesskit_node()
-            .is_selected(),
-        Some(true)
-    );
+    harness.get_by_label("Seite 2");
+    harness.get_by_label("日本語 (ja)").click();
+    harness.run_steps(3);
+    harness.get_by_label("読み込み中");
+    for text in ["العربية", "日本語", "中文", "読み込み中"] {
+        assert!(
+            harness
+                .ctx
+                .fonts_mut(|fonts| fonts.has_glyphs(&egui::FontId::proportional(16.0), text))
+        );
+    }
 }
 
 #[test]

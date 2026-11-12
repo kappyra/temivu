@@ -35,7 +35,9 @@ scrolls it into view.
 `LineCalendar::selectable` disables individual days, `LineCalendar::today` marks
 today with a dot and the ", Today" accessible suffix, `LineCalendar::toggleable`
 makes pressing the selected day clear it, and `LineCalendar::orientation` and
-`LineCalendar::item_size` control the layout. With keyboard focus (Tab), arrows
+`LineCalendar::item_size` control the layout. `radius` overrides the day-cell
+corners, and `lighting` can override the inherited Vesper material or turn it
+off for that strip. With keyboard focus (Tab), arrows
 step by one day along the strip and by one week across it, Home/End jump to the
 window edges, Page Up/Page Down change the month, and Enter/Space select the
 focused day. Arrow keys are locked to the strip so focus cannot escape while

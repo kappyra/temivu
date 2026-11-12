@@ -194,6 +194,7 @@ pub struct Sidebar<'a> {
     title: Option<&'a str>,
     width: f32,
     collapsed_width: f32,
+    framed: bool,
 }
 
 impl<'a> Sidebar<'a> {
@@ -212,6 +213,7 @@ impl<'a> Sidebar<'a> {
             title: None,
             width: DEFAULT_WIDTH,
             collapsed_width: COLLAPSED_WIDTH,
+            framed: true,
         }
     }
 
@@ -243,6 +245,12 @@ impl<'a> Sidebar<'a> {
         self
     }
 
+    /// Give the sidebar its own background. Turn off inside a styled panel.
+    pub fn framed(mut self, framed: bool) -> Self {
+        self.framed = framed;
+        self
+    }
+
     /// The width this sidebar recommends for its current collapsed state.
     pub fn recommended_width(state: &SidebarState) -> f32 {
         if state.collapsed {
@@ -268,6 +276,7 @@ impl<'a> Sidebar<'a> {
             title,
             width,
             collapsed_width,
+            framed,
         } = self;
         let collapsed = state.collapsed;
         let enabled = ui.is_enabled();
@@ -281,17 +290,22 @@ impl<'a> Sidebar<'a> {
         let mut collapsed_changed = false;
         let scope = ui.scope_builder(UiBuilder::new().id(id).sense(Sense::hover()), |ui| {
             ui.set_width(width);
+            let margin = if framed { 7 } else { 0 };
             egui::Frame::new()
-                .fill(theme.muted)
-                .corner_radius(20)
-                .inner_margin(5)
+                .fill(if framed {
+                    theme.muted
+                } else {
+                    egui::Color32::TRANSPARENT
+                })
+                .corner_radius(14)
+                .inner_margin(margin)
                 .show(ui, |ui| {
-                    ui.set_width((width - 10.0).max(1.0));
+                    ui.set_width((width - 2.0 * f32::from(margin)).max(1.0));
                     ui.spacing_mut().item_spacing.y = 4.0;
                     collapsed_changed = header(ui, title, theme, state, collapsed, enabled);
                     ui.add_space(4.0);
                     ScrollArea::vertical()
-                        .auto_shrink([false, false])
+                        .auto_shrink([false, !framed])
                         .show(ui, |ui| {
                             for group in groups {
                                 draw_group(
@@ -460,6 +474,8 @@ fn draw_item(
     let text = item_text(item, collapsed, has_children, expanded);
     let response = crate::Item::new(&text, theme)
         .id(sidebar_id.with(("sidebar-item", item.id)))
+        .flat(true)
+        .radius(12)
         .enabled(item_enabled)
         .selected(item_is_selected)
         .show(ui);

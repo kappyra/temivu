@@ -221,7 +221,10 @@ fn compact_sheet_keeps_its_header_visible_and_dismisses_by_grip() {
         shapes.iter().any(|shape| {
             matches!(shape, egui::Shape::Rect(rect)
             if rect.fill == Theme::light().card
-                && rect.corner_radius == egui::CornerRadius::same(32))
+                && rect.rect.width() > 200.0
+                && rect.corner_radius == egui::CornerRadius::same(
+                    temivu::SurfaceShape::Panel.radius(egui::vec2(rect.rect.width(), 220.0))
+                ))
         })
     });
     assert!(rounded_frame, "the floating sheet has four rounded corners");

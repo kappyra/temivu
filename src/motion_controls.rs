@@ -120,7 +120,8 @@ fn icon(painter: &egui::Painter, center: Pos2, icon: Icon, stretch: f32, color: 
     }
 }
 
-pub(crate) fn press_amount(response: &Response, theme: &Theme) -> f32 {
+/// The Temivu press phase for an arbitrary enabled egui control response.
+pub fn press_amount(response: &Response, theme: &Theme) -> f32 {
     let pressed = response.enabled()
         && (response.is_pointer_button_down_on()
             || (response.has_focus()

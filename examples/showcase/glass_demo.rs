@@ -1,11 +1,44 @@
 use egui::{Color32, ColorImage, Context, Frame, Rect, TextureHandle, TextureOptions, Ui, Vec2};
-use temivu::{Button, ButtonVariant, Glass, GlassBackdrop, GlassMode, Slider, Switch, Theme};
+use temivu::{
+    Button, ButtonVariant, Glass, GlassBackdrop, GlassMode, GlassTuning, Slider, Switch, Theme,
+};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Preset {
+    Frost,
+    SoftPrism,
+    Prism,
+}
+
+impl Preset {
+    const ALL: [Self; 3] = [Self::Frost, Self::SoftPrism, Self::Prism];
+
+    fn label(self) -> &'static str {
+        match self {
+            Self::Frost => "Frost",
+            Self::SoftPrism => "Soft Prism",
+            Self::Prism => "Prism",
+        }
+    }
+
+    fn material(self) -> Glass {
+        match self {
+            Self::Frost => Glass::default().mode(GlassMode::Frost),
+            Self::SoftPrism => Glass::soft_prism(),
+            Self::Prism => Glass::default(),
+        }
+    }
+}
 
 pub(super) struct GlassDemo {
     pub enabled: bool,
     tint: f64,
-    mode: GlassMode,
+    preset: Preset,
+    prism_preset: Preset,
+    tuning: [GlassTuning; 3],
     artwork: Option<Artwork>,
+    frost_motion: SampleMotion,
+    prism_motion: SampleMotion,
 }
 
 impl Default for GlassDemo {
@@ -13,16 +46,26 @@ impl Default for GlassDemo {
         Self {
             enabled: false,
             tint: 0.28,
-            mode: GlassMode::Prism,
+            preset: Preset::SoftPrism,
+            prism_preset: Preset::SoftPrism,
+            tuning: Preset::ALL.map(|preset| preset.material().tuning()),
             artwork: None,
+            frost_motion: SampleMotion::default(),
+            prism_motion: SampleMotion::default(),
         }
     }
 }
 
 impl GlassDemo {
+    fn material(&self, preset: Preset) -> Glass {
+        preset
+            .material()
+            .with_tint(self.tint as f32)
+            .with_tuning(self.tuning[preset as usize])
+    }
+
     pub fn apply(&self, ctx: &Context, high_contrast: bool) {
-        let glass =
-            (self.enabled && !high_contrast).then(|| Glass::new(self.tint as f32).mode(self.mode));
+        let glass = (self.enabled && !high_contrast).then(|| self.material(self.preset));
         Glass::set_context(ctx, glass);
     }
 
@@ -32,40 +75,41 @@ impl GlassDemo {
             .label("Glass surfaces")
             .description("Choose a material for navigation and overlays.")
             .show(ui);
-        if self.enabled {
-            if high_contrast {
-                ui.label("High contrast uses opaque surfaces.");
-            } else {
-                ui.horizontal_wrapped(|ui| {
-                    for (mode, label) in [(GlassMode::Frost, "Frost"), (GlassMode::Prism, "Prism")]
-                    {
-                        let variant = if self.mode == mode {
-                            ButtonVariant::Secondary
-                        } else {
-                            ButtonVariant::Ghost
-                        };
-                        let response = Button::new(label, theme).variant(variant).show(ui);
-                        if response.clicked() {
-                            self.mode = mode;
+        if self.enabled && high_contrast {
+            ui.label("High contrast uses opaque surfaces.");
+        } else if self.enabled {
+            ui.horizontal_wrapped(|ui| {
+                for preset in Preset::ALL {
+                    let variant = if self.preset == preset {
+                        ButtonVariant::Secondary
+                    } else {
+                        ButtonVariant::Ghost
+                    };
+                    let response = Button::new(preset.label(), theme).variant(variant).show(ui);
+                    if response.clicked() {
+                        self.preset = preset;
+                        if preset != Preset::Frost {
+                            self.prism_preset = preset;
                         }
-                        ui.ctx().accesskit_node_builder(response.id, |node| {
-                            node.set_selected(self.mode == mode)
-                        });
                     }
-                });
-                ui.label(
-                    egui::RichText::new(match self.mode {
-                        GlassMode::Frost => "Frost diffuses the background evenly.",
-                        GlassMode::Prism => "Prism bends the scene along the polished edge.",
-                    })
-                    .color(theme.muted_foreground),
-                );
-                Slider::new(&mut self.tint, theme)
-                    .expect("the tint stays within the slider range")
-                    .label("Glass tint")
-                    .filled(true)
-                    .show(ui);
-            }
+                    ui.ctx().accesskit_node_builder(response.id, |node| {
+                        node.set_selected(self.preset == preset);
+                    });
+                }
+            });
+            Slider::new(&mut self.tint, theme)
+                .expect("the tint stays within the slider range")
+                .label("Glass tint")
+                .filled(true)
+                .show(ui);
+            ui.collapsing("Optical settings", |ui| {
+                let tuning = &mut self.tuning[self.preset as usize];
+                tuning_slider(ui, theme, "Backdrop blur", &mut tuning.blur);
+                if self.preset != Preset::Frost {
+                    tuning_slider(ui, theme, "Refraction", &mut tuning.refraction);
+                }
+                tuning_slider(ui, theme, "Rim", &mut tuning.rim);
+            });
         }
         self.apply(ui.ctx(), high_contrast);
     }
@@ -78,57 +122,108 @@ impl GlassDemo {
             ui,
             theme,
             "Glass studio",
-            "One backdrop, two materials. The tint slider applies to both samples.",
+            "Drag either sample across the scene to compare its effect on the background.",
             |ui| {
-                let tint = self.tint as f32;
-                let mut sample = |ui: &mut Ui, mode| {
-                    let (title, caption) = match mode {
-                        GlassMode::Frost => (
-                            "Frost glassmorphism",
-                            "Soft diffusion across the entire surface.",
-                        ),
-                        GlassMode::Prism => (
-                            "Prism optical glass",
-                            "A clear center with a polished, refracting edge.",
-                        ),
+                let frost = self.material(Preset::Frost);
+                let prism = self.material(self.prism_preset);
+                let mut sample = |ui: &mut Ui, preset, glass| {
+                    let (title, motion) = if preset == Preset::Frost {
+                        ("Frost glassmorphism", &mut self.frost_motion)
+                    } else {
+                        ("Prism optical glass", &mut self.prism_motion)
                     };
                     ui.label(egui::RichText::new(title).strong());
-                    ui.label(
-                        egui::RichText::new(caption)
-                            .size(12.0)
-                            .color(theme.muted_foreground),
-                    );
                     ui.add_space(3.0);
-
-                    let (rect, _) = ui.allocate_exact_size(
+                    let (rect, stage) = ui.allocate_exact_size(
                         Vec2::new(ui.available_width(), 164.0),
                         egui::Sense::hover(),
                     );
                     if !ui.is_rect_visible(rect) || !rect.is_positive() {
                         return;
                     }
+                    let size = Vec2::new((rect.width() * 0.64).min(208.0), 62.0);
+                    let sample = motion.sample(ui, &stage, size, title);
                     let artwork = self.artwork.get_or_insert_with(|| Artwork::new(ui.ctx()));
-                    artwork.paint(ui, theme, rect, Glass::new(tint).mode(mode), mode);
+                    artwork.paint(ui, theme, rect, sample, glass, preset);
                 };
-
                 if ui.available_width() >= 600.0 {
                     ui.columns(2, |columns| {
-                        sample(&mut columns[0], GlassMode::Frost);
-                        sample(&mut columns[1], GlassMode::Prism);
+                        sample(&mut columns[0], Preset::Frost, frost);
+                        sample(&mut columns[1], self.prism_preset, prism);
                     });
                 } else {
-                    sample(ui, GlassMode::Frost);
+                    sample(ui, Preset::Frost, frost);
                     ui.add_space(16.0);
-                    sample(ui, GlassMode::Prism);
+                    sample(ui, self.prism_preset, prism);
                 }
             },
         );
     }
 }
 
+fn tuning_slider(ui: &mut Ui, theme: &Theme, label: &str, multiplier: &mut f32) {
+    let mut position = f64::from(*multiplier) * 0.5;
+    if Slider::new(&mut position, theme)
+        .expect("the multiplier stays within its slider range")
+        .label(label)
+        .filled(true)
+        .show(ui)
+        .changed()
+    {
+        *multiplier = (position * 2.0) as f32;
+    }
+}
+
+#[derive(Default)]
+struct SampleMotion {
+    position: Vec2,
+    drag_origin: Option<Vec2>,
+}
+
+impl SampleMotion {
+    fn sample(&mut self, ui: &Ui, stage: &egui::Response, size: Vec2, label: &str) -> Rect {
+        let travel = ((stage.rect.size() - size) * 0.5 - Vec2::splat(8.0)).max(Vec2::ZERO);
+        let sample_at =
+            |position: Vec2| Rect::from_center_size(stage.rect.center() + position * travel, size);
+        let handle = ui.interact(
+            sample_at(self.position),
+            stage.id.with("glass-sample"),
+            egui::Sense::click_and_drag(),
+        );
+        handle.widget_info(|| {
+            egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("Drag {label}"))
+        });
+        if let Some(delta) = handle.total_drag_delta() {
+            let origin = *self.drag_origin.get_or_insert(self.position);
+            self.position = origin + delta / travel.max(Vec2::splat(1.0));
+        } else {
+            self.drag_origin = None;
+            if handle.has_focus() {
+                self.position += ui.input_mut(|input| {
+                    let mut step =
+                        |key| f32::from(input.consume_key(egui::Modifiers::NONE, key)) * 0.14;
+                    egui::vec2(
+                        step(egui::Key::ArrowRight) - step(egui::Key::ArrowLeft),
+                        step(egui::Key::ArrowDown) - step(egui::Key::ArrowUp),
+                    )
+                });
+            }
+        }
+        self.position = self.position.clamp(-Vec2::splat(1.0), Vec2::splat(1.0));
+        let cursor = if handle.dragged() {
+            egui::CursorIcon::Grabbing
+        } else {
+            egui::CursorIcon::Grab
+        };
+        handle.on_hover_cursor(cursor);
+        sample_at(self.position)
+    }
+}
+
 struct Artwork {
     scene: TextureHandle,
     frost: TextureHandle,
+    soft_prism: TextureHandle,
     prism: TextureHandle,
 }
 
@@ -145,24 +240,37 @@ impl Artwork {
         }
         // Backends without a live effect reuse continuous, prefiltered versions
         // of the same artwork. The native Showcase samples the original scene.
-        let frost = soften(&image, &[1, 4, 10, 18, 25, 28, 25, 18, 10, 4, 1]);
+        let frost = soften(
+            &image,
+            &[1, 3, 7, 12, 20, 28, 34, 36, 34, 28, 20, 12, 7, 3, 1],
+        );
+        let soft_prism = soften(&image, &[1, 3, 8, 13, 16, 13, 8, 3, 1]);
         let prism = soften(&image, &[1, 4, 6, 4, 1]);
         Self {
             scene: ctx.load_texture("glass-coast", image, TextureOptions::LINEAR),
             frost: ctx.load_texture("glass-coast-frost", frost, TextureOptions::LINEAR),
+            soft_prism: ctx.load_texture(
+                "glass-coast-soft-prism",
+                soft_prism,
+                TextureOptions::LINEAR,
+            ),
             prism: ctx.load_texture("glass-coast-prism", prism, TextureOptions::LINEAR),
         }
     }
 
-    fn paint(&self, ui: &Ui, theme: &Theme, rect: Rect, glass: Glass, mode: GlassMode) {
+    fn paint(
+        &self,
+        ui: &Ui,
+        theme: &Theme,
+        rect: Rect,
+        sample: Rect,
+        glass: Glass,
+        preset: Preset,
+    ) {
         let uv = Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0));
         ui.painter().add(
             egui::epaint::RectShape::filled(rect, 19, Color32::WHITE)
                 .with_texture(self.scene.id(), uv),
-        );
-        let sample = Rect::from_center_size(
-            rect.center(),
-            Vec2::new((rect.width() * 0.64).min(208.0), 62.0),
         );
         glass.paint(
             ui.painter(),
@@ -173,9 +281,10 @@ impl Artwork {
                 .stroke(egui::Stroke::new(1.0, theme.border))
                 .corner_radius(26),
             Some(GlassBackdrop {
-                texture: match mode {
-                    GlassMode::Frost => self.frost.id(),
-                    GlassMode::Prism => self.prism.id(),
+                texture: match preset {
+                    Preset::Frost => self.frost.id(),
+                    Preset::SoftPrism => self.soft_prism.id(),
+                    Preset::Prism => self.prism.id(),
                 },
                 bounds: rect,
             }),
@@ -184,10 +293,7 @@ impl Artwork {
             ui.painter().text(
                 sample.center(),
                 egui::Align2::CENTER_CENTER,
-                match mode {
-                    GlassMode::Frost => "Frost",
-                    GlassMode::Prism => "Prism",
-                },
+                preset.label(),
                 egui::FontId::proportional(14.0),
                 theme.foreground,
             );
@@ -265,4 +371,31 @@ fn soften(source: &ColorImage, weights: &[u16]) -> ColorImage {
         output
     };
     pass(&pass(source, true), false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use egui_kittest::Harness;
+
+    #[test]
+    fn a_glass_sample_moves_with_the_pointer_and_stays_inside_the_artwork() {
+        let mut harness = Harness::builder().build_ui_state(
+            |ui, (motion, artwork, sample)| {
+                let (rect, stage) =
+                    ui.allocate_exact_size(egui::vec2(280.0, 164.0), egui::Sense::hover());
+                *artwork = rect;
+                *sample = motion.sample(ui, &stage, egui::vec2(160.0, 62.0), "Glass sample");
+            },
+            (SampleMotion::default(), Rect::NOTHING, Rect::NOTHING),
+        );
+        harness.run_steps(2);
+        let center = harness.state().2.center();
+        harness.drag_at(center);
+        harness.event(egui::Event::PointerMoved(center + egui::vec2(120.0, 0.0)));
+        harness.run_steps(2);
+        let (_, artwork, sample) = harness.state();
+        assert!(sample.center().x > center.x + 40.0);
+        assert!(artwork.contains_rect(*sample));
+    }
 }

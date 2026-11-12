@@ -45,6 +45,16 @@ fn primary(pos: Pos2, pressed: bool) -> Event {
     }
 }
 
+fn touch(pos: Pos2, phase: egui::TouchPhase) -> Event {
+    Event::Touch {
+        device_id: egui::TouchDeviceId(0),
+        id: egui::TouchId(1),
+        phase,
+        pos,
+        force: None,
+    }
+}
+
 #[test]
 fn lighting_is_opt_in_and_widget_overrides_take_precedence() {
     let mut harness = Harness::builder().build_ui_state(
@@ -134,6 +144,64 @@ fn direct_light_tracks_input_and_fades_after_release() {
 }
 
 #[test]
+fn a_held_contact_stays_lit_across_the_touch_long_press_and_on_passive_surfaces() {
+    for (sense, touchscreen) in [
+        (Sense::click(), true),
+        (Sense::hover(), true),
+        (Sense::hover(), false),
+    ] {
+        let mut harness = Harness::builder().build_ui_state(
+            |ui, rect| {
+                let theme = Theme::light();
+                let (bounds, response) = ui.allocate_exact_size(vec2(210.0, 54.0), sense);
+                *rect = bounds;
+                Vesper::expressive().paint(ui.painter(), &theme, &response, bounds, 27.into());
+            },
+            Rect::NOTHING,
+        );
+        harness
+            .ctx
+            .all_styles_mut(|style| style.animation_time = 0.2);
+        let rect = *harness.state();
+        let left = Pos2::new(rect.left() + 26.0, rect.center().y);
+        let right = Pos2::new(rect.right() - 26.0, rect.center().y);
+        let mut events = vec![Event::PointerMoved(left), primary(left, true)];
+        if touchscreen {
+            events.push(touch(left, egui::TouchPhase::Start));
+        }
+        step(&mut harness, 1.0, events);
+        for time in [1.15, 1.38, 1.62, 1.78, 2.0, 2.18, 2.4] {
+            step(&mut harness, time, []);
+        }
+        let label = format!("sense={sense:?}, touchscreen={touchscreen}");
+        assert!(
+            light_center(&harness).is_some_and(|x| x < rect.center().x),
+            "{label}"
+        );
+
+        let mut events = vec![Event::PointerMoved(right)];
+        if touchscreen {
+            events.push(touch(right, egui::TouchPhase::Move));
+        }
+        step(&mut harness, 2.43, events);
+        assert!(
+            light_center(&harness).is_some_and(|x| x > rect.center().x),
+            "{label}"
+        );
+
+        let mut events = vec![primary(right, false), Event::PointerGone];
+        if touchscreen {
+            events.push(touch(right, egui::TouchPhase::End));
+        }
+        step(&mut harness, 2.47, events);
+        for frame in 1..=10 {
+            step(&mut harness, 2.47 + f64::from(frame) * 0.05, []);
+        }
+        assert!(light_center(&harness).is_none(), "{label}");
+    }
+}
+
+#[test]
 fn reduced_motion_keeps_the_steady_light_and_suppresses_the_pulse() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, state: &mut (Rect, bool, bool)| {
@@ -179,4 +247,37 @@ fn reduced_motion_keeps_the_steady_light_and_suppresses_the_pulse() {
         light_center(&harness).is_some(),
         "a normal press shows the pulse"
     );
+}
+
+#[test]
+fn pointer_focus_does_not_keep_the_contact_glow_after_release() {
+    let mut harness = Harness::builder().build_ui_state(
+        |ui, rect| {
+            let theme = Theme::light().touch();
+            let (bounds, response) = ui.allocate_exact_size(vec2(160.0, 54.0), Sense::click());
+            *rect = bounds;
+            if response.clicked() {
+                response.request_focus();
+            }
+            Vesper::subtle().paint(ui.painter(), &theme, &response, bounds, 26.into());
+        },
+        Rect::NOTHING,
+    );
+    harness
+        .ctx
+        .all_styles_mut(|style| style.animation_time = 0.2);
+    let point = harness.state().center();
+    step(
+        &mut harness,
+        1.0,
+        [Event::PointerMoved(point), primary(point, true)],
+    );
+    assert!(light_center(&harness).is_some());
+    step(&mut harness, 1.03, [primary(point, false)]);
+    step(&mut harness, 1.06, [Event::PointerGone]);
+    assert!(harness.ctx.memory(|memory| memory.focused().is_some()));
+    for frame in 1..=10 {
+        step(&mut harness, 1.06 + f64::from(frame) * 0.05, []);
+    }
+    assert!(light_center(&harness).is_none());
 }

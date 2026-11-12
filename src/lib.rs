@@ -17,6 +17,7 @@ pub mod date_field;
 pub mod date_time_picker;
 pub mod dialog;
 pub mod divider;
+pub mod floating_motion;
 mod generated_localizations;
 mod generated_palette;
 pub mod glass;
@@ -84,15 +85,20 @@ pub use date_time_picker::{
 };
 pub use dialog::Dialog;
 pub use divider::{Divider, DividerAxis, DividerStyle};
-pub use glass::{Glass, GlassBackdrop, GlassMode, GlassProfile, GlassRegion, GlassRenderer};
+pub use effect_surface::EffectSurface;
+pub use floating_motion::FloatingMotion;
+pub use glass::{
+    Glass, GlassBackdrop, GlassMode, GlassProfile, GlassRegion, GlassRenderer, GlassTuning,
+};
 pub use header::Header;
 pub use item::{Item, ItemVariant};
 pub use label::{FieldLabel, LabelLayout};
-pub use lighting::{LightEffects, LightQuality, LightTracking, Vesper};
+pub use lighting::{LightEffects, LightQuality, LightSpill, LightTracking, Vesper};
 pub use line_calendar::{
     LineCalendar, LineCalendarLabels, LineCalendarOrientation, LineCalendarResponse,
     LineCalendarState,
 };
+pub use liquid::{DropletAnchor, DropletPart, DropletResize, LiquidStyle, SurfaceTransition};
 pub use localization::Messages;
 pub use motion::{animate_bool, animate_f32};
 pub use motion_controls::{
@@ -102,8 +108,8 @@ pub use motion_controls::{
 pub use multi_select::MultiSelect;
 pub use otp_field::{OtpField, OtpFieldResponse, OtpLabels};
 pub use pagination::{
-    PageItem, PaginationState, pagination, pagination_localized, pagination_localized_with_id,
-    pagination_with_id,
+    PageItem, PaginationState, pagination, pagination_compact, pagination_localized,
+    pagination_localized_with_id, pagination_with_id,
 };
 pub use picker::{Picker, PickerItem, PickerResponse};
 pub use popover::Popover;
@@ -123,11 +129,14 @@ pub use slider::{Slider, SliderMark};
 pub use switch::{Switch, SwitchStyle};
 pub use tabs::Tabs;
 pub use text_field::{TextField, TextFieldOutput, Validator};
-pub use theme::{Easing, FontWeight, MotionSettings, TextStyleToken, Theme, Typography};
+pub use theme::{
+    Easing, FontWeight, MotionSettings, SurfaceShape, TextStyleToken, Theme, Typography,
+};
 pub use tile::Tile;
 pub use time_field::{TimeField, TimeFieldResponse, TimeFieldState};
 pub use time_picker::{
-    Time, TimeError, TimeParseError, TimePicker, TimePickerLabels, TimePickerResponse,
+    Time, TimeError, TimeParseError, TimePicker, TimePickerLabels, TimePickerLayout,
+    TimePickerResponse,
 };
 pub use toast::{Toast, ToastState, ToastStatus, ToastVariant};
 pub use toaster::{NotificationCenterLabels, ToastEntry, Toaster, ToasterResponse, ToasterState};
@@ -144,6 +153,7 @@ pub use page_transition::PageTransition;
 pub mod navigation_menu;
 pub use navigation_menu::{MenuPresentation, NavigationMenu};
 
+pub mod effect_surface;
 pub mod lighting;
 pub mod liquid;
 

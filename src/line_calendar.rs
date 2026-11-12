@@ -22,8 +22,8 @@
 //! # }
 //! ```
 
-use crate::Theme;
 use crate::calendar::{Calendar, Date, Weekday, month_name};
+use crate::{Theme, Vesper};
 use egui::{Id, Rect, Response, Sense, Stroke, StrokeKind, Ui, Vec2};
 
 const DEFAULT_DAYS: usize = 14;
@@ -219,6 +219,8 @@ pub struct LineCalendar<'a> {
     labels: LineCalendarLabels<'a>,
     toggleable: bool,
     id: Option<Id>,
+    radius: u8,
+    lighting: Option<Option<Vesper>>,
 }
 
 impl<'a> LineCalendar<'a> {
@@ -241,6 +243,8 @@ impl<'a> LineCalendar<'a> {
             labels: LineCalendarLabels::english(),
             toggleable: false,
             id: None,
+            radius: 12,
+            lighting: None,
         }
     }
 
@@ -280,7 +284,21 @@ impl<'a> LineCalendar<'a> {
     /// Override the default item size (`44 x 52` logical pixels). The strip may
     /// shrink items to fit the available cross-axis space.
     pub fn item_size(mut self, size: Vec2) -> Self {
-        self.item_size = Some(size);
+        if size.is_finite() && size.min_elem() > 0.0 {
+            self.item_size = Some(size);
+        }
+        self
+    }
+
+    /// Override the resting day-cell corner radius.
+    pub fn radius(mut self, radius: u8) -> Self {
+        self.radius = radius;
+        self
+    }
+
+    /// Override inherited lighting. Pass `None` to disable it for this strip.
+    pub fn lighting(mut self, lighting: Option<Vesper>) -> Self {
+        self.lighting = Some(lighting);
         self
     }
 
@@ -328,6 +346,8 @@ impl<'a> LineCalendar<'a> {
             item_size,
             labels,
             toggleable,
+            radius,
+            lighting,
             ..
         } = self;
         config.span = days.max(1);
@@ -517,12 +537,16 @@ impl<'a> LineCalendar<'a> {
         );
         let count = start.days_until(end).max(0) as usize + 1;
         let default_size = item_size.unwrap_or(Vec2::new(DEFAULT_ITEM_WIDTH, DEFAULT_ITEM_HEIGHT));
-        let spacing = ITEM_SPACING;
+        let spacing = if orientation == LineCalendarOrientation::Horizontal {
+            ITEM_SPACING.min(ui.available_width().max(1.0) / (2.0 * count as f32))
+        } else {
+            ITEM_SPACING
+        };
         let (strip_origin, strip_size, item_width, item_height) = match orientation {
             LineCalendarOrientation::Horizontal => {
                 let available = ui.available_width().max(1.0);
                 let width = (available - spacing * (count.saturating_sub(1)) as f32) / count as f32;
-                let width = default_size.x.min(width.max(24.0));
+                let width = default_size.x.min(width.max(0.0));
                 let height = default_size.y;
                 let size = Vec2::new(
                     width * count as f32 + spacing * (count.saturating_sub(1)) as f32,
@@ -591,6 +615,7 @@ impl<'a> LineCalendar<'a> {
         }
 
         let painter = ui.painter();
+        let lighting = lighting.unwrap_or_else(|| Vesper::context(ui.ctx()));
         let mut clicked_date = None;
         for index in 0..count {
             let Some(date) = start.add_days(index as i64) else {
@@ -635,6 +660,9 @@ impl<'a> LineCalendar<'a> {
                 painter,
                 item_rect,
                 theme,
+                radius,
+                &item_response,
+                lighting,
                 ItemVisual {
                     selected,
                     today: is_today,
@@ -753,8 +781,25 @@ struct ItemVisual<'a> {
     day: u8,
 }
 
-fn paint_item(painter: &egui::Painter, rect: Rect, theme: &Theme, visual: ItemVisual<'_>) {
-    let radius = egui::CornerRadius::same(8);
+fn paint_item(
+    painter: &egui::Painter,
+    rect: Rect,
+    theme: &Theme,
+    radius: u8,
+    response: &Response,
+    lighting: Option<Vesper>,
+    visual: ItemVisual<'_>,
+) {
+    if !painter.clip_rect().intersects(rect) {
+        return;
+    }
+    let press = if visual.disabled {
+        0.0
+    } else {
+        crate::motion_controls::press_amount(response, theme)
+    };
+    let rect = rect.scale_from_center(1.0 - 0.045 * press);
+    let radius = egui::CornerRadius::same(radius);
     let (fill, text_color, weekday_color) = if visual.selected {
         (
             theme.primary,
@@ -780,22 +825,34 @@ fn paint_item(painter: &egui::Painter, rect: Rect, theme: &Theme, visual: ItemVi
             theme.muted_foreground,
         )
     } else {
-        (theme.card, theme.foreground, theme.muted_foreground)
+        (
+            egui::Color32::TRANSPARENT,
+            theme.foreground,
+            theme.muted_foreground,
+        )
     };
-    painter.rect_filled(rect, radius, fill);
-    painter.rect_stroke(
-        rect,
-        radius,
-        Stroke::new(
-            1.0,
-            if visual.focused {
-                theme.foreground
-            } else {
-                theme.border
-            },
-        ),
-        StrokeKind::Inside,
-    );
+    let stroke = if visual.focused {
+        Stroke::new(1.5, theme.readable_on(theme.foreground, fill, 4.5))
+    } else {
+        Stroke::NONE
+    };
+    painter.add(crate::motion::press_shape(
+        egui::epaint::RectShape::new(rect, radius, fill, stroke, StrokeKind::Inside),
+        press,
+    ));
+    if let Some(style) = lighting
+        && !visual.disabled
+        && let Some(light) = style.interactive_shape_on(
+            painter,
+            theme,
+            response,
+            rect,
+            crate::motion::press_corners(rect, radius, press),
+            fill,
+        )
+    {
+        painter.add(light);
+    }
     let body = theme.typography.body;
     let caption = theme.typography.caption;
     let text_color = if visual.disabled {
@@ -804,7 +861,7 @@ fn paint_item(painter: &egui::Painter, rect: Rect, theme: &Theme, visual: ItemVi
         text_color
     };
     painter.text(
-        egui::pos2(rect.center().x, rect.center().y - caption.size * 0.55),
+        egui::pos2(rect.center().x, rect.center().y - caption.size * 0.78),
         egui::Align2::CENTER_CENTER,
         visual.weekday,
         egui::FontId::proportional(caption.size),
@@ -815,7 +872,7 @@ fn paint_item(painter: &egui::Painter, rect: Rect, theme: &Theme, visual: ItemVi
         },
     );
     painter.text(
-        egui::pos2(rect.center().x, rect.center().y + body.size * 0.35),
+        egui::pos2(rect.center().x, rect.center().y + body.size * 0.40),
         egui::Align2::CENTER_CENTER,
         visual.day,
         egui::FontId::proportional(body.size),
@@ -827,7 +884,7 @@ fn paint_item(painter: &egui::Painter, rect: Rect, theme: &Theme, visual: ItemVi
         } else {
             theme.foreground
         };
-        painter.circle_filled(egui::pos2(rect.max.x - 7.0, rect.min.y + 7.0), 2.0, dot);
+        painter.circle_filled(egui::pos2(rect.center().x, rect.bottom() - 6.0), 1.5, dot);
     }
 }
 

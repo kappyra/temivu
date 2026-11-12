@@ -41,6 +41,18 @@ fn both_presentations_select_and_dismiss_with_escape() {
         harness.run();
         harness.get_by_label("Open navigation").click();
         harness.run();
+        if presentation == MenuPresentation::Drawer {
+            let drawer = harness
+                .get_by_role_and_label(egui::accesskit::Role::Dialog, "Navigation")
+                .rect();
+            assert!(drawer.left() >= 0.0 && drawer.right() < 390.0, "{drawer:?}");
+            assert!(
+                drawer.top() >= 0.0 && drawer.bottom() <= 720.0,
+                "{drawer:?}"
+            );
+            assert!(drawer.height() >= 680.0, "{drawer:?}");
+            harness.get_by_label("Find your next destination.");
+        }
         let locked = harness.get_by_role_and_label(egui::accesskit::Role::MenuItem, "Locked");
         assert!(locked.accesskit_node().is_disabled());
         let settings = harness.get_by_role_and_label(egui::accesskit::Role::MenuItem, "Settings");

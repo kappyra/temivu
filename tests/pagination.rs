@@ -5,6 +5,38 @@ use egui_kittest::{
 use temivu::{PageItem, PaginationState, Theme, pagination};
 
 #[test]
+fn compact_controls_are_centered_and_hold_their_positions_as_digits_change() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(390.0, 240.0))
+        .build_ui_state(
+            |ui, state: &mut PaginationState| {
+                temivu::pagination_compact(
+                    ui,
+                    state,
+                    &Theme::light().touch(),
+                    "Previous",
+                    "Next",
+                    |page, total| format!("Page {page} of {total}"),
+                );
+            },
+            PaginationState::new(12, 8, 0, false).unwrap(),
+        );
+    harness.run();
+    let previous = harness.get_by_label("Previous").rect();
+    let next = harness.get_by_label("Next").rect();
+    let caption = harness.get_by_label("Page 9 of 12").rect();
+    assert_eq!(previous.size(), next.size());
+    assert_eq!(previous.center().y, next.center().y);
+    assert!((previous.center().lerp(next.center(), 0.5).x - caption.center().x).abs() <= 1.0);
+    assert!(previous.height() >= 44.0);
+    harness.get_by_label("Next").click();
+    harness.run();
+    harness.get_by_label("Page 10 of 12");
+    assert_eq!(harness.get_by_label("Previous").rect(), previous);
+    assert_eq!(harness.get_by_label("Next").rect(), next);
+}
+
+#[test]
 fn controller_enforces_limits_and_clamps_when_page_count_changes() {
     assert!(PaginationState::new(0, 0, 1, true).is_err());
     assert!(PaginationState::new(3, 3, 1, true).is_err());

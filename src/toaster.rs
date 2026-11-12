@@ -386,7 +386,7 @@ impl ToasterState {
                                 theme,
                             );
                             let glass = crate::glass::GlassTransition::new(ui.ctx(), alpha, true);
-                            let base = crate::surface::popup_frame(theme, 8).corner_radius(28);
+                            let base = crate::surface::popup_frame(theme, 8);
                             let tray = if glass.enabled() {
                                 glass.frame(theme, base)
                             } else {

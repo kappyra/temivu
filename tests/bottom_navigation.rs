@@ -5,6 +5,43 @@ use egui_kittest::{
 use temivu::{NavigationItem, Theme, bottom_navigation};
 
 #[test]
+fn glass_dock_fade_reaches_the_window_edge_beyond_the_safe_area() {
+    let theme = Theme::light();
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(320.0, 640.0))
+        .build_ui(move |ui| {
+            temivu::Glass::set_context(ui.ctx(), Some(temivu::Glass::default()));
+            let items = [NavigationItem::new(egui::Id::new("home"), "Home")];
+            temivu::FloatingNavigation::new(egui::Id::new("dock-fade"), &theme)
+                .show(ui, &items, &mut None);
+        });
+    harness.input_mut().safe_area_insets = Some(egui::SafeAreaInsets(egui::epaint::MarginF32 {
+        bottom: 24.0,
+        ..Default::default()
+    }));
+    harness.run_steps(4);
+    let fade = harness
+        .output()
+        .shapes
+        .iter()
+        .find_map(|entry| match &entry.shape {
+            egui::Shape::Mesh(mesh)
+                if mesh.vertices.len() == 12 && mesh.calc_bounds().width() == 320.0 =>
+            {
+                Some((mesh, entry.clip_rect))
+            }
+            _ => None,
+        })
+        .expect("window-width fade");
+    let (fade, clip) = fade;
+    assert_eq!(fade.calc_bounds().bottom(), 640.0);
+    assert_eq!(clip.bottom(), 640.0);
+    assert_eq!(fade.vertices[8].color, Theme::light().background);
+    assert_eq!(fade.vertices[10].color, fade.vertices[8].color);
+    assert!(harness.get_by_label("Home").rect().bottom() < 616.0);
+}
+
+#[test]
 fn five_short_items_share_one_row_when_they_fit() {
     let mut harness = Harness::builder()
         .with_size(egui::vec2(1100.0, 200.0))

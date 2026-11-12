@@ -62,6 +62,7 @@ pub struct Resizable<'a> {
     min_second: f32,
     divider_extent: f32,
     keyboard_step: Option<f32>,
+    track: bool,
     label: &'a str,
     theme: &'a Theme,
 }
@@ -76,6 +77,7 @@ impl<'a> Resizable<'a> {
             min_second: 0.0,
             divider_extent: 11.0,
             keyboard_step: None,
+            track: true,
             label: "Resize panes",
             theme,
         }
@@ -91,6 +93,12 @@ impl<'a> Resizable<'a> {
     /// The divider's interactive thickness, in points. Defaults to 11.
     pub fn divider_extent(mut self, extent: f32) -> Self {
         self.divider_extent = extent;
+        self
+    }
+
+    /// Show the line along the divider track. The handle is always available.
+    pub fn track(mut self, visible: bool) -> Self {
+        self.track = visible;
         self
     }
 
@@ -223,10 +231,12 @@ impl<'a> Resizable<'a> {
         let (first_rect, divider_rect, second_rect) =
             split(rect, self.axis, first_extent, divider_extent);
         ui.scope_builder(egui::UiBuilder::new().max_rect(first_rect), |ui| {
+            ui.set_clip_rect(ui.clip_rect().intersect(first_rect));
             ui.set_min_size(first_rect.size());
             first(ui);
         });
         ui.scope_builder(egui::UiBuilder::new().max_rect(second_rect), |ui| {
+            ui.set_clip_rect(ui.clip_rect().intersect(second_rect));
             ui.set_min_size(second_rect.size());
             second(ui);
         });
@@ -257,33 +267,27 @@ impl<'a> Resizable<'a> {
             self.theme.border
         };
         let painter = ui.painter();
-        match self.axis {
-            ResizableAxis::Horizontal => {
-                let center = rect.center();
-                painter.rect_filled(
-                    Rect::from_center_size(center, egui::vec2(1.0, rect.height())),
-                    0.0,
-                    self.theme.border,
-                );
-                painter.rect_filled(
-                    Rect::from_center_size(center, egui::vec2(4.0, 24.0)),
-                    2.0,
-                    color,
-                );
-            }
-            ResizableAxis::Vertical => {
-                let center = rect.center();
-                painter.rect_filled(
-                    Rect::from_center_size(center, egui::vec2(rect.width(), 1.0)),
-                    0.0,
-                    self.theme.border,
-                );
-                painter.rect_filled(
-                    Rect::from_center_size(center, egui::vec2(24.0, 4.0)),
-                    2.0,
-                    color,
-                );
-            }
+        let reveal =
+            crate::motion::spring_bool(ui.ctx(), divider.id.with("handle"), active, self.theme)
+                .clamp(0.0, 1.0);
+        let short = egui::lerp(3.0..=5.0, reveal);
+        let long = egui::lerp(22.0..=29.0, reveal);
+        let (track_size, handle_size) = match self.axis {
+            ResizableAxis::Horizontal => (egui::vec2(1.0, rect.height()), egui::vec2(short, long)),
+            ResizableAxis::Vertical => (egui::vec2(rect.width(), 1.0), egui::vec2(long, short)),
+        };
+        let painter = painter.with_clip_rect(painter.clip_rect().intersect(rect));
+        if self.track {
+            painter.rect_filled(
+                Rect::from_center_size(rect.center(), track_size),
+                0,
+                self.theme.border,
+            );
+        }
+        let handle = Rect::from_center_size(rect.center(), handle_size);
+        painter.rect_filled(handle, 3, color);
+        if let Some(light) = crate::Vesper::context(ui.ctx()) {
+            light.paint(&painter, self.theme, divider, handle, 3.into());
         }
         if divider.has_focus() {
             painter.rect_stroke(

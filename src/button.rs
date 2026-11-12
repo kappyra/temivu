@@ -1,5 +1,5 @@
 //! A first, intentionally incomplete port of Forui's button.
-use crate::{Sizes, Theme, Vesper};
+use crate::{Sizes, SurfaceShape, Theme, Vesper};
 use egui::{Color32, Response, RichText, Stroke, Ui, Vec2};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -159,7 +159,8 @@ impl<'a> Button<'a> {
             ),
         };
         let height = self.size.height(self.input);
-        let radius = self.radius.unwrap_or_else(|| (height * 0.5).round() as u8);
+        let default_radius = SurfaceShape::Control.radius(Vec2::splat(height));
+        let radius = self.radius.unwrap_or(default_radius).min(default_radius);
         let hover_fill = match self.variant {
             ButtonVariant::Primary | ButtonVariant::Secondary => self.theme.hover(fill),
             ButtonVariant::Destructive => {
@@ -224,7 +225,6 @@ impl<'a> Button<'a> {
         let surface = Color32::from(
             egui::Rgba::from(fill) * (1.0 - hover) + egui::Rgba::from(hover_fill) * hover,
         );
-        let radius = radius.min((height * 0.5).round() as u8);
         let button = egui::Button::new(content)
             .frame(true)
             .corner_radius(radius)
@@ -252,26 +252,40 @@ impl<'a> Button<'a> {
                 let start = paint_start(ui.ctx(), ui.layer_id());
                 let response = ui.add_enabled(self.enabled, button);
                 deform_paint(ui.ctx(), ui.layer_id(), start, press);
-                if let Some(style) = self.lighting.unwrap_or_else(|| Vesper::context(ui.ctx()))
-                    && let Some(light) = style.interactive_shape(
+                if let Some(style) = self.lighting.unwrap_or_else(|| Vesper::context(ui.ctx())) {
+                    if let Some(light) = style.interactive_shape_on(
                         ui.painter(),
                         self.theme,
                         &response,
                         response.rect,
                         crate::motion::press_corners(response.rect, radius.into(), press),
-                    )
-                {
-                    // egui paints the button frame first. Keep the label and
-                    // focus treatment above the interaction mesh.
-                    ui.ctx().graphics_mut(|graphics| {
-                        let list = graphics.entry(ui.layer_id());
-                        if start.0 < list.next_idx().0 {
-                            list.mutate_shape(start, |entry| {
-                                let frame = std::mem::replace(&mut entry.shape, egui::Shape::Noop);
-                                entry.shape = egui::Shape::Vec(vec![frame, light]);
-                            });
-                        }
-                    });
+                        surface,
+                    ) {
+                        // egui paints the button frame first. Keep the label and
+                        // focus treatment above the interaction mesh.
+                        ui.ctx().graphics_mut(|graphics| {
+                            let list = graphics.entry(ui.layer_id());
+                            if start.0 < list.next_idx().0 {
+                                list.mutate_shape(start, |entry| {
+                                    let frame =
+                                        std::mem::replace(&mut entry.shape, egui::Shape::Noop);
+                                    entry.shape = egui::Shape::Vec(vec![frame, light]);
+                                });
+                            }
+                        });
+                    }
+                    if response.enabled() {
+                        crate::lighting::spill::receive_background_at(
+                            ui.painter(),
+                            response.id,
+                            response.rect,
+                            crate::motion::press_corners(response.rect, radius.into(), press),
+                            &style,
+                            surface,
+                            self.theme.card,
+                            start,
+                        );
+                    }
                 }
                 response
             })
@@ -299,27 +313,19 @@ impl<'a> Button<'a> {
             response.hovered() && self.enabled,
             self.theme,
         );
-        if attention > 0.0 {
-            let ring = self.theme.primary.gamma_multiply(attention * 0.23);
-            ui.painter().add(crate::motion::press_shape(
-                egui::epaint::RectShape::stroke(
-                    painted.expand(2.0),
-                    radius,
-                    Stroke::new(2.0, ring),
-                    egui::StrokeKind::Outside,
-                ),
-                press,
-            ));
-        }
-        if response.has_focus() {
-            ui.painter().add(crate::motion::press_shape(
-                egui::epaint::RectShape::stroke(
-                    painted.expand(2.0),
-                    radius,
-                    Stroke::new(2.0, self.theme.foreground),
-                    egui::StrokeKind::Outside,
-                ),
-                press,
+        let ring = if response.has_focus() {
+            self.theme.foreground
+        } else {
+            self.theme.primary.gamma_multiply(attention * 0.23)
+        };
+        if ring.a() > 0 {
+            let radius = crate::motion::press_corners(response.rect, radius.into(), press).nw;
+            ui.painter().add(crate::motion::rounded_shape(
+                painted.expand(2.0),
+                egui::epaint::CornerRadiusF32::same(radius * transform.scaling + 2.0),
+                Color32::TRANSPARENT,
+                Stroke::new(2.0, ring),
+                egui::StrokeKind::Outside,
             ));
         }
         response

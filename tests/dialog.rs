@@ -154,7 +154,7 @@ fn themed_dialog_draws_card_border_rounded_corners_and_barrier() {
                 if rect.fill == card
                     && rect.stroke.color == border
                     && rect.stroke.width == 1.0
-                    && rect.corner_radius.nw == 32
+                    && rect.corner_radius.nw == 20
         )),
         "the themed dialog uses the card, border and rounded corners"
     );

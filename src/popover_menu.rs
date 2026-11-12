@@ -79,6 +79,7 @@ pub struct PopoverMenu<'a> {
     label: &'a str,
     open: &'a mut bool,
     width: f32,
+    frame: Option<egui::Frame>,
     theme: Option<&'a crate::Theme>,
 }
 
@@ -89,6 +90,7 @@ impl<'a> PopoverMenu<'a> {
             label,
             open,
             width: 200.0,
+            frame: None,
             theme: None,
         }
     }
@@ -105,6 +107,12 @@ impl<'a> PopoverMenu<'a> {
         self
     }
 
+    /// Override the menu's corners, padding, colors and shadow.
+    pub fn frame(mut self, frame: egui::Frame) -> Self {
+        self.frame = Some(frame);
+        self
+    }
+
     /// Shows the menu and returns the popup response while it is open.
     ///
     /// `open` is updated by pointer dismissal, Escape and [`Ui::close`].
@@ -118,6 +126,7 @@ impl<'a> PopoverMenu<'a> {
             label,
             open,
             width,
+            frame,
             theme,
         } = self;
         let mut items = MenuItems::new();
@@ -129,8 +138,13 @@ impl<'a> PopoverMenu<'a> {
         } else {
             popup
         };
+        let popup = if let Some(frame) = frame {
+            popup.frame(frame)
+        } else {
+            popup
+        };
         let shown = popup.show(anchor, |ui| {
-            ui.set_width(width.max(1.0));
+            ui.set_width(width.max(1.0).min(ui.available_width()));
             content(ui, &mut items);
             items.first_enabled.take().unwrap_or_else(|| ui.response())
         })?;

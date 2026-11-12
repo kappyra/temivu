@@ -1,6 +1,8 @@
 use egui::{Color32, Context, Frame, Rect, Shape, TextureId, pos2, vec2};
 use std::sync::Arc;
-use temivu::{Dialog, Glass, GlassBackdrop, GlassMode, GlassRegion, GlassRenderer, Theme};
+use temivu::{
+    Dialog, Glass, GlassBackdrop, GlassMode, GlassRegion, GlassRenderer, GlassTuning, Theme,
+};
 struct TestRenderer;
 impl GlassRenderer for TestRenderer {
     fn callback(&self, region: GlassRegion) -> egui::PaintCallback {
@@ -17,6 +19,62 @@ fn region(shape: &Shape) -> Option<&GlassRegion> {
         Shape::Vec(shapes) => shapes.iter().find_map(region),
         _ => None,
     }
+}
+
+#[test]
+fn glass_frame_wraps_arbitrary_content_and_preserves_its_bounds() {
+    let ctx = Context::default();
+    Glass::set_renderer(&ctx, Some(Arc::new(TestRenderer)));
+    let frame = Frame::new()
+        .fill(Color32::WHITE)
+        .corner_radius(18)
+        .inner_margin(12);
+    let soft = Glass::soft_prism();
+    assert_eq!(Glass::default().tuning(), GlassTuning::default());
+    assert!(soft.tuning().blur > 1.0 && soft.tuning().refraction < 1.0);
+    let tuned = soft.with_tuning(GlassTuning {
+        blur: 3.0,
+        refraction: f32::NAN,
+        rim: 0.0,
+    });
+    let mut output = ctx.run_ui(Default::default(), |ui| {
+        ui.scope(|ui| {
+            ui.multiply_opacity(0.45);
+            tuned.show(
+                ui,
+                &Theme::light(),
+                frame,
+                temivu::GlassProfile::Dock,
+                |ui| {
+                    ui.allocate_space(vec2(120.0, 40.0));
+                    ui.label("Custom content");
+                },
+            );
+        });
+    });
+    output.textures_delta.clear();
+    let (index, backdrop) = output
+        .shapes
+        .iter()
+        .enumerate()
+        .find_map(|(index, entry)| region(&entry.shape).map(|backdrop| (index, backdrop)))
+        .expect("live glass backdrop");
+    assert_eq!(backdrop.profile, temivu::GlassProfile::Dock);
+    assert_eq!(backdrop.strength, 0.45);
+    assert_eq!(
+        backdrop.tuning,
+        GlassTuning {
+            blur: 2.0,
+            refraction: 1.0,
+            rim: 0.0
+        }
+    );
+    assert!(backdrop.rect.width() >= 144.0);
+    assert!(
+        output.shapes[index + 1..]
+            .iter()
+            .any(|entry| matches!(entry.shape, Shape::Text(_)))
+    );
 }
 
 #[test]

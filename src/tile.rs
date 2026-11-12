@@ -1,7 +1,7 @@
 //! Experimental textual tile, built on the preliminary Item implementation.
 //! Rich slots, groups, long press, and upstream style parity remain open.
 use crate::item::ItemAppearance;
-use crate::{Item, ItemVariant, Theme};
+use crate::{Item, ItemVariant, Theme, Vesper};
 use egui::{Id, Response, Ui};
 
 /// A textual, caller-controlled tile with a minimum 48-point interaction height.
@@ -36,6 +36,18 @@ impl<'a> Tile<'a> {
     }
     pub fn description(mut self, description: &'a str) -> Self {
         self.item = self.item.description(description);
+        self
+    }
+    pub fn icon(mut self, icon: &'a str) -> Self {
+        self.item = self.item.icon(icon);
+        self
+    }
+    pub fn radius(mut self, radius: u8) -> Self {
+        self.item = self.item.radius(radius);
+        self
+    }
+    pub fn lighting(mut self, lighting: Option<Vesper>) -> Self {
+        self.item = self.item.lighting(lighting);
         self
     }
     pub fn variant(mut self, variant: ItemVariant) -> Self {
