@@ -9,7 +9,7 @@ is experimental until 1.0; APIs may change between releases.
 - Showcase pages use elastic scrolling on touchscreens. Pulling past either edge
   increases resistance, and the page springs back when released. Reduced motion
   disables edge bounce and inertial coasting.
-- Added downloadable Showcase previews for Android, Linux, and Windows.
+- Added downloadable Showcase previews for Android, Linux, Windows, and macOS.
 
 ## [0.1.4] - 2026-11-13
 

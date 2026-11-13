@@ -42,9 +42,10 @@ dependency of the optional demo feature.
 
 ## Recorded gaps
 
-- `dispatch` 0.2.0 declares MIT but contains no license text or notice file at its
-  recorded revision or current `master`. No text was fabricated; the record is in
-  `third_party/upstream-licenses/dispatch/0.2.0/README.md`.
+- `dispatch` 0.2.0 declares MIT in its upstream manifest. The macOS preview
+  bundles that manifest and the standard MIT text from SPDX. A standalone
+  upstream license file and copyright line are still missing. See the
+  [dependency notice](third_party/upstream-licenses/dispatch/0.2.0/README.md).
 - The `objc2` family's upstream licensing notes raise an unresolved question about
   Apple-SDK-derived works; package manifests declare MIT or
   `Zlib OR Apache-2.0 OR MIT`. See `third_party/upstream-licenses/objc2-packages.json`

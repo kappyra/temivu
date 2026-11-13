@@ -24,7 +24,7 @@ env:
 
 jobs:
   desktop:
-    name: ${{ matrix.platform }} Showcase
+    name: ${{ matrix.platform }} Showcase (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
@@ -32,13 +32,25 @@ jobs:
           - platform: Linux
             runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
+            arch: x86_64
           - platform: Windows
             runner: windows-2025
             target: x86_64-pc-windows-msvc
+            arch: x86_64
+          - platform: macOS
+            runner: macos-15
+            target: aarch64-apple-darwin
+            arch: arm64
+          - platform: macOS
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            arch: x86_64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
       BUILD_TARGET: ${{ matrix.target }}
+      BUILD_ARCH: ${{ matrix.arch }}
+      MACOSX_DEPLOYMENT_TARGET: '13.0'
       CARGO_PROFILE_RELEASE_STRIP: debuginfo
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -71,9 +83,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Copy-Item "target/$env:BUILD_TARGET/release/examples/showcase.exe" package/temivu-showcase.exe
           Compress-Archive -Path package/* -DestinationPath temivu-showcase-windows-x86_64.zip
+      - name: Package and verify macOS disk image
+        if: runner.os == 'macOS'
+        run: bash examples/showcase/macos/package.sh "$BUILD_TARGET" "$BUILD_ARCH"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: temivu-showcase-${{ matrix.platform }}-x86_64
+          name: temivu-showcase-${{ matrix.platform }}-${{ matrix.arch }}
           path: temivu-showcase-*
           if-no-files-found: error
           retention-days: 30

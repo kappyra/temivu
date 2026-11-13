@@ -50,8 +50,13 @@ cargo run --locked --features demo --example showcase
 
 Prebuilt Showcase previews are available in the **Artifacts** section of a successful
 [Showcase builds run](https://github.com/kappyra/temivu/actions/workflows/showcase.yml).
-Sign in to GitHub to download them. Linux and Windows previews target x86-64. The
-Android APK supports arm64 and x86-64 and uses a new debug signing key for each run.
+Sign in to GitHub to download them. Linux and Windows previews target x86-64.
+The macOS previews are DMGs for Apple Silicon (arm64) and Intel (x86-64), built
+with a macOS 13 deployment target. Open the disk image and drag **Temivu
+Showcase** to **Applications**. The app uses an ad hoc signature. Apple
+notarization is pending, so Gatekeeper may block it.
+
+The Android APK supports arm64 and x86-64 and uses a new debug signing key for each run.
 Uninstall an older preview before installing an APK signed with a different key.
 
 The showcase needs a desktop graphics session. On Linux, to play a local video, open **Widgets → Media**. Select **Choose video…**, or enter a local filename and select **Open path** or press Enter. The chooser uses Zenity on Linux. Playback requires system Python with PyGObject, GStreamer 1.0 and plugins for the chosen media format.
