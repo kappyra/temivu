@@ -3,7 +3,7 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
-## [Unreleased]
+## [0.1.5] - 2026-11-13
 
 - Updated egui, eframe, and egui_kittest to 0.37.0.
 - Showcase pages use elastic scrolling on touchscreens. Pulling past either edge

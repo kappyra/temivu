@@ -48,9 +48,10 @@ cd temivu
 cargo run --locked --features demo --example showcase
 ```
 
-Prebuilt Showcase previews are available in the **Artifacts** section of a successful
-[Showcase builds run](https://github.com/kappyra/temivu/actions/workflows/showcase.yml).
-Sign in to GitHub to download them. Linux and Windows previews target x86-64.
+Download the Showcase from [GitHub Releases](https://github.com/kappyra/temivu/releases/latest).
+Development builds are also available under **Artifacts** in
+[GitHub Actions](https://github.com/kappyra/temivu/actions/workflows/showcase.yml)
+when signed in. Linux and Windows previews target x86-64.
 The macOS previews are DMGs for Apple Silicon (arm64) and Intel (x86-64), built
 with a macOS 13 deployment target. Open the disk image and drag **Temivu
 Showcase** to **Applications**. The app uses an ad hoc signature. Apple
