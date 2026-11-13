@@ -13,7 +13,7 @@ app="$stage/Temivu Showcase.app"
 resources="$app/Contents/Resources"
 mkdir -p "$app/Contents/MacOS" "$work/Temivu.iconset" "$work/mounted"
 install -m 755 "$binary" "$app/Contents/MacOS/showcase"
-lipo -verify_arch "$arch" "$app/Contents/MacOS/showcase"
+lipo "$app/Contents/MacOS/showcase" -verify_arch "$arch"
 python3 examples/showcase/notices.py "$resources/licenses" "$target"
 
 for size in 16 32 128 256; do
