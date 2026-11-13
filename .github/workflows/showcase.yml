@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/showcase.yml'
+      - '.gitattributes'
       - 'Cargo.*'
       - 'src/**'
       - 'examples/**'
@@ -40,7 +41,7 @@ jobs:
       BUILD_TARGET: ${{ matrix.target }}
       CARGO_PROFILE_RELEASE_STRIP: debuginfo
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
       - name: Set up Rust
@@ -49,7 +50,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev
+          sudo apt-get install -y libgl1-mesa-dev libwayland-dev libxkbcommon-dev
       - name: Build
         shell: bash
         run: |
@@ -84,14 +85,15 @@ jobs:
     env:
       CARGO_PROFILE_DEV_DEBUG: '0'
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           persist-credentials: false
       - name: Set up Rust and Android SDK
         run: |
           rustup toolchain install 1.99.0 --profile minimal
           rustup target add aarch64-linux-android x86_64-linux-android
-          sdkmanager --install 'platforms;android-34' 'build-tools;36.0.0' 'ndk;27.1.12297006'
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            'platforms;android-34' 'build-tools;36.0.0' 'ndk;27.1.12297006'
       - name: Build and verify APK
         run: |
           keystore="$RUNNER_TEMP/temivu-debug.keystore"

@@ -1,0 +1,2 @@
+# Preserve the bytes used by the upstream notice checksums on all platforms.
+third_party/upstream-licenses/** -text

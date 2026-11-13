@@ -24,6 +24,10 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev
       - name: Set up Rust
         run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy
       - name: Format
@@ -45,6 +49,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwayland-dev
       - name: Set up the declared minimum toolchain
         run: rustup toolchain install 1.95.0 --profile minimal
       - name: Compile at the declared minimum Rust version
