@@ -10,6 +10,8 @@ mod lighting_demo;
 mod localization_demo;
 #[path = "showcase/motion_gallery.rs"]
 mod motion_gallery;
+#[path = "showcase/motion_lab.rs"]
+mod motion_lab;
 #[cfg(not(target_os = "android"))]
 #[path = "showcase/video_demo.rs"]
 mod video_demo;

@@ -105,25 +105,22 @@ impl<'a> Progress<'a> {
                     )
                 };
                 (0.0, displayed.clamp(0.0, 1.0))
-            } else if self.motion == Motion::Disabled
-                || ui.style().animation_time <= 0.0
-                || !self.theme.motion.animations_enabled(ui.ctx())
+            } else if let Some(phase) =
+                (self.motion == Motion::Enabled && ui.style().animation_time > 0.0 && width > 0.0)
+                    .then(|| {
+                        crate::motion::cycle(
+                            ui.ctx(),
+                            self.theme.motion,
+                            1.5 * f64::from(self.theme.motion.normal_scale().clamp(0.25, 4.0)),
+                            2.0 / 3.0,
+                        )
+                    })
+                    .flatten()
             {
-                (0.0, 0.4)
-            } else {
-                let scale = self.theme.motion.normal_scale().clamp(0.25, 4.0);
-                let phase =
-                    ui.input(|input| (input.time / f64::from(scale)).rem_euclid(1.5)) as f32;
-                let start = (-0.4 + 1.4 * phase.min(1.0)).clamp(-0.4, 1.0);
-                if width > 0.0 {
-                    let wait = if phase < 1.0 {
-                        std::time::Duration::from_millis(16)
-                    } else {
-                        std::time::Duration::from_secs_f32((1.5 - phase) * scale)
-                    };
-                    ui.ctx().request_repaint_after(wait);
-                }
+                let start = (-0.4 + 1.4 * (phase * 1.5).min(1.0)).clamp(-0.4, 1.0);
                 (start.max(0.0), (start + 0.4).min(1.0))
+            } else {
+                (0.0, 0.4)
             };
             if end > start {
                 let rtl = ui.layout().prefer_right_to_left();
@@ -238,14 +235,18 @@ impl<'a> CircularProgress<'a> {
         painter.circle_stroke(center, radius, Stroke::new(thickness, self.theme.secondary));
         let (start, sweep) = if let Some(value) = self.value {
             (-FRAC_PI_2, value * TAU)
-        } else if self.motion == Motion::Enabled
-            && ui.style().animation_time > 0.0
-            && self.theme.motion.animations_enabled(ui.ctx())
+        } else if let Some(phase) = (self.motion == Motion::Enabled
+            && ui.style().animation_time > 0.0)
+            .then(|| {
+                crate::motion::cycle(
+                    ui.ctx(),
+                    self.theme.motion,
+                    1.25 * f64::from(self.theme.motion.normal_scale().clamp(0.25, 4.0)),
+                    1.0,
+                )
+            })
+            .flatten()
         {
-            ui.ctx()
-                .request_repaint_after(std::time::Duration::from_millis(16));
-            let period = 1.25 * f64::from(self.theme.motion.normal_scale().clamp(0.25, 4.0));
-            let phase = ui.input(|input| input.time.rem_euclid(period) / period) as f32;
             let wave = 0.5 - 0.5 * (phase * TAU).cos();
             (phase * TAU - FRAC_PI_2, (0.20 + 0.53 * wave) * TAU)
         } else {

@@ -1,5 +1,4 @@
-//! Preliminary Forui accordion with caller-owned expansion state. Animation,
-//! custom icons, complete style customization and lifted callbacks remain open.
+//! Accordion with caller-owned expansion and a paint-only reveal.
 use crate::Theme;
 use egui::{Response, RichText, Stroke, Ui};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -127,11 +126,24 @@ impl<'a> AccordionItem<'a> {
                     egui::StrokeKind::Outside,
                 );
             }
+            let target = f32::from(open);
+            let reveal =
+                crate::motion::MotionTrack::new(ui.ctx(), id.with("reveal"), self.theme.motion);
             if open {
+                let opacity = reveal
+                    .sample(
+                        target,
+                        target,
+                        crate::motion::MotionRole::Feedback.tween(self.theme.motion),
+                    )
+                    .value;
                 ui.vertical(|ui| {
+                    ui.multiply_opacity(opacity);
                     content(ui);
                     ui.add_space(16.0);
                 });
+            } else {
+                reveal.follow(0.0_f32, [0.0]);
             }
             response
         })

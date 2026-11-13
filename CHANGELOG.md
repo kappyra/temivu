@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
+## [0.1.4] - 2026-11-13
+
+- Unified spring, tween, and inertial motion under typed animation tracks.
+- Added analytical support for all three damping regimes, velocity-preserving
+  spring retargeting, six presets, and a shared motion role vocabulary.
+- Aligned lighting, progress indicators, accordion reveal, and notification
+  action feedback with the shared motion system.
+- Added a Motion Lab, mathematical and interaction regressions, and a
+  reproducible headless benchmark.
+
 ## [0.1.3] - 2026-11-12
 
 - Improved Vesper contrast on pale surfaces and maintained pointer and touch
@@ -96,3 +106,4 @@ is experimental until 1.0; APIs may change between releases.
 [0.1.1]: https://github.com/kappyra/temivu/releases/tag/v0.1.1
 [0.1.2]: https://github.com/kappyra/temivu/releases/tag/v0.1.2
 [0.1.3]: https://github.com/kappyra/temivu/releases/tag/v0.1.3
+[0.1.4]: https://github.com/kappyra/temivu/releases/tag/v0.1.4

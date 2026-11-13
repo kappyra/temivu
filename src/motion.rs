@@ -1,30 +1,101 @@
-//! Reduced-motion-aware animation helpers for boolean and floating-point
-//! values.
-//!
-//! The helper keeps its animation state in egui's temporary data, keyed by an
-//! [`Id`], so widgets do not need an extra animation field. It reads the clock
-//! from `Context::input(|input| input.time)` and therefore works with
-//! `egui_kittest` tests that drive time explicitly. There is no async code and
-//! no threading: a repaint is requested only while a value is actually changing,
-//! so an idle UI does not repaint.
-//!
-//! An animation snaps straight to its target when any of these is true:
-//!
-//! * [`Theme::motion`]'s `enabled` flag is `false`,
-//! * [`Theme::motion`]'s `reduced_motion` flag is `true`, or
-//! * egui's active style has `animation_time == 0.0` (in egui 0.36 that style
-//!   is `Context::global_style()`; older releases call it `Context::style()`).
+//! Shared motion clocks, physics, presets, and rendering helpers.
+#![doc = include_str!("../docs/MOTION.md")]
 use crate::theme::{Easing, MotionSettings, Theme};
 use egui::{Context, Id};
 
-#[derive(Clone, Copy)]
-struct SpringState {
-    value: f32,
-    velocity: f32,
-    target: f32,
-    time: f64,
-    duration: f32,
-    damping: f32,
+mod physics;
+mod track;
+
+pub use physics::{Decay, Spring, rubber_band, tracking_alpha};
+pub use track::{MotionSample, MotionSpec, MotionTrack, MotionValue, Tween};
+
+fn spring_id(id: Id) -> Id {
+    id.with("temivu-spring")
+}
+fn tween_id(id: Id) -> Id {
+    id.with("temivu-tween")
+}
+
+/// Motion roles define rhythm without coupling an effect to a particular widget.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MotionRole {
+    Feedback,
+    State,
+    Navigation,
+    Attention,
+    Spatial,
+    Status,
+    Decorative,
+}
+
+impl MotionRole {
+    pub fn tween(self, settings: MotionSettings) -> MotionSpec {
+        let (duration, easing) = match self {
+            Self::Feedback => (settings.fast, Easing::EaseOut),
+            Self::State | Self::Status => (settings.normal, settings.easing),
+            Self::Navigation | Self::Spatial => (settings.slow, Easing::Emphasized),
+            Self::Attention => (settings.normal, Easing::EaseInOut),
+            Self::Decorative => (settings.slow, Easing::EaseInOut),
+        };
+        MotionSpec::Tween(Tween { duration, easing })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum SpringPreset {
+    Soft,
+    Snappy,
+    Bouncy,
+    Smooth,
+    Gentle,
+    #[default]
+    Responsive,
+}
+
+impl SpringPreset {
+    pub fn spring(self, settings: MotionSettings) -> Spring {
+        let (pace, damping) = match self {
+            Self::Soft => (1.12, 0.86),
+            Self::Snappy => (0.72, 0.92),
+            Self::Bouncy => (1.00, 0.48),
+            Self::Smooth => (1.00, 1.00),
+            Self::Gentle => (1.30, 1.13),
+            Self::Responsive => (1.00, 0.72),
+        };
+        Spring::response(settings.normal * pace, damping)
+    }
+}
+
+/// Phase of a visible, repeating effect. During the inactive tail, the
+/// renderer sleeps until the next cycle instead of ticking every frame.
+pub fn cycle(
+    ctx: &Context,
+    settings: MotionSettings,
+    period: f64,
+    active_fraction: f64,
+) -> Option<f32> {
+    if !settings.animations_enabled(ctx)
+        || !period.is_finite()
+        || !(0.016..=3600.0).contains(&period)
+        || !active_fraction.is_finite()
+        || !(0.0..=1.0).contains(&active_fraction)
+        || active_fraction == 0.0
+    {
+        return None;
+    }
+    let now = ctx.input(|input| input.time);
+    if !now.is_finite() {
+        return None;
+    }
+    let elapsed = now.rem_euclid(period);
+    let phase = elapsed / period;
+    let wait = if phase < active_fraction {
+        0.016
+    } else {
+        period - elapsed
+    };
+    ctx.request_repaint_after(std::time::Duration::from_secs_f64(wait));
+    Some(phase as f32)
 }
 
 /// Damped interaction spring with a small spatial overshoot.
@@ -44,18 +115,16 @@ pub fn spring_f32(ctx: &Context, id: Id, initial: f32, target: f32, theme: &Them
 /// The first frame uses the requested size. Keep the ID stable as the size
 /// changes and clamp the result to the parent constraints before laying it out.
 pub fn spring_size(ctx: &Context, id: Id, target: egui::Vec2, theme: &Theme) -> egui::Vec2 {
-    let axis = |id, target: f32| {
-        let target = if target.is_finite() {
-            target.max(0.0)
-        } else {
-            0.0
-        };
-        spring_f32_with_damping(ctx, id, target, target, 0.86, theme).max(0.0)
-    };
-    egui::vec2(
-        axis(id.with("width"), target.x),
-        axis(id.with("height"), target.y),
-    )
+    let dimension = |v: f32| if v.is_finite() { v.max(0.0) } else { 0.0 };
+    let target = egui::vec2(dimension(target.x), dimension(target.y));
+    MotionTrack::new(ctx, spring_id(id), theme.motion)
+        .sample(
+            target,
+            target,
+            MotionSpec::Spring(Spring::response(theme.motion.normal, 0.86)),
+        )
+        .value
+        .max(egui::Vec2::ZERO)
 }
 
 /// Scale paint around a fixed point. With egui's `Ui::with_visual_transform`
@@ -93,161 +162,26 @@ pub fn spring_f32_with_settings(
     damping: f32,
     settings: MotionSettings,
 ) -> f32 {
-    if !initial.is_finite() || !target.is_finite() {
-        return target;
-    }
-    let duration = if settings.normal.is_finite() {
-        settings.normal.clamp(0.04, 2.0)
-    } else {
-        MotionSettings::default().normal
-    };
-    let damping = if damping.is_finite() {
-        damping.clamp(0.1, 0.99)
-    } else {
-        0.72
-    };
-    let stored = ctx.data(|data| data.get_temp::<SpringState>(id));
-    if stored.is_some_and(|state| {
-        state.target == target && state.value == target && state.velocity == 0.0
-    }) {
-        return target;
-    }
-    let now = ctx.input(|input| input.time);
-    let mut state = stored.unwrap_or(SpringState {
-        value: initial,
-        velocity: 0.0,
-        target,
-        time: now,
-        duration,
-        damping,
-    });
-    if !settings.animations_enabled(ctx) {
-        state.value = target;
-        state.velocity = 0.0;
-    } else {
-        // This is an analytic solution, so it remains stable over a long
-        // frame. Do not stretch animations after backgrounding or slow swaps.
-        let dt = ((now - state.time) as f32).clamp(0.0, 10.0);
-        // Integrate the elapsed interval using the parameters that were in
-        // effect during it, including when a faster exit retargets the spring.
-        let omega = 5.2 / state.duration;
-        let offset = state.value - state.target;
-        let damping = state.damping;
-        let attenuation = damping * omega;
-        let frequency = omega * (1.0 - damping * damping).sqrt();
-        let coefficient = (state.velocity + attenuation * offset) / frequency;
-        let (sin, cos) = (frequency * dt).sin_cos();
-        let decay = (-attenuation * dt).exp();
-        state.value = state.target + decay * (offset * cos + coefficient * sin);
-        state.velocity = decay
-            * ((coefficient * frequency - attenuation * offset) * cos
-                - (offset * frequency + attenuation * coefficient) * sin);
-        if (state.value - target).abs() < 0.001 && state.velocity.abs() < 0.01 {
-            state.value = target;
-            state.velocity = 0.0;
-        } else {
-            ctx.request_repaint();
-        }
-    }
-    state.target = target;
-    state.time = now;
-    state.duration = duration;
-    state.damping = damping;
-    ctx.data_mut(|data| data.insert_temp(id, state));
-    state.value
+    MotionTrack::new(ctx, spring_id(id), settings)
+        .sample(
+            initial,
+            target,
+            MotionSpec::Spring(Spring::response(settings.normal, damping)),
+        )
+        .value
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-struct Animation {
-    from: f32,
-    target: f32,
-    start: f64,
-    duration: f32,
-}
-
-impl Animation {
-    /// Seconds since the animation started. The delta is reduced to `f32` so it
-    /// compares exactly against the `f32` duration instead of accumulating the
-    /// wider representation of an `f32` constant.
-    fn elapsed(&self, now: f64) -> f32 {
-        (now - self.start) as f32
-    }
-
-    fn value(&self, now: f64, easing: Easing) -> f32 {
-        if !self.duration.is_finite() || self.duration <= 0.0 {
-            return self.target;
-        }
-        let progress = self.elapsed(now) / self.duration;
-        if !progress.is_finite() {
-            return self.target;
-        }
-        self.from + (self.target - self.from) * easing.apply(progress)
-    }
-
-    fn finished(&self, now: f64) -> bool {
-        !self.duration.is_finite() || self.duration <= 0.0 || self.elapsed(now) >= self.duration
-    }
-}
-
-/// Animate a floating-point value towards `target` and return its current
-/// value.
-///
-/// `initial` is used only on the first call for an `id`; later calls continue
-/// from the stored value, so callers can pass a constant `initial` every frame.
-/// Passing the previous value is not required. The first call jumps directly to
-/// `target` when animations are disabled.
-///
-/// A repaint is requested only while the value is between `initial` and
-/// `target`. The stored state is normalized when the animation settles, so the
-/// next target change starts exactly at the settled value.
+/// Animate a float with the theme duration and easing. The first call starts
+/// at `initial`; subsequent targets start at the current pose.
 pub fn animate_f32(ctx: &Context, id: Id, initial: f32, target: f32, theme: &Theme) -> f32 {
     if !initial.is_finite() || !target.is_finite() {
         reset(ctx, id);
+        // Preserve the legacy helper's invalid-input return convention.
         return target;
     }
-    let now = ctx.input(|input| input.time);
-    let enabled = theme.motion.animations_enabled(ctx);
-    let duration = theme.motion.normal;
-    let previous = ctx.data_mut(|data| data.get_temp::<Animation>(id));
-    let animation = match previous {
-        Some(mut animation) => {
-            if animation.target != target {
-                // Continue from wherever the previous animation had reached.
-                animation.from = animation.value(now, theme.motion.easing);
-                animation.target = target;
-                animation.start = now;
-                animation.duration = duration;
-            }
-            animation
-        }
-        None => Animation {
-            from: if enabled { initial } else { target },
-            target,
-            start: now,
-            duration,
-        },
-    };
-    // `from == target` means there is nothing to animate (for example the first
-    // frame of `animate_bool`), so settle without scheduling a repaint.
-    if !enabled || animation.from == target || animation.finished(now) {
-        // Normalize so a later change starts from the settled target.
-        ctx.data_mut(|data| {
-            data.insert_temp(
-                id,
-                Animation {
-                    from: target,
-                    target,
-                    start: now,
-                    duration,
-                },
-            );
-        });
-        target
-    } else {
-        ctx.data_mut(|data| data.insert_temp(id, animation));
-        ctx.request_repaint();
-        animation.value(now, theme.motion.easing)
-    }
+    MotionTrack::new(ctx, tween_id(id), theme.motion)
+        .sample(initial, target, MotionRole::State.tween(theme.motion))
+        .value
 }
 
 /// Animate a boolean towards `target`, returning progress in `0.0..=1.0`.
@@ -265,10 +199,9 @@ pub fn animate_bool(ctx: &Context, id: Id, target: bool, theme: &Theme) -> f32 {
 /// A float animation starts again from its initial value and a boolean
 /// animation starts at its target.
 pub fn reset(ctx: &Context, id: Id) {
-    ctx.data_mut(|data| {
-        data.remove_temp::<Animation>(id);
-        data.remove::<SpringState>(id);
-    });
+    track::forget::<1>(ctx, tween_id(id));
+    track::forget::<1>(ctx, spring_id(id));
+    track::forget::<2>(ctx, spring_id(id));
 }
 
 /// Shared spatial feedback for controls. A quick tap still gets enough time
@@ -281,7 +214,7 @@ pub(crate) fn press(ctx: &Context, id: Id, held: bool, clicked: bool, theme: &Th
         ctx.data_mut(|data| data.remove::<f64>(pulse));
         return spring_bool(ctx, spring, held, theme);
     }
-    let previous = ctx.data(|data| data.get_temp::<SpringState>(spring));
+    let previous = MotionTrack::new(ctx, spring_id(spring), theme.motion).inspect::<f32, 1>();
     if clicked && previous.is_none_or(|state| state.value < 0.60) {
         let duration = 0.048 * f64::from(theme.motion.normal_scale().clamp(0.2, 10.0));
         ctx.data_mut(|data| data.insert_temp(pulse, now + duration));

@@ -7,6 +7,7 @@ use temivu::{
 
 #[derive(Default)]
 pub struct Gallery {
+    lab: super::motion_lab::Lab,
     tab: usize,
     count: i32,
     view: ViewMode,
@@ -31,7 +32,7 @@ type Example = (&'static str, &'static str, Draw);
 
 impl Gallery {
     pub fn show(&mut self, ui: &mut Ui, theme: &Theme, filter: &str) -> bool {
-        let examples: [Example; 14] = [
+        let examples: [Example; 15] = [
             (
                 "Circular loading",
                 "Watch the spinner or start a timed load.",
@@ -102,6 +103,11 @@ impl Gallery {
                 "Use the buttons or arrow keys when focused.",
                 Self::direction,
             ),
+            (
+                "Motion lab",
+                "Compare presets, change the spring, or release a drag with momentum.",
+                Self::lab,
+            ),
         ];
         let visible: Vec<_> = examples
             .iter()
@@ -139,6 +145,10 @@ impl Gallery {
             ui.add_space(12.0);
         }
         true
+    }
+
+    fn lab(&mut self, ui: &mut Ui, theme: &Theme) {
+        self.lab.show(ui, theme);
     }
 
     fn resize(&mut self, ui: &mut Ui, theme: &Theme) {

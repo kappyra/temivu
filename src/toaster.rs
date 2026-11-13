@@ -449,13 +449,22 @@ impl ToasterState {
                                     ui.add_space(padding);
                                 });
 
-                            if let Some(labels) = footer.filter(|_| self.len() > 1) {
-                                let opacity = if theme.motion.animations_enabled(ui.ctx()) {
-                                    ui.ctx()
-                                        .animate_bool_responsive(id.with("queue-actions"), true)
-                                } else {
-                                    1.0
-                                };
+                            let actions = footer.filter(|_| self.len() > 1);
+                            let opacity = labels.map_or(1.0, |_| {
+                                let target = f32::from(actions.is_some());
+                                crate::motion::MotionTrack::new(
+                                    ui.ctx(),
+                                    id.with("queue-actions"),
+                                    theme.motion,
+                                )
+                                .sample(
+                                    target,
+                                    target,
+                                    crate::motion::MotionRole::Feedback.tween(theme.motion),
+                                )
+                                .value
+                            });
+                            if let Some(labels) = actions {
                                 let (clear, view) = ui
                                     .scope(|ui| {
                                         ui.multiply_opacity(opacity);
@@ -493,9 +502,6 @@ impl ToasterState {
                                     self.clear();
                                     ui.ctx().request_repaint();
                                 }
-                            } else if labels.is_some() {
-                                ui.ctx()
-                                    .animate_bool_responsive(id.with("queue-actions"), false);
                             }
                         });
                     });

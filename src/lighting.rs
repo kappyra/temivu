@@ -377,9 +377,11 @@ impl Vesper {
         if !active && !activated && previous.is_none() {
             return None;
         }
+        let mut motion = theme.motion;
+        motion.normal = 0.10 + self.inertia * 0.30;
+        let spring = crate::motion::MotionTrack::new(ctx, id.with("spring-position"), motion);
         if previous.is_none() && self.tracking == LightTracking::Spring {
-            crate::motion::reset(ctx, id.with("x"));
-            crate::motion::reset(ctx, id.with("y"));
+            spring.reset::<2>();
         }
 
         // Track normalized widget coordinates so a resize does not move the light
@@ -451,7 +453,7 @@ impl Vesper {
         }
         let flowing = animated && self.effects.flow && state.velocity.length_sq() > 1.0;
         if animated {
-            let smoothing = 1.0 - (-dt / (0.012 + 0.095 * self.inertia)).exp();
+            let smoothing = crate::motion::tracking_alpha(dt, 0.012 + 0.095 * self.inertia);
             state.position = match self.tracking {
                 LightTracking::Direct => target,
                 LightTracking::Smooth => {
@@ -461,34 +463,26 @@ impl Vesper {
                         state.position.lerp(target, smoothing)
                     }
                 }
-                LightTracking::Spring => {
-                    let mut motion = theme.motion;
-                    motion.normal = 0.10 + self.inertia * 0.30;
-                    let spring = |axis, initial, target| {
-                        crate::motion::spring_f32_with_settings(
-                            ctx,
-                            id.with(axis),
-                            initial,
-                            target,
+                LightTracking::Spring => spring
+                    .sample(
+                        state.position,
+                        target,
+                        crate::motion::MotionSpec::Spring(crate::motion::Spring::response(
+                            motion.normal,
                             0.82,
-                            motion,
-                        )
-                        .clamp(0.0, 1.0)
-                    };
-                    Pos2::new(
-                        spring("x", state.position.x, target.x),
-                        spring("y", state.position.y, target.y),
+                        )),
                     )
-                }
+                    .value
+                    .clamp(Pos2::ZERO, Pos2::new(1.0, 1.0)),
             };
-            let fade = 1.0
-                - (-dt
-                    * if target_energy > state.energy {
-                        35.0
-                    } else {
-                        19.0
-                    })
-                .exp();
+            let fade = crate::motion::tracking_alpha(
+                dt,
+                if target_energy > state.energy {
+                    1.0 / 35.0
+                } else {
+                    1.0 / 19.0
+                },
+            );
             state.energy = if (state.energy - target_energy).abs() < 0.004 {
                 target_energy
             } else {
@@ -515,8 +509,9 @@ impl Vesper {
         if state.energy <= 0.0 && pulse >= 1.0 && !active {
             if previous.is_some() {
                 ctx.data_mut(|data| data.remove::<Interaction>(id));
-                crate::motion::reset(ctx, id.with("x"));
-                crate::motion::reset(ctx, id.with("y"));
+                if self.tracking == LightTracking::Spring {
+                    spring.reset::<2>();
+                }
             }
             return None;
         }

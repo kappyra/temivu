@@ -431,3 +431,167 @@ fn size_spring_synchronizes_axes_and_reverses_without_jumping() {
     harness.step();
     assert_eq!(harness.state().1, vec2(80.0, 40.0));
 }
+
+#[test]
+fn closed_form_matches_known_solutions_for_all_damping_regimes() {
+    use temivu::motion::Spring;
+
+    let under = Spring::physical(1.0, 16.0, 4.0).unwrap();
+    let critical = Spring::physical(1.0, 16.0, 8.0).unwrap();
+    let over = Spring::physical(1.0, 16.0, 10.0).unwrap();
+    let t: f64 = 0.37;
+    let a = (-2.0 * t).exp();
+    let b = (-8.0 * t).exp();
+    let e = (-4.0 * t).exp();
+    let frequency = 12.0_f64.sqrt();
+    let (sin, cos) = (frequency * t).sin_cos();
+    for (spring, position, velocity) in [
+        (
+            under,
+            a * (cos + 2.0 * sin / frequency),
+            -16.0 * a * sin / frequency,
+        ),
+        (critical, e * (1.0 + 4.0 * t), -16.0 * t * e),
+        (over, (4.0 * a - b) / 3.0, 8.0 * (b - a) / 3.0),
+    ] {
+        let (x, v) = spring.advance(1.0, 0.0, 0.0, t);
+        assert!((x - position).abs() < 1e-12 && (v - velocity).abs() < 1e-12);
+        let (first, speed) = spring.advance(1.0, -3.0, 0.5, 0.04);
+        let whole = spring.advance(1.0, -3.0, 0.5, t);
+        let split = spring.advance(first, speed, 0.5, t - 0.04);
+        assert!((whole.0 - split.0).abs() < 1e-12);
+        assert!((whole.1 - split.1).abs() < 1e-12);
+        assert_eq!(spring.advance(1.0, 0.0, 0.0, f64::MAX), (0.0, 0.0));
+    }
+    for damping in [8.0 - 1e-6, 8.0 + 1e-6] {
+        let close = Spring::physical(1.0, 16.0, damping)
+            .unwrap()
+            .advance(1.0, 0.0, 0.0, t);
+        assert!((close.0 - e * (1.0 + 4.0 * t)).abs() < 1e-7);
+    }
+    assert!(Spring::physical(0.0, 16.0, 8.0).is_none());
+    assert!(Spring::physical(1.0, 16.0, f64::NAN).is_none());
+}
+
+#[test]
+fn gesture_transfers_velocity_and_motion_can_change_behavior() {
+    use temivu::{
+        Easing,
+        motion::{Decay, MotionRole, MotionSpec, MotionTrack, SpringPreset, Tween},
+    };
+    let ctx = egui::Context::default();
+    let settings = Theme::light().motion;
+    let track = MotionTrack::new(&ctx, animation_id(), settings);
+    let coast = Decay::new(5.0).unwrap();
+    let spring = MotionSpec::Spring(SpringPreset::Smooth.spring(settings));
+    let frame = |time, run: &mut dyn FnMut()| {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                time: Some(time),
+                ..Default::default()
+            },
+            |_| run(),
+        );
+        output.textures_delta.clear();
+    };
+    frame(0.0, &mut || {
+        track.follow(12.0_f32, [20.0]);
+        let target = coast.destination(12.0, 20.0) as f32;
+        let sample = track.sample(0.0_f32, target, MotionSpec::Decay(coast));
+        assert_eq!((sample.value, sample.velocity), (12.0, [20.0]));
+    });
+    frame(0.1, &mut || {
+        let before = track.inspect::<f32, 1>().unwrap();
+        let after = track.sample(0.0_f32, -2.0, spring);
+        assert_eq!(before, after);
+        assert!(after.value > 12.0);
+    });
+    frame(0.15, &mut || {
+        let before = track.inspect::<f32, 1>().unwrap();
+        let tween = MotionSpec::Tween(Tween {
+            duration: 0.2,
+            easing: Easing::EaseInOut,
+        });
+        assert_eq!(track.sample(0.0_f32, 3.0, tween).value, before.value);
+    });
+    frame(0.5, &mut || {
+        assert_eq!(
+            track
+                .sample(0.0_f32, 3.0, MotionRole::State.tween(settings))
+                .value,
+            3.0
+        );
+    });
+}
+
+#[test]
+fn tracks_expire_reset_and_handle_non_finite_targets() {
+    use temivu::motion::{MotionRole, MotionTrack};
+    let ctx = egui::Context::default();
+    let settings = Theme::light().motion;
+    let track = MotionTrack::new(&ctx, animation_id(), settings);
+    let spec = MotionRole::Feedback.tween(settings);
+    for time in [0.0, 0.5, 1.0, 2.0, 65.0] {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                time: Some(time),
+                ..Default::default()
+            },
+            |_| {
+                if time == 1.0 || time == 2.0 {
+                    return;
+                }
+                if time == 65.0 {
+                    assert!(track.inspect::<egui::Vec2, 2>().is_none());
+                }
+                let initial = egui::Vec2::ZERO;
+                let target = egui::vec2(40.0, 20.0);
+                let sample = track.sample(initial, target, spec);
+                assert_eq!(sample.value, if time == 0.5 { target } else { initial });
+                if time == 65.0 {
+                    assert!(
+                        track
+                            .sample(initial, egui::vec2(f32::NAN, 0.0), spec)
+                            .value
+                            .is_finite()
+                    );
+                    assert!(track.inspect::<egui::Vec2, 2>().is_none());
+                    track.follow(target, [0.0; 2]);
+                    track.reset::<2>();
+                    assert!(track.inspect::<egui::Vec2, 2>().is_none());
+                }
+            },
+        );
+        output.textures_delta.clear();
+    }
+}
+
+#[test]
+fn color_tween_blends_linear_light_and_reduced_motion_snaps() {
+    use temivu::motion::{MotionRole, MotionTrack};
+    let ctx = egui::Context::default();
+    let mut settings = Theme::light().motion;
+    for (time, expected) in [
+        (0.0, 0),
+        (f64::from(settings.normal) / 2.0, 188),
+        (0.5, 255),
+    ] {
+        settings.reduced_motion = time == 0.5;
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                time: Some(time),
+                ..Default::default()
+            },
+            |_| {
+                let sample = MotionTrack::new(&ctx, animation_id(), settings).sample(
+                    egui::Color32::BLACK,
+                    egui::Color32::WHITE,
+                    MotionRole::State.tween(settings),
+                );
+                assert!((i16::from(sample.value.r()) - expected).abs() <= 1);
+                assert_eq!(sample.running, time < 0.5);
+            },
+        );
+        output.textures_delta.clear();
+    }
+}

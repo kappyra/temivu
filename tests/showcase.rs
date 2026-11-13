@@ -696,6 +696,27 @@ fn motion_gallery_exposes_examples_and_loading_on_a_narrow_page() {
 }
 
 #[test]
+fn motion_lab_switches_presets_and_exposes_custom_parameters() {
+    let mut harness = harness();
+    harness.get_by_label("Widgets").click();
+    harness.run_steps(3);
+    harness
+        .get_by_role_and_label(egui::accesskit::Role::TextInput, "Find a widget")
+        .focus();
+    harness.run_steps(2);
+    harness.event(egui::Event::Text("motion lab".to_owned()));
+    harness.run_steps(3);
+    harness.get_by_label("Smooth").click();
+    harness.run_steps(3);
+    harness.get_by_label("Critical  ·  ζ 1.00");
+    harness.get_by_label("Custom spring").click();
+    harness.run_steps(3);
+    harness.get_by_role_and_label(egui::accesskit::Role::Slider, "Mass");
+    harness.get_by_role_and_label(egui::accesskit::Role::Slider, "Stiffness");
+    harness.get_by_role_and_label(egui::accesskit::Role::Slider, "Damping");
+}
+
+#[test]
 fn circular_loading_demo_fills_to_completion() {
     let mut harness = harness();
     navigate(&mut harness, "Controls");
@@ -731,14 +752,14 @@ fn widgets_open_from_the_header_and_filter_by_name() {
     harness.get_by_label("Widgets").click();
     harness.run_steps(3);
     harness.get_by_label("Motion gallery");
-    harness.get_by_label("14 of 14 examples");
+    harness.get_by_label("15 of 15 examples");
     harness
         .get_by_role_and_label(egui::accesskit::Role::TextInput, "Find a widget")
         .focus();
     harness.run_steps(2);
     harness.event(egui::Event::Text("direction".to_owned()));
     harness.run_steps(3);
-    harness.get_by_label("1 of 14 examples");
+    harness.get_by_label("1 of 15 examples");
     harness.get_by_label("Direction pad");
     assert!(harness.query_by_label("Quantity").is_none());
 }

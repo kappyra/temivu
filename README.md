@@ -71,6 +71,7 @@ Create a theme such as `Theme::light()` in the host, apply it to the egui contex
 
 - [Component inventory and coverage](docs/COVERAGE.md)
 - [Navigation menus and responsive presentation](docs/NAVIGATION_MENU.md)
+- [Motion system and custom animation API](docs/MOTION.md)
 - [Droplet motion](docs/LIQUID_MOTION.md)
 - [Optional glass surfaces](docs/GLASS.md)
 - [Floating surfaces and responsive geometry](docs/FLOATING_SURFACES.md)
