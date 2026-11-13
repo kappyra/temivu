@@ -6,7 +6,7 @@ fn view(ui: &mut egui::Ui, state: &mut (bool, usize)) {
     if anchor.clicked() {
         state.0 = !state.0;
     }
-    Popover::new(egui::Id::new("popover"), "Options panel", &mut state.0)
+    Popover::new(egui::Id::unique("popover"), "Options panel", &mut state.0)
         .focus_on_open(true)
         .show(&anchor, |ui| {
             let action = ui.button("Apply action");
@@ -29,7 +29,7 @@ fn keyboard_open_escape_closes_and_restores_anchor_focus() {
     harness.run();
     assert!(harness.state().0);
     assert!(harness.get_by_label("Apply action").is_focused());
-    harness.get_by_role_and_label(egui::accesskit::Role::Group, "Options panel");
+    harness.get_by_role_and_label(egui::accesskit::Role::Dialog, "Options panel");
     harness.key_press(egui::Key::Escape);
     harness.run();
     assert!(!harness.state().0);
@@ -118,7 +118,7 @@ fn programmatic_open_does_not_steal_unrelated_focus_by_default() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, open: &mut bool| {
             let anchor = ui.button("Options");
-            Popover::new(egui::Id::new("popover"), "Options panel", open)
+            Popover::new(egui::Id::unique("popover"), "Options panel", open)
                 .show(&anchor, |ui| ui.button("Apply action"));
             let _ = ui.button("Other");
         },
@@ -135,14 +135,14 @@ fn programmatic_open_does_not_steal_unrelated_focus_by_default() {
 
 #[test]
 fn action_can_redirect_focus_without_anchor_overriding_it() {
-    let destination = egui::Id::new("destination");
+    let destination = egui::Id::unique("destination");
     let mut harness = Harness::builder().build_ui_state(
         move |ui, open: &mut bool| {
             let anchor = ui.button("Options");
             if anchor.clicked() {
                 *open = !*open;
             }
-            Popover::new(egui::Id::new("popover"), "Options panel", open)
+            Popover::new(egui::Id::unique("popover"), "Options panel", open)
                 .focus_on_open(true)
                 .show(&anchor, |ui| {
                     let action = ui.button("Move focus");
@@ -154,9 +154,8 @@ fn action_can_redirect_focus_without_anchor_overriding_it() {
                 });
             let (rect, _) = ui.allocate_exact_size(egui::vec2(90.0, 32.0), egui::Sense::hover());
             let other = ui.interact(rect, destination, egui::Sense::click());
-            other.widget_info(|| {
-                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Destination")
-            });
+            other
+                .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Destination"));
         },
         false,
     );
@@ -179,7 +178,7 @@ fn stable_id_keeps_popup_focus_after_prior_content_changes() {
                 let _ = ui.button("Inserted");
             }
             let anchor = ui.button("Options");
-            Popover::new(egui::Id::new("popover"), "Options panel", &mut state.0)
+            Popover::new(egui::Id::unique("popover"), "Options panel", &mut state.0)
                 .show(&anchor, |ui| ui.button("Apply action"));
         },
         (true, false),

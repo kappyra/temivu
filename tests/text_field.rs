@@ -127,7 +127,7 @@ fn stable_id_preserves_focus_when_a_preceding_sibling_appears() {
                 ui.label("Additional information");
             }
             TextField::new(&mut state.0, &Theme::light(), "Name")
-                .id(egui::Id::new("stable-name"))
+                .id(egui::Id::unique("stable-name"))
                 .show(ui);
         },
         (String::new(), false),

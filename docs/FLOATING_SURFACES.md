@@ -24,7 +24,7 @@ fn toolbar(ctx: &egui::Context, theme: &Theme, open: bool, spread: bool) {
     };
     FloatingMotion::lift().show(
         ctx,
-        egui::Id::new("floating-toolbar"),
+        egui::Id::unique("floating-toolbar"),
         (egui::Align2::CENTER_BOTTOM, egui::vec2(0.0, -16.0)),
         open,
         EffectSurface::new(theme)

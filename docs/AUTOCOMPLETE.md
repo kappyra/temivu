@@ -11,9 +11,9 @@ use temivu::{Autocomplete, AutocompleteOption, Messages, Theme};
 fn example(ui: &mut egui::Ui, query: &mut String) {
     let theme = Theme::light();
     let fruits = [
-        AutocompleteOption::new(egui::Id::new("apple"), "Apple"),
-        AutocompleteOption::new(egui::Id::new("banana"), "Banana"),
-        AutocompleteOption::new(egui::Id::new("avocado"), "Avocado").enabled(false),
+        AutocompleteOption::new(egui::Id::unique("apple"), "Apple"),
+        AutocompleteOption::new(egui::Id::unique("banana"), "Banana"),
+        AutocompleteOption::new(egui::Id::unique("avocado"), "Avocado").enabled(false),
     ];
     let output = Autocomplete::new(query, &theme, "Fruit", &fruits)
         .hint("Start typing")

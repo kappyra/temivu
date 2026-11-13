@@ -11,7 +11,7 @@ use egui::{Id, Response, RichText, Ui, UiBuilder};
 /// The egui temporary-data key under which a [`SelectGroup`] publishes its
 /// validation message while it draws its content.
 fn inherited_error_key() -> Id {
-    Id::new("temivu-select-group-inherited-error")
+    Id::unique("temivu-select-group-inherited-error")
 }
 
 /// The validation message of the enclosing [`SelectGroup`], if any.
@@ -55,12 +55,12 @@ pub struct SelectGroupResponse<R> {
 /// ```
 /// # fn example(ui: &mut egui::Ui, theme: &temivu::Theme, color: &mut Option<egui::Id>) {
 /// use temivu::{Select, SelectGroup, SelectOption};
-/// let options = [SelectOption::new(egui::Id::new("red"), "Red")];
-/// let group = SelectGroup::new(egui::Id::new("shipping"), "Shipping color", theme)
+/// let options = [SelectOption::new(egui::Id::unique("red"), "Red")];
+/// let group = SelectGroup::new(egui::Id::unique("shipping"), "Shipping color", theme)
 ///     .description("Used on the label")
 ///     .show(ui, |ui| {
 ///         Select::new(
-///             egui::Id::new("shipping-color"),
+///             egui::Id::unique("shipping-color"),
 ///             "Color",
 ///             "Choose a color",
 ///             &options,
@@ -138,7 +138,7 @@ impl<'a> SelectGroup<'a> {
             data.insert_temp(inherited_error_key(), error.map(str::to_owned));
             previous
         });
-        let scope = ui.scope_builder(UiBuilder::new().id(id), |ui| {
+        let scope = ui.scope_builder(UiBuilder::new().scope_id(id), |ui| {
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 6.0;
                 let label = ui.add(

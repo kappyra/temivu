@@ -7,24 +7,24 @@ use temivu::sidebar::{Sidebar, SidebarGroup, SidebarItem, SidebarState};
 use temivu::{Scaffold, Theme};
 
 fn example(ui: &mut egui::Ui, theme: &Theme, state: &mut SidebarState, selected: &mut Option<egui::Id>) {
-let children = [SidebarItem::new(egui::Id::new("settings"), "Settings")];
+let children = [SidebarItem::new(egui::Id::unique("settings"), "Settings")];
 let items = [
-    SidebarItem::new(egui::Id::new("inbox"), "Inbox").icon("▤"),
-    SidebarItem::new(egui::Id::new("projects"), "Projects").children(&children),
+    SidebarItem::new(egui::Id::unique("inbox"), "Inbox").icon("▤"),
+    SidebarItem::new(egui::Id::unique("projects"), "Projects").children(&children),
 ];
-let groups = [SidebarGroup::new(egui::Id::new("main"), &items).label("Main")];
+let groups = [SidebarGroup::new(egui::Id::unique("main"), &items).label("Main")];
 let width = if state.collapsed {
     Sidebar::COLLAPSED_WIDTH
 } else {
     Sidebar::DEFAULT_WIDTH
 };
-Scaffold::new(egui::Id::new("app-shell"), theme)
+Scaffold::new(egui::Id::unique("app-shell"), theme)
     .sidebar(width)
     .unwrap()
     .show(
         ui,
         |ui| {
-            Sidebar::new(egui::Id::new("sidebar"), "Main navigation", theme, state)
+            Sidebar::new(egui::Id::unique("sidebar"), "Main navigation", theme, state)
                 .title("Workspace")
                 .show(ui, &groups, selected);
         },

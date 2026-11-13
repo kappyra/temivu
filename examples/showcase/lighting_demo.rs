@@ -185,7 +185,7 @@ impl LightingDemo {
             Sense::click_and_drag(),
         );
         response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Vesper interactive surface")
+            egui::WidgetInfo::labeled(egui::Role::Button, true, "Vesper interactive surface")
         });
         if !ui.is_rect_visible(rect) {
             return;
@@ -261,7 +261,7 @@ impl LightingDemo {
             style.receive(
                 painter,
                 theme,
-                ui.id().with("lit-environment"),
+                ui.scope_id().with("lit-environment"),
                 stage,
                 20.into(),
                 base,
@@ -291,7 +291,7 @@ impl LightingDemo {
                 style.receive(
                     painter,
                     theme,
-                    ui.id().with(("neighbor", index)),
+                    ui.scope_id().with(("neighbor", index)),
                     rect,
                     16.into(),
                     fill,
@@ -311,11 +311,11 @@ impl LightingDemo {
         }
         let response = ui.interact(
             emitter,
-            ui.id().with("spill-source"),
+            ui.scope_id().with("spill-source"),
             Sense::click_and_drag(),
         );
         response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Shared light source")
+            egui::WidgetInfo::labeled(egui::Role::Button, true, "Shared light source")
         });
         painter.rect_filled(emitter, 20, STAGE);
         if self.enabled {

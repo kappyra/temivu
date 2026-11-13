@@ -884,3 +884,95 @@ fn showcase_glass_is_optional_and_yields_to_high_contrast() {
     harness.run_steps(3);
     assert!(temivu::Glass::context(&harness.ctx).is_none());
 }
+
+#[test]
+fn touch_overscroll_resists_drag_and_returns_to_edge() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(390.0, 844.0))
+        .build_ui_state(
+            |ui, app: &mut showcase::Showcase| {
+                app.ui(ui, &mut eframe::Frame::_new_kittest());
+            },
+            showcase::Showcase::default(),
+        );
+    harness.run_steps(3);
+
+    let heading = |harness: &Harness<'_, showcase::Showcase>| {
+        harness.get_by_label("Welcome to Temivu").rect().top()
+    };
+    let initial = heading(&harness);
+    let start = egui::pos2(350.0, 90.0);
+    let touch = |pos, phase| egui::Event::Touch {
+        device_id: egui::TouchDeviceId(0),
+        id: egui::TouchId(1),
+        phase,
+        pos,
+        force: None,
+    };
+    let primary = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    let mut time = 1.0;
+    let mut step = |harness: &mut Harness<'_, showcase::Showcase>, events: Vec<_>| {
+        time += 1.0 / 60.0;
+        harness.input_mut().time = Some(time);
+        harness.input_mut().events.extend(events);
+        harness.step();
+    };
+    step(
+        &mut harness,
+        vec![
+            egui::Event::PointerMoved(start),
+            touch(start, egui::TouchPhase::Start),
+        ],
+    );
+    step(&mut harness, vec![primary(start, true)]);
+    let primed = start + egui::vec2(0.0, 60.0);
+    step(
+        &mut harness,
+        vec![
+            egui::Event::PointerMoved(primed),
+            touch(primed, egui::TouchPhase::Move),
+        ],
+    );
+
+    step(&mut harness, vec![]);
+    let mut previous = heading(&harness);
+    let mut last_delta = f32::INFINITY;
+    for distance in [120.0, 180.0, 240.0] {
+        let pos = start + egui::vec2(0.0, distance);
+        step(
+            &mut harness,
+            vec![
+                egui::Event::PointerMoved(pos),
+                touch(pos, egui::TouchPhase::Move),
+            ],
+        );
+        step(&mut harness, vec![]);
+        let current = heading(&harness);
+        let delta = current - previous;
+        assert!(
+            delta > 0.0 && delta < last_delta,
+            "pull {distance}: moved {delta}"
+        );
+        previous = current;
+        last_delta = delta;
+    }
+
+    let end = start + egui::vec2(0.0, 240.0);
+    step(
+        &mut harness,
+        vec![
+            touch(end, egui::TouchPhase::End),
+            primary(end, false),
+            egui::Event::PointerGone,
+        ],
+    );
+    for _ in 0..90 {
+        step(&mut harness, vec![]);
+    }
+    assert!((heading(&harness) - initial).abs() < 1.0);
+}

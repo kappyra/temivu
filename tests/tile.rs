@@ -9,7 +9,7 @@ fn tile_exposes_description_selection_and_keyboard_activation() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, selected: &mut bool| {
             let response = Tile::new("Bluetooth", &Theme::light())
-                .id(egui::Id::new("bluetooth"))
+                .id(egui::Id::unique("bluetooth"))
                 .description("Connect devices")
                 .selected(*selected)
                 .show(ui);
@@ -78,12 +78,12 @@ fn stable_tile_identity_survives_insertion() {
         |ui, insert: &mut bool| {
             if *insert {
                 Tile::new("Inserted", &Theme::light())
-                    .id(egui::Id::new("inserted"))
+                    .id(egui::Id::unique("inserted"))
                     .show(ui);
             }
             for name in ["First", "Second"] {
                 Tile::new(name, &Theme::light())
-                    .id(egui::Id::new(name))
+                    .id(egui::Id::unique(name))
                     .show(ui);
             }
         },

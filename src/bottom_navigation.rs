@@ -131,7 +131,7 @@ pub fn bottom_navigation_styled(
                     egui::vec2(width, 48.0),
                     egui::Layout::left_to_right(egui::Align::Center),
                     |ui| {
-                        ui.scope_builder(egui::UiBuilder::new().id(id.with(item.id)), |ui| {
+                        ui.scope_builder(egui::UiBuilder::new().scope_id(id.with(item.id)), |ui| {
                             crate::button::press_native(ui, &theme, |ui| {
                                 ui.add_enabled(item.enabled, button)
                             })
@@ -354,7 +354,7 @@ impl<'a> FloatingNavigation<'a> {
                 };
                 let response = ui.interact(rect, self.id.with(item.id), sense);
                 response.widget_info(|| {
-                    egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, item.label)
+                    egui::WidgetInfo::labeled(egui::Role::Button, enabled, item.label)
                 });
                 ctx.accesskit_node_builder(response.id, |node| {
                     node.set_selected(active == Some(index))

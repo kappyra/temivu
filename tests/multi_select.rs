@@ -6,13 +6,13 @@ use temivu::{MultiSelect, SelectOption};
 
 fn view(ui: &mut egui::Ui, state: &mut (Vec<egui::Id>, bool)) {
     let options = [
-        SelectOption::new(egui::Id::new("email"), "Email"),
-        SelectOption::new(egui::Id::new("sms"), "SMS"),
-        SelectOption::new(egui::Id::new("push"), "Push"),
-        SelectOption::new(egui::Id::new("inbox"), "Inbox").enabled(false),
+        SelectOption::new(egui::Id::unique("email"), "Email"),
+        SelectOption::new(egui::Id::unique("sms"), "SMS"),
+        SelectOption::new(egui::Id::unique("push"), "Push"),
+        SelectOption::new(egui::Id::unique("inbox"), "Inbox").enabled(false),
     ];
     let response = MultiSelect::new(
-        egui::Id::new("channels"),
+        egui::Id::unique("channels"),
         "Channels",
         "Choose channels",
         &options,
@@ -40,7 +40,7 @@ fn toggling_options_keeps_the_popup_open_and_summarises() {
     harness.run_steps(2);
     assert_eq!(
         harness.state().0,
-        vec![egui::Id::new("email"), egui::Id::new("sms")]
+        vec![egui::Id::unique("email"), egui::Id::unique("sms")]
     );
     harness.get_by_label("Push");
     assert_eq!(
@@ -67,7 +67,7 @@ fn keyboard_space_toggles_the_focused_option() {
     harness.run();
     harness.key_press(egui::Key::Space);
     harness.run();
-    assert_eq!(harness.state().0, vec![egui::Id::new("sms")]);
+    assert_eq!(harness.state().0, vec![egui::Id::unique("sms")]);
     harness.key_press(egui::Key::Space);
     harness.run();
     assert!(harness.state().0.is_empty(), "a second Space deselects");
@@ -109,10 +109,10 @@ fn disabled_options_cannot_be_toggled() {
 #[test]
 fn more_than_three_selections_show_a_count() {
     let selected = vec![
-        egui::Id::new("email"),
-        egui::Id::new("sms"),
-        egui::Id::new("push"),
-        egui::Id::new("inbox"),
+        egui::Id::unique("email"),
+        egui::Id::unique("sms"),
+        egui::Id::unique("push"),
+        egui::Id::unique("inbox"),
     ];
     let mut harness = Harness::builder().build_ui_state(view, (selected, false));
     harness.run();
@@ -131,11 +131,11 @@ fn search_filters_multi_select_options() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, selected: &mut Vec<egui::Id>| {
             let options = [
-                SelectOption::new(egui::Id::new("email"), "Email"),
-                SelectOption::new(egui::Id::new("sms"), "SMS"),
+                SelectOption::new(egui::Id::unique("email"), "Email"),
+                SelectOption::new(egui::Id::unique("sms"), "SMS"),
             ];
             MultiSelect::new(
-                egui::Id::new("searchable-channels"),
+                egui::Id::unique("searchable-channels"),
                 "Channels",
                 "Choose channels",
                 &options,
@@ -164,11 +164,11 @@ fn escape_from_search_restores_field_focus() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, selected: &mut Vec<egui::Id>| {
             let options = [
-                SelectOption::new(egui::Id::new("email"), "Email"),
-                SelectOption::new(egui::Id::new("sms"), "SMS"),
+                SelectOption::new(egui::Id::unique("email"), "Email"),
+                SelectOption::new(egui::Id::unique("sms"), "SMS"),
             ];
             MultiSelect::new(
-                egui::Id::new("search-escape-channels"),
+                egui::Id::unique("search-escape-channels"),
                 "Channels",
                 "Choose channels",
                 &options,
@@ -204,11 +204,11 @@ fn an_outside_click_dismisses_the_multi_select_popup() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, selected: &mut Vec<egui::Id>| {
             let options = [
-                SelectOption::new(egui::Id::new("email"), "Email"),
-                SelectOption::new(egui::Id::new("sms"), "SMS"),
+                SelectOption::new(egui::Id::unique("email"), "Email"),
+                SelectOption::new(egui::Id::unique("sms"), "SMS"),
             ];
             MultiSelect::new(
-                egui::Id::new("outside-channels"),
+                egui::Id::unique("outside-channels"),
                 "Channels",
                 "Choose channels",
                 &options,
@@ -238,21 +238,21 @@ fn an_outside_click_dismisses_the_multi_select_popup() {
 fn custom_count_summary_is_used() {
     let summary = |count: usize| format!("{count} ausgewählt");
     let selected = vec![
-        egui::Id::new("email"),
-        egui::Id::new("sms"),
-        egui::Id::new("push"),
-        egui::Id::new("inbox"),
+        egui::Id::unique("email"),
+        egui::Id::unique("sms"),
+        egui::Id::unique("push"),
+        egui::Id::unique("inbox"),
     ];
     let mut harness = Harness::builder().build_ui_state(
         move |ui, selected: &mut Vec<egui::Id>| {
             let options = [
-                SelectOption::new(egui::Id::new("email"), "Email"),
-                SelectOption::new(egui::Id::new("sms"), "SMS"),
-                SelectOption::new(egui::Id::new("push"), "Push"),
-                SelectOption::new(egui::Id::new("inbox"), "Inbox"),
+                SelectOption::new(egui::Id::unique("email"), "Email"),
+                SelectOption::new(egui::Id::unique("sms"), "SMS"),
+                SelectOption::new(egui::Id::unique("push"), "Push"),
+                SelectOption::new(egui::Id::unique("inbox"), "Inbox"),
             ];
             MultiSelect::new(
-                egui::Id::new("localized-channels"),
+                egui::Id::unique("localized-channels"),
                 "Channels",
                 "Choose channels",
                 &options,

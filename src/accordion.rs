@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT_ACCORDION_ID: AtomicU64 = AtomicU64::new(0);
 
 fn new_id() -> egui::Id {
-    egui::Id::new((
+    egui::Id::unique((
         "temivu-accordion",
         NEXT_ACCORDION_ID.fetch_add(1, Ordering::Relaxed),
     ))
@@ -103,7 +103,7 @@ impl<'a> AccordionItem<'a> {
     /// Content is only evaluated while the item is open; this prevents hidden interaction.
     pub fn show(self, ui: &mut Ui, content: impl FnOnce(&mut Ui)) -> Response {
         let id = self.state.id.with(self.index);
-        ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
+        ui.scope_builder(egui::UiBuilder::new().scope_id(id), |ui| {
             let mut response = crate::button::press_native(ui, self.theme, |ui| {
                 ui.add(
                     egui::Button::new(RichText::new(self.title).color(self.theme.foreground))

@@ -8,7 +8,7 @@ use temivu::{Theme, ToastEntry, Toaster, ToasterState};
 fn notifications(ui: &mut egui::Ui, theme: &Theme, queue: &mut ToasterState) {
     if ui.button("Save").clicked() {
         queue.push(
-            ToastEntry::new(egui::Id::new("saved"), "Changes saved")
+            ToastEntry::new(egui::Id::unique("saved"), "Changes saved")
                 .description("Your draft is up to date."),
         );
     }

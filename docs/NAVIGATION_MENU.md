@@ -6,9 +6,9 @@
 # fn example(ui: &mut egui::Ui, open: &mut bool, selected: &mut Option<egui::Id>) {
 use temivu::{Button, MenuPresentation, NavigationItem, NavigationMenu, Theme};
 let theme = Theme::light();
-let items = [NavigationItem::new(egui::Id::new("home"), "Home")];
+let items = [NavigationItem::new(egui::Id::unique("home"), "Home")];
 let trigger = Button::new("Menu", &theme).show(ui);
-NavigationMenu::new(egui::Id::new("main-menu"), "Navigation", open, &theme)
+NavigationMenu::new(egui::Id::unique("main-menu"), "Navigation", open, &theme)
     .presentation(MenuPresentation::Adaptive)
     .show(&trigger, &items, selected);
 # }

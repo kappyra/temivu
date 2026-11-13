@@ -78,11 +78,11 @@ impl LiquidStyle {
 
     /// Set the default for this egui context; widget overrides take precedence.
     pub fn set_context_default(self, ctx: &egui::Context) {
-        ctx.data_mut(|data| data.insert_temp(Id::new("temivu-surface-motion-default"), self));
+        ctx.data_mut(|data| data.insert_temp(Id::unique("temivu-surface-motion-default"), self));
     }
     /// Read the context default, falling back to Droplet.
     pub fn context_default(ctx: &egui::Context) -> Self {
-        ctx.data(|data| data.get_temp(Id::new("temivu-surface-motion-default")))
+        ctx.data(|data| data.get_temp(Id::unique("temivu-surface-motion-default")))
             .unwrap_or_default()
     }
 }
@@ -409,7 +409,8 @@ fn content_transform(
         * egui::emath::TSTransform::from_translation(-pivot.to_vec2())
 }
 
-pub(crate) struct PopupSurface {
+pub(crate) struct PopupSurface<'a> {
+    pub label: Option<&'a str>,
     pub match_compact_trigger: bool,
     pub width: Option<f32>,
     pub frame: Frame,
@@ -423,11 +424,12 @@ pub(crate) fn popup<R>(
     anchor: &Response,
     id: Id,
     open: &mut bool,
-    surface: PopupSurface,
+    surface: PopupSurface<'_>,
     theme: &Theme,
     content: impl FnOnce(&mut Ui) -> R,
 ) -> Option<InnerResponse<R>> {
     let PopupSurface {
+        label,
         match_compact_trigger,
         width,
         frame,
@@ -557,6 +559,9 @@ pub(crate) fn popup<R>(
         .open_bool(open)
         .close_behavior(close_behavior)
         .frame(Frame::NONE.inner_margin(frame.inner_margin));
+    if let Some(label) = label {
+        popup = popup.accessible_name(label);
+    }
     if matched {
         let align = if source.center().x > clip.center().x {
             egui::RectAlign::BOTTOM_END
@@ -582,7 +587,19 @@ pub(crate) fn popup<R>(
             // Resolve layout in this frame instead of displaying an empty morph.
             ui.ctx().request_discard("liquid surface sizing");
         }
-        content(ui)
+        let result = content(ui);
+        if label.is_some() {
+            let bounds = ui.min_rect();
+            ui.ctx().accesskit_node_builder(id, |node| {
+                node.set_bounds(egui::accesskit::Rect {
+                    x0: f64::from(bounds.left()),
+                    y0: f64::from(bounds.top()),
+                    x1: f64::from(bounds.right()),
+                    y1: f64::from(bounds.bottom()),
+                });
+            });
+        }
+        result
     });
     if !*open && motion.transition == SurfaceTransition::Droplet {
         let contact = trigger_contact(anchor).or(origin.contact);

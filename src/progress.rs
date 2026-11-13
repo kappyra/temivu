@@ -1,6 +1,6 @@
 //! Experimental Forui progress indicators. See coverage notes for missing parity.
 use crate::Theme;
-use egui::{Pos2, Rect, Response, Sense, Shape, Stroke, Ui, Vec2, WidgetInfo, WidgetType};
+use egui::{Pos2, Rect, Response, Role, Sense, Shape, Stroke, Ui, Vec2, WidgetInfo};
 
 /// Whether indeterminate animations should run.
 ///
@@ -84,7 +84,7 @@ impl<'a> Progress<'a> {
             ui.allocate_exact_size(Vec2::new(width, self.thickness), Sense::hover());
         response.widget_info(|| {
             let mut info =
-                WidgetInfo::labeled(WidgetType::ProgressIndicator, ui.is_enabled(), self.label);
+                WidgetInfo::labeled(Role::ProgressIndicator, ui.is_enabled(), self.label);
             info.value = self.value.map(|value| f64::from((value * 100.0).round()));
             info
         });
@@ -221,7 +221,7 @@ impl<'a> CircularProgress<'a> {
         let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::hover());
         response.widget_info(|| {
             let mut info =
-                WidgetInfo::labeled(WidgetType::ProgressIndicator, ui.is_enabled(), self.label);
+                WidgetInfo::labeled(Role::ProgressIndicator, ui.is_enabled(), self.label);
             info.value = self.value.map(|value| f64::from((value * 100.0).round()));
             info
         });

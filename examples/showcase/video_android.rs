@@ -11,7 +11,7 @@ impl DemoVideo {
 
     pub fn show(&mut self, ui: &mut Ui, theme: &Theme) {
         VideoPlayer::new(
-            Id::new("demo-video"),
+            Id::unique("demo-video"),
             "Video preview",
             theme,
             VideoStatus::default(),

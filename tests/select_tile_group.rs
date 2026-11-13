@@ -27,9 +27,9 @@ impl Default for State {
 }
 
 fn tiles(reorder: bool) -> Vec<SelectTile<'static>> {
-    let wifi = SelectTile::new(egui::Id::new("wifi"), "Wi-Fi").description("Wireless networks");
-    let bluetooth = SelectTile::new(egui::Id::new("bluetooth"), "Bluetooth");
-    let nfc = SelectTile::new(egui::Id::new("nfc"), "NFC").enabled(false);
+    let wifi = SelectTile::new(egui::Id::unique("wifi"), "Wi-Fi").description("Wireless networks");
+    let bluetooth = SelectTile::new(egui::Id::unique("bluetooth"), "Bluetooth");
+    let nfc = SelectTile::new(egui::Id::unique("nfc"), "NFC").enabled(false);
     if reorder {
         vec![bluetooth, wifi, nfc]
     } else {
@@ -51,10 +51,16 @@ fn view(ui: &mut egui::Ui, state: &mut State) {
         ui.disable();
     }
     let tiles = tiles(*reorder);
-    let group = SelectTileGroup::new(egui::Id::new("radios"), "Radios", &theme, &tiles, selected)
-        .description("Choose any that apply")
-        .enabled(*group_enabled)
-        .show(ui);
+    let group = SelectTileGroup::new(
+        egui::Id::unique("radios"),
+        "Radios",
+        &theme,
+        &tiles,
+        selected,
+    )
+    .description("Choose any that apply")
+    .enabled(*group_enabled)
+    .show(ui);
     *changed |= group.changed;
     if let Some(id) = group.activated {
         *activated = Some(id);
@@ -99,20 +105,23 @@ fn pointer_toggles_multi_selection_in_caller_state() {
 
     harness.get_by_label("Wi-Fi").click();
     harness.run();
-    assert_eq!(harness.state().selected, vec![egui::Id::new("wifi")]);
-    assert_eq!(harness.state().activated, Some(egui::Id::new("wifi")));
+    assert_eq!(harness.state().selected, vec![egui::Id::unique("wifi")]);
+    assert_eq!(harness.state().activated, Some(egui::Id::unique("wifi")));
     assert!(harness.state().changed);
 
     harness.get_by_label("Bluetooth").click();
     harness.run();
     assert_eq!(
         harness.state().selected,
-        vec![egui::Id::new("wifi"), egui::Id::new("bluetooth")]
+        vec![egui::Id::unique("wifi"), egui::Id::unique("bluetooth")]
     );
 
     harness.get_by_label("Wi-Fi").click();
     harness.run();
-    assert_eq!(harness.state().selected, vec![egui::Id::new("bluetooth")]);
+    assert_eq!(
+        harness.state().selected,
+        vec![egui::Id::unique("bluetooth")]
+    );
     assert_eq!(
         harness
             .get_by_role_and_label(egui::accesskit::Role::ListItem, "Wi-Fi")
@@ -143,7 +152,7 @@ fn arrow_keys_move_focus_skip_disabled_tiles_and_toggle_selection() {
 
     harness.key_press(egui::Key::Enter);
     harness.run();
-    assert_eq!(harness.state().selected, vec![egui::Id::new("wifi")]);
+    assert_eq!(harness.state().selected, vec![egui::Id::unique("wifi")]);
 
     harness.key_press(egui::Key::End);
     harness.run();
@@ -214,7 +223,7 @@ fn selection_follows_stable_ids_when_tiles_are_reordered() {
     harness.run();
     harness.get_by_label("Wi-Fi").click();
     harness.run();
-    assert_eq!(harness.state().selected, vec![egui::Id::new("wifi")]);
+    assert_eq!(harness.state().selected, vec![egui::Id::unique("wifi")]);
 
     harness.state_mut().reorder = true;
     harness.run();
@@ -225,5 +234,5 @@ fn selection_follows_stable_ids_when_tiles_are_reordered() {
         "selection must stay attached to the stable tile ID after reordering"
     );
     assert_eq!(wifi.accesskit_node().position_in_set(), Some(1));
-    assert_eq!(harness.state().selected, vec![egui::Id::new("wifi")]);
+    assert_eq!(harness.state().selected, vec![egui::Id::unique("wifi")]);
 }

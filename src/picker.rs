@@ -15,11 +15,11 @@
 //!
 //! let theme = Theme::light();
 //! let items = [
-//!     PickerItem::new(egui::Id::new("small"), "Small"),
-//!     PickerItem::new(egui::Id::new("medium"), "Medium"),
-//!     PickerItem::new(egui::Id::new("large"), "Large"),
+//!     PickerItem::new(egui::Id::unique("small"), "Small"),
+//!     PickerItem::new(egui::Id::unique("medium"), "Medium"),
+//!     PickerItem::new(egui::Id::unique("large"), "Large"),
 //! ];
-//! let mut selected = Some(egui::Id::new("medium"));
+//! let mut selected = Some(egui::Id::unique("medium"));
 //! let output = Picker::new(&mut selected, &items, &theme)
 //!     .label("Size")
 //!     .show(ui);
@@ -77,6 +77,7 @@ pub struct PickerResponse {
 #[derive(Clone, Copy, Debug, Default)]
 struct PickerMemory {
     last_selected: Option<Id>,
+    snap_offset: Option<f32>,
 }
 
 /// A wheel-style picker over caller-owned [`PickerItem`]s.
@@ -183,8 +184,10 @@ impl<'a> Picker<'a> {
         let id = self
             .id
             .unwrap_or_else(|| ui.next_auto_id().with("temivu-picker"));
-        ui.scope_builder(egui::UiBuilder::new().id(id), |ui| self.show_inner(ui, id))
-            .inner
+        ui.scope_builder(egui::UiBuilder::new().scope_id(id), |ui| {
+            self.show_inner(ui, id)
+        })
+        .inner
     }
 
     fn show_inner(self, ui: &mut Ui, id: Id) -> PickerResponse {
@@ -268,6 +271,7 @@ impl<'a> Picker<'a> {
         // Wheel input this frame: do not snap while the user is still scrolling.
         let scrolling_input =
             ui.input(|input| input.smooth_scroll_delta.y != 0.0 || input.pointer.any_down());
+        let pending_snap = memory.snap_offset.filter(|_| !scrolling_input);
 
         let (viewport_rect, _) =
             ui.allocate_exact_size(Vec2::new(list_width, viewport_height), Sense::hover());
@@ -323,7 +327,7 @@ impl<'a> Picker<'a> {
                             egui::scroll_area::ScrollSource::MOUSE_WHEEL
                                 | egui::scroll_area::ScrollSource::DRAG,
                         );
-                    if let Some(offset) = explicit_offset {
+                    if let Some(offset) = explicit_offset.or(pending_snap) {
                         area = area.vertical_scroll_offset(offset);
                     }
                     area.show(ui, |ui| {
@@ -405,8 +409,9 @@ impl<'a> Picker<'a> {
         // Reconcile the wheel position with the selection. Scrolling selects
         // the nearest enabled row; once the wheel stops, the offset snaps to a
         // whole row so the band stays centred. Both steps only run on change.
+        let mut snap_offset = None;
         if enabled && !items.is_empty() {
-            let offset = output.state.offset.y;
+            let offset = output.state.clamped_offset().y;
             let nearest = (offset / row_height)
                 .round()
                 .clamp(0.0, (items.len() - 1) as f32) as usize;
@@ -416,12 +421,13 @@ impl<'a> Picker<'a> {
                 changed = true;
                 ui.ctx().request_repaint();
             }
-            if !scrolling_input && output.state.velocity().y.abs() < 1.0 {
+            if !scrolling_input
+                && output.state.overscroll().y == 0.0
+                && output.state.velocity().y.abs() < 1.0
+            {
                 let snapped = target as f32 * row_height;
                 if (offset - snapped).abs() > 0.5 {
-                    let mut state = output.state;
-                    state.offset.y = snapped;
-                    state.store(ui.ctx(), output.id);
+                    snap_offset = Some(snapped);
                     ui.ctx().request_repaint();
                 }
             }
@@ -432,6 +438,7 @@ impl<'a> Picker<'a> {
                 memory_key,
                 PickerMemory {
                     last_selected: *selected,
+                    snap_offset,
                 },
             );
         });
@@ -550,41 +557,41 @@ mod tests {
 
     fn items() -> [PickerItem<'static>; 3] {
         [
-            PickerItem::new(Id::new("a"), "A"),
-            PickerItem::new(Id::new("b"), "B").enabled(false),
-            PickerItem::new(Id::new("c"), "C"),
+            PickerItem::new(Id::unique("a"), "A"),
+            PickerItem::new(Id::unique("b"), "B").enabled(false),
+            PickerItem::new(Id::unique("c"), "C"),
         ]
     }
 
     #[test]
     fn keyboard_step_skips_disabled_rows_and_clamps() {
         let items = items();
-        assert_eq!(step_enabled(&items, None, 1, false), Some(Id::new("a")));
+        assert_eq!(step_enabled(&items, None, 1, false), Some(Id::unique("a")));
         assert_eq!(
-            step_enabled(&items, Some(Id::new("a")), 1, false),
-            Some(Id::new("c"))
+            step_enabled(&items, Some(Id::unique("a")), 1, false),
+            Some(Id::unique("c"))
         );
         assert_eq!(
-            step_enabled(&items, Some(Id::new("c")), 1, false),
-            Some(Id::new("c"))
+            step_enabled(&items, Some(Id::unique("c")), 1, false),
+            Some(Id::unique("c"))
         );
         assert_eq!(
-            step_enabled(&items, Some(Id::new("a")), -1, false),
-            Some(Id::new("a"))
+            step_enabled(&items, Some(Id::unique("a")), -1, false),
+            Some(Id::unique("a"))
         );
-        assert_eq!(step_enabled(&items, None, -1, false), Some(Id::new("c")));
+        assert_eq!(step_enabled(&items, None, -1, false), Some(Id::unique("c")));
     }
 
     #[test]
     fn looping_wraps_past_the_ends() {
         let items = items();
         assert_eq!(
-            step_enabled(&items, Some(Id::new("c")), 1, true),
-            Some(Id::new("a"))
+            step_enabled(&items, Some(Id::unique("c")), 1, true),
+            Some(Id::unique("a"))
         );
         assert_eq!(
-            step_enabled(&items, Some(Id::new("a")), -1, true),
-            Some(Id::new("c"))
+            step_enabled(&items, Some(Id::unique("a")), -1, true),
+            Some(Id::unique("c"))
         );
     }
 
@@ -593,8 +600,8 @@ mod tests {
         let items = items();
         assert_eq!(nearest_enabled_index(&items, 1), 2);
         let all_disabled = [
-            PickerItem::new(Id::new("a"), "A").enabled(false),
-            PickerItem::new(Id::new("b"), "B").enabled(false),
+            PickerItem::new(Id::unique("a"), "A").enabled(false),
+            PickerItem::new(Id::unique("b"), "B").enabled(false),
         ];
         assert_eq!(nearest_enabled_index(&all_disabled, 1), 1);
     }

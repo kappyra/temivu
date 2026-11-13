@@ -12,8 +12,8 @@ fn view(ui: &mut egui::Ui, state: &mut ToasterState) {
 #[test]
 fn queued_toasts_render_and_can_be_dismissed() {
     let mut state = ToasterState::new(3);
-    state.push(ToastEntry::new(egui::Id::new("first"), "First toast"));
-    state.push(ToastEntry::new(egui::Id::new("second"), "Second toast").description("Details"));
+    state.push(ToastEntry::new(egui::Id::unique("first"), "First toast"));
+    state.push(ToastEntry::new(egui::Id::unique("second"), "Second toast").description("Details"));
     let mut harness = Harness::builder().build_ui_state(view, state);
     harness.run();
     assert_eq!(
@@ -39,7 +39,7 @@ fn the_limit_queues_remaining_toasts() {
     let mut state = ToasterState::new(2);
     for index in 0..3 {
         state.push(ToastEntry::new(
-            egui::Id::new(format!("queued-{index}")),
+            egui::Id::unique(format!("queued-{index}")),
             format!("Toast {index}"),
         ));
     }
@@ -67,7 +67,7 @@ fn the_limit_queues_remaining_toasts() {
 fn zero_timeout_toasts_are_pruned_immediately() {
     let mut state = ToasterState::new(3);
     state.push(
-        ToastEntry::new(egui::Id::new("instant"), "Instant")
+        ToastEntry::new(egui::Id::unique("instant"), "Instant")
             .timeout(Some(std::time::Duration::ZERO)),
     );
     let mut harness = Harness::builder().build_ui_state(view, state);
@@ -84,7 +84,7 @@ fn zero_timeout_toasts_are_pruned_immediately() {
 #[test]
 fn persistent_toasts_stay_until_dismissed() {
     let mut state = ToasterState::new(3);
-    state.push(ToastEntry::new(egui::Id::new("sticky"), "Sticky").timeout(None));
+    state.push(ToastEntry::new(egui::Id::unique("sticky"), "Sticky").timeout(None));
     let mut harness = Harness::builder().build_ui_state(view, state);
     harness.run_steps(5);
     assert_eq!(
@@ -99,8 +99,8 @@ fn persistent_toasts_stay_until_dismissed() {
 #[test]
 fn pushing_the_same_id_replaces_the_entry() {
     let mut state = ToasterState::new(3);
-    state.push(ToastEntry::new(egui::Id::new("same"), "First title"));
-    state.push(ToastEntry::new(egui::Id::new("same"), "Second title"));
+    state.push(ToastEntry::new(egui::Id::unique("same"), "First title"));
+    state.push(ToastEntry::new(egui::Id::unique("same"), "Second title"));
     let mut harness = Harness::builder().build_ui_state(view, state);
     harness.run();
     assert_eq!(harness.state().len(), 1);
@@ -118,7 +118,7 @@ fn limit_is_clamped_to_supported_bounds() {
 fn timed_toasts_expire_through_the_simulated_clock() {
     let mut state = ToasterState::new(3);
     state.push(
-        ToastEntry::new(egui::Id::new("timed"), "Timed")
+        ToastEntry::new(egui::Id::unique("timed"), "Timed")
             .timeout(Some(std::time::Duration::from_secs(5))),
     );
     let mut harness = Harness::builder().build_ui_state(view, state);
@@ -137,8 +137,8 @@ fn timed_toasts_expire_through_the_simulated_clock() {
 #[test]
 fn stacked_toasts_have_unique_dismiss_accessible_names() {
     let mut state = ToasterState::new(3);
-    state.push(ToastEntry::new(egui::Id::new("first"), "First"));
-    state.push(ToastEntry::new(egui::Id::new("second"), "Second"));
+    state.push(ToastEntry::new(egui::Id::unique("first"), "First"));
+    state.push(ToastEntry::new(egui::Id::unique("second"), "Second"));
     let mut harness = Harness::builder().build_ui_state(view, state);
     harness.run();
     harness.get_by_label("Dismiss: First");
@@ -152,7 +152,10 @@ fn stacked_toasts_have_unique_dismiss_accessible_names() {
 #[test]
 fn dismissing_with_the_keyboard_removes_the_focused_toast() {
     let mut state = ToasterState::new(3);
-    state.push(ToastEntry::new(egui::Id::new("keyboard"), "Keyboard toast"));
+    state.push(ToastEntry::new(
+        egui::Id::unique("keyboard"),
+        "Keyboard toast",
+    ));
     let mut harness = Harness::builder().build_ui_state(view, state);
     harness.run();
     harness.get_by_label("Dismiss: Keyboard toast").focus();
@@ -177,7 +180,7 @@ fn custom_anchors_keep_the_overlay_on_screen() {
         (Align2::CENTER_BOTTOM, false, true),
     ] {
         let mut state = ToasterState::new(3);
-        state.push(ToastEntry::new(egui::Id::new("anchored"), "Anchored").timeout(None));
+        state.push(ToastEntry::new(egui::Id::unique("anchored"), "Anchored").timeout(None));
         let mut harness = Harness::builder()
             .with_size(egui::vec2(480.0, 360.0))
             .build_ui_state(
@@ -208,7 +211,7 @@ fn custom_anchors_keep_the_overlay_on_screen() {
 fn toast_entries_can_render_a_decorative_icon() {
     let mut state = ToasterState::new(3);
     state.push(
-        ToastEntry::new(egui::Id::new("with-icon"), "Saved")
+        ToastEntry::new(egui::Id::unique("with-icon"), "Saved")
             .icon("!")
             .timeout(None),
     );
@@ -223,7 +226,7 @@ fn toast_entries_can_render_a_decorative_icon() {
 
 #[test]
 fn dismissed_card_keeps_paint_until_the_queue_finishes_its_exit() {
-    let id = egui::Id::new("exit");
+    let id = egui::Id::unique("exit");
     let mut state = ToasterState::default();
     state.push(ToastEntry::new(id, "Saved").timeout(None));
     let mut harness = Harness::builder().build_ui_state(view, state);
@@ -255,7 +258,9 @@ fn dismissed_card_keeps_paint_until_the_queue_finishes_its_exit() {
 fn notification_center_includes_pending_entries_and_clears_only_multiple() {
     let mut state = ToasterState::new(1);
     for index in 0..3 {
-        state.push(ToastEntry::new(egui::Id::new(index), format!("Update {index}")).timeout(None));
+        state.push(
+            ToastEntry::new(egui::Id::unique(index), format!("Update {index}")).timeout(None),
+        );
     }
     let mut harness = Harness::builder()
         .with_size(egui::vec2(390.0, 480.0))
@@ -356,7 +361,7 @@ fn notification_center_includes_pending_entries_and_clears_only_multiple() {
     harness
         .state_mut()
         .0
-        .push(ToastEntry::new(egui::Id::new(3), "New update"));
+        .push(ToastEntry::new(egui::Id::unique(3), "New update"));
     harness.run_steps(3);
     harness.get_by_label("Clear all").click();
     harness.run();
@@ -370,7 +375,7 @@ fn notification_center_includes_pending_entries_and_clears_only_multiple() {
 #[test]
 fn stacked_preview_actions_are_under_the_cards_and_only_for_multiple_notices() {
     let mut state = ToasterState::default();
-    state.push(ToastEntry::new(egui::Id::new(0), "First notice").timeout(None));
+    state.push(ToastEntry::new(egui::Id::unique(0), "First notice").timeout(None));
     let mut harness = Harness::builder()
         .with_size(egui::vec2(390.0, 844.0))
         .build_ui_state(
@@ -391,7 +396,7 @@ fn stacked_preview_actions_are_under_the_cards_and_only_for_multiple_notices() {
     harness
         .state_mut()
         .0
-        .push(ToastEntry::new(egui::Id::new(1), "Second notice").timeout(None));
+        .push(ToastEntry::new(egui::Id::unique(1), "Second notice").timeout(None));
     harness.run();
     let first = harness
         .get_by_role_and_label(egui::accesskit::Role::Alert, "First notice")
@@ -406,10 +411,9 @@ fn stacked_preview_actions_are_under_the_cards_and_only_for_multiple_notices() {
     assert!(harness.query_by_label("+1").is_none());
 
     for index in 2..5 {
-        harness
-            .state_mut()
-            .0
-            .push(ToastEntry::new(egui::Id::new(index), format!("Notice {index}")).timeout(None));
+        harness.state_mut().0.push(
+            ToastEntry::new(egui::Id::unique(index), format!("Notice {index}")).timeout(None),
+        );
     }
     harness.run();
     harness.get_by_label("+2");

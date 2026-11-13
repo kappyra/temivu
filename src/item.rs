@@ -1,8 +1,8 @@
 //! Textual item port; rich content, grouping and full style parity remain open.
 use crate::{Theme, Vesper};
 use egui::{
-    Color32, FontId, Galley, Response, Sense, Stroke, StrokeKind, TextFormat, Ui, Vec2, WidgetInfo,
-    WidgetType, text::LayoutJob,
+    Color32, FontId, Galley, Response, Role, Sense, Stroke, StrokeKind, TextFormat, Ui, Vec2,
+    WidgetInfo, text::LayoutJob,
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -162,8 +162,10 @@ impl<'a> Item<'a> {
 
     pub fn show(self, ui: &mut Ui) -> Response {
         if let Some(id) = self.id {
-            ui.scope_builder(egui::UiBuilder::new().id(id), |ui| self.show_inner(ui))
-                .inner
+            ui.scope_builder(egui::UiBuilder::new().scope_id(id), |ui| {
+                self.show_inner(ui)
+            })
+            .inner
         } else {
             self.show_inner(ui)
         }
@@ -243,9 +245,8 @@ impl<'a> Item<'a> {
             Sense::hover()
         };
         let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), sense);
-        response.widget_info(|| {
-            WidgetInfo::selected(WidgetType::Button, enabled, self.selected, self.title)
-        });
+        response
+            .widget_info(|| WidgetInfo::selected(Role::Button, enabled, self.selected, self.title));
         ui.ctx().accesskit_node_builder(response.id, |node| {
             node.set_label(self.title);
             node.clear_toggled();

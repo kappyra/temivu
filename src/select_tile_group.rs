@@ -68,10 +68,10 @@ pub struct SelectTileGroupResponse {
 /// # fn example(ui: &mut egui::Ui, theme: &temivu::Theme, selected: &mut Vec<egui::Id>) {
 /// use temivu::{SelectTile, SelectTileGroup};
 /// let tiles = [
-///     SelectTile::new(egui::Id::new("wifi"), "Wi-Fi").description("Wireless networks"),
-///     SelectTile::new(egui::Id::new("bluetooth"), "Bluetooth"),
+///     SelectTile::new(egui::Id::unique("wifi"), "Wi-Fi").description("Wireless networks"),
+///     SelectTile::new(egui::Id::unique("bluetooth"), "Bluetooth"),
 /// ];
-/// let _ = SelectTileGroup::new(egui::Id::new("radios"), "Radios", theme, &tiles, selected)
+/// let _ = SelectTileGroup::new(egui::Id::unique("radios"), "Radios", theme, &tiles, selected)
 ///     .description("Choose any that apply")
 ///     .show(ui);
 /// # }
@@ -136,7 +136,7 @@ impl<'a> SelectTileGroup<'a> {
         let mut rows = Vec::with_capacity(tiles.len());
         let mut changed = false;
         let mut activated = None;
-        let scope = ui.scope_builder(UiBuilder::new().id(id), |ui| {
+        let scope = ui.scope_builder(UiBuilder::new().scope_id(id), |ui| {
             ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing.y = 2.0;
                 ui.add(

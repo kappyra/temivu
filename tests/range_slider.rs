@@ -144,7 +144,7 @@ fn disabled_range_slider_cannot_change_or_expose_actions() {
 fn accesskit_increment_and_decrement_actions_change_the_value() {
     use egui::accesskit::{Action, ActionRequest, TreeId};
 
-    let slider_id = egui::Id::new("at-range");
+    let slider_id = egui::Id::unique("at-range");
     let mut harness = Harness::builder().build_ui_state(
         move |ui, value: &mut (f64, f64)| {
             RangeSlider::new(value, &Theme::light())
@@ -291,7 +291,7 @@ fn clicking_the_track_at_a_place_that_snaps_to_the_current_value_does_not_mark_c
 fn accesskit_actions_at_bounds_and_in_the_middle() {
     use egui::accesskit::{Action, ActionRequest, TreeId};
 
-    let slider_id = egui::Id::new("clamped-range");
+    let slider_id = egui::Id::unique("clamped-range");
     let mut harness = Harness::builder().build_ui_state(
         move |ui, value: &mut (f64, f64)| {
             RangeSlider::new(value, &Theme::light())
@@ -331,7 +331,7 @@ fn accesskit_actions_at_bounds_and_in_the_middle() {
     assert_eq!(harness.state().1, 1.0);
 
     // Two action requests in one frame are both applied in the middle range.
-    let mid_id = egui::Id::new("mid-range");
+    let mid_id = egui::Id::unique("mid-range");
     let mut mid = Harness::builder().build_ui_state(
         move |ui, value: &mut (f64, f64)| {
             RangeSlider::new(value, &Theme::light())

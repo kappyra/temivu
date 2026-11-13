@@ -7,7 +7,7 @@ use temivu::{Resizable, ResizableAxis, Theme};
 
 fn example(ui: &mut egui::Ui, theme: &Theme, fraction: &mut f32) {
 Resizable::new(
-    egui::Id::new("editor-split"),
+    egui::Id::unique("editor-split"),
     ResizableAxis::Horizontal,
     fraction,
     theme,

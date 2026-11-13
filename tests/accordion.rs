@@ -110,7 +110,8 @@ fn focused_child_survives_expansion_of_preceding_item() {
                 ui.label("Earlier content");
             });
             AccordionItem::new(&mut state.0, 1, "Second", &Theme::light()).show(ui, |ui| {
-                ui.text_edit_singleline(&mut state.1);
+                ui.text_edit_singleline(&mut state.1)
+                    .accessible_name("Second item text");
             });
         },
         (state, String::new()),

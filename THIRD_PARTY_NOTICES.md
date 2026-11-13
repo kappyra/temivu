@@ -28,7 +28,7 @@ accompany the subsets and are included in the Android package.
 
 ## egui default fonts
 
-The locked dependency `epaint_default_fonts` 0.36.2 bundles Hack, Noto Emoji, Ubuntu Light and an emoji icon font. Its font license and attribution text files are reproduced in `third_party/egui-fonts/` from the published crate. These fonts are subject to their own terms; they are not relicensed as MIT. The complete transitive dependency and asset notice review is still outstanding.
+The locked dependency `epaint_default_fonts` 0.37.0 bundles Hack, Ubuntu Light and an icon font subset. The optional monochrome emoji fonts are included in the published crate. Its font license and attribution text files are reproduced in `third_party/egui-fonts/` from the published crate. These fonts are subject to their own terms; they are not relicensed as MIT. The complete transitive dependency and asset notice review is still outstanding.
 
 The optional native showcase adds dependencies under the Boost Software License 1.0 and ISC License. They remain under their own licenses. Full transitive notice collection remains incomplete. The dependency audit also reports unmaintained `zbus_names`, `zvariant`, and `zvariant_derive` through the Linux accessibility stack; these findings are not suppressed and the dependency gate remains blocked until resolved.
 

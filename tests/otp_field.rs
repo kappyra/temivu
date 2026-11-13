@@ -339,10 +339,10 @@ fn explicit_ids_keep_two_fields_independent_and_stateful() {
             |ui, state: &mut (String, String)| {
                 let theme = Theme::light();
                 OtpField::new(&mut state.0, &theme, "First code")
-                    .id(egui::Id::new("first-code"))
+                    .id(egui::Id::unique("first-code"))
                     .show(ui);
                 OtpField::new(&mut state.1, &theme, "Second code")
-                    .id(egui::Id::new("second-code"))
+                    .id(egui::Id::unique("second-code"))
                     .show(ui);
             },
             (String::new(), String::new()),

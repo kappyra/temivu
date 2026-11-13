@@ -110,7 +110,7 @@ impl<'a> MultiSelect<'a> {
     pub fn show(self, ui: &mut Ui) -> Response {
         let id = self.id;
         let label = self.label;
-        ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
+        ui.scope_builder(egui::UiBuilder::new().scope_id(id), |ui| {
             ui.vertical(|ui| {
                 let label_response = ui.label(label);
                 self.show_inner(ui).labelled_by(label_response.id)
@@ -163,7 +163,7 @@ impl<'a> MultiSelect<'a> {
                         if self.searchable {
                             let search = ui.add(
                                 egui::TextEdit::singleline(&mut query)
-                                    .vertical_align(egui::Align::Center)
+                                    .align(egui::Align2::LEFT_CENTER)
                                     .margin(egui::Margin::symmetric(8, 6))
                                     .hint_text(self.search_hint)
                                     .desired_width(f32::INFINITY),
@@ -193,7 +193,7 @@ impl<'a> MultiSelect<'a> {
                             let selected = self.selected.contains(&option.id);
                             let response = ui
                                 .scope_builder(
-                                    egui::UiBuilder::new().id(self.id.with(option.id)),
+                                    egui::UiBuilder::new().scope_id(self.id.with(option.id)),
                                     |ui| {
                                         let text_color = if selected {
                                             ui.visuals().selection.stroke.color

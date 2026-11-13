@@ -40,7 +40,7 @@ The first recording walks through the widget catalog, overlays, data views and l
 
 ## Quick start
 
-Rust 1.95 or later is required. The library is available as source from [GitHub Releases](https://github.com/kappyra/temivu/releases/latest).
+Rust 1.95 or later is required. Temivu uses egui 0.37.0. The library is available as source from [GitHub Releases](https://github.com/kappyra/temivu/releases/latest).
 
 ```bash
 git clone https://github.com/kappyra/temivu.git
@@ -48,7 +48,13 @@ cd temivu
 cargo run --locked --features demo --example showcase
 ```
 
-The showcase needs a desktop graphics session. To play a local video, open **Widgets → Media**. Select **Choose video…**, or enter a local filename and select **Open path** or press Enter. The chooser uses Zenity on Linux. Playback requires system Python with PyGObject, GStreamer 1.0 and plugins for the chosen media format.
+Prebuilt Showcase previews are available in the **Artifacts** section of a successful
+[Showcase builds run](https://github.com/kappyra/temivu/actions/workflows/showcase.yml).
+Sign in to GitHub to download them. Linux and Windows previews target x86-64. The
+Android APK supports arm64 and x86-64 and uses a new debug signing key for each run.
+Uninstall an older preview before installing an APK signed with a different key.
+
+The showcase needs a desktop graphics session. On Linux, to play a local video, open **Widgets → Media**. Select **Choose video…**, or enter a local filename and select **Open path** or press Enter. The chooser uses Zenity on Linux. Playback requires system Python with PyGObject, GStreamer 1.0 and plugins for the chosen media format.
 
 The library’s `VideoPlayer` accepts a texture and emits playback actions for the host’s media backend.
 

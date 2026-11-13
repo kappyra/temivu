@@ -331,8 +331,10 @@ impl<'a> LineCalendar<'a> {
         let id = self
             .id
             .unwrap_or_else(|| ui.next_auto_id().with("temivu-line-calendar"));
-        ui.scope_builder(egui::UiBuilder::new().id(id), |ui| self.show_inner(ui, id))
-            .inner
+        ui.scope_builder(egui::UiBuilder::new().scope_id(id), |ui| {
+            self.show_inner(ui, id)
+        })
+        .inner
     }
 
     fn show_inner(self, ui: &mut Ui, id: Id) -> LineCalendarResponse {

@@ -6,7 +6,7 @@ Use a bottom sheet for a focused task such as choosing filters. The sheet is a m
 use temivu::{Sheet, Theme};
 
 fn filters(ui: &mut egui::Ui, theme: &Theme, open: &mut bool) {
-    Sheet::new(egui::Id::new("filters"), "Filters", theme)
+    Sheet::new(egui::Id::unique("filters"), "Filters", theme)
         .description("Choose which items are shown.")
         .show(ui.ctx(), open, |ui| {
             if ui.button("Apply filters").clicked() {

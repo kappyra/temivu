@@ -11,8 +11,8 @@ fn glass_dock_fade_reaches_the_window_edge_beyond_the_safe_area() {
         .with_size(egui::vec2(320.0, 640.0))
         .build_ui(move |ui| {
             temivu::Glass::set_context(ui.ctx(), Some(temivu::Glass::default()));
-            let items = [NavigationItem::new(egui::Id::new("home"), "Home")];
-            temivu::FloatingNavigation::new(egui::Id::new("dock-fade"), &theme)
+            let items = [NavigationItem::new(egui::Id::unique("home"), "Home")];
+            temivu::FloatingNavigation::new(egui::Id::unique("dock-fade"), &theme)
                 .show(ui, &items, &mut None);
         });
     harness.input_mut().safe_area_insets = Some(egui::SafeAreaInsets(egui::epaint::MarginF32 {
@@ -47,10 +47,10 @@ fn five_short_items_share_one_row_when_they_fit() {
         .with_size(egui::vec2(1100.0, 200.0))
         .build_ui(|ui| {
             let items = ["Overview", "Controls", "Overlays", "Data", "Localization"]
-                .map(|name| NavigationItem::new(egui::Id::new(name), name));
+                .map(|name| NavigationItem::new(egui::Id::unique(name), name));
             bottom_navigation(
                 ui,
-                egui::Id::new("row"),
+                egui::Id::unique("row"),
                 &items,
                 &mut None,
                 &Theme::mint_light(),
@@ -67,9 +67,9 @@ fn five_short_items_share_one_row_when_they_fit() {
 
 #[test]
 fn keyboard_selection_and_disabled_actions() {
-    let home = egui::Id::new("home");
-    let search = egui::Id::new("search");
-    let locked = egui::Id::new("locked");
+    let home = egui::Id::unique("home");
+    let search = egui::Id::unique("search");
+    let locked = egui::Id::unique("locked");
     let mut harness = Harness::builder().build_ui_state(
         move |ui, selected: &mut Option<egui::Id>| {
             let items = [
@@ -77,7 +77,13 @@ fn keyboard_selection_and_disabled_actions() {
                 NavigationItem::new(search, "Search"),
                 NavigationItem::new(locked, "Locked").enabled(false),
             ];
-            bottom_navigation(ui, egui::Id::new("nav"), &items, selected, &Theme::light());
+            bottom_navigation(
+                ui,
+                egui::Id::unique("nav"),
+                &items,
+                selected,
+                &Theme::light(),
+            );
         },
         Some(home),
     );
@@ -122,13 +128,13 @@ fn long_labels_and_small_viewport_remain_accessible() {
         .build_ui_state(
             |ui, selected: &mut Option<egui::Id>| {
                 let items = [
-                    NavigationItem::new(egui::Id::new(1), "Long translated navigation label"),
-                    NavigationItem::new(egui::Id::new(2), "Another translated navigation label"),
-                    NavigationItem::new(egui::Id::new(3), "Settings"),
+                    NavigationItem::new(egui::Id::unique(1), "Long translated navigation label"),
+                    NavigationItem::new(egui::Id::unique(2), "Another translated navigation label"),
+                    NavigationItem::new(egui::Id::unique(3), "Settings"),
                 ];
                 bottom_navigation(
                     ui,
-                    egui::Id::new("small-nav"),
+                    egui::Id::unique("small-nav"),
                     &items,
                     selected,
                     &Theme::light(),
@@ -148,13 +154,13 @@ fn long_labels_and_small_viewport_remain_accessible() {
     }
     harness.get_by_label("Settings").click();
     harness.run();
-    assert_eq!(*harness.state(), Some(egui::Id::new(3)));
+    assert_eq!(*harness.state(), Some(egui::Id::unique(3)));
 }
 
 #[test]
 fn focus_tracks_item_identity_across_reordering_and_empty_list_is_safe() {
-    let first = egui::Id::new("first");
-    let second = egui::Id::new("second");
+    let first = egui::Id::unique("first");
+    let second = egui::Id::unique("second");
     let mut harness = Harness::builder().build_ui_state(
         move |ui, state: &mut (Option<egui::Id>, bool)| {
             let mut items = [
@@ -167,7 +173,7 @@ fn focus_tracks_item_identity_across_reordering_and_empty_list_is_safe() {
             assert!(
                 bottom_navigation(
                     ui,
-                    egui::Id::new("empty"),
+                    egui::Id::unique("empty"),
                     &[],
                     &mut state.0,
                     &Theme::light()
@@ -176,7 +182,7 @@ fn focus_tracks_item_identity_across_reordering_and_empty_list_is_safe() {
             );
             bottom_navigation(
                 ui,
-                egui::Id::new("stable-nav"),
+                egui::Id::unique("stable-nav"),
                 &items,
                 &mut state.0,
                 &Theme::light(),
@@ -201,14 +207,14 @@ fn short_destination_names_wrap_without_visual_truncation_at_zoom() {
         .build_ui(|ui| {
             egui::CentralPanel::default().show(ui, |ui| {
                 let items = [
-                    NavigationItem::new(egui::Id::new(1), "Home"),
-                    NavigationItem::new(egui::Id::new(2), "Search"),
-                    NavigationItem::new(egui::Id::new(3), "Settings"),
+                    NavigationItem::new(egui::Id::unique(1), "Home"),
+                    NavigationItem::new(egui::Id::unique(2), "Search"),
+                    NavigationItem::new(egui::Id::unique(3), "Settings"),
                 ];
-                let mut selected = Some(egui::Id::new(1));
+                let mut selected = Some(egui::Id::unique(1));
                 bottom_navigation(
                     ui,
-                    egui::Id::new("zoom-nav"),
+                    egui::Id::unique("zoom-nav"),
                     &items,
                     &mut selected,
                     &Theme::light(),
@@ -233,11 +239,14 @@ fn floating_tabs_stay_inside_viewport_and_can_be_selected_by_keyboard() {
                 move |ui, selected: &mut Option<egui::Id>| {
                     temivu::Glass::set_context(ui.ctx(), glass.then(temivu::Glass::default));
                     let items = ["Home", "Controls", "Overlays", "Data", "Localization"]
-                        .map(|label| NavigationItem::new(egui::Id::new(label), label));
-                    temivu::FloatingNavigation::new(egui::Id::new("float-tabs"), &Theme::light())
-                        .show(ui, &items, selected);
+                        .map(|label| NavigationItem::new(egui::Id::unique(label), label));
+                    temivu::FloatingNavigation::new(
+                        egui::Id::unique("float-tabs"),
+                        &Theme::light(),
+                    )
+                    .show(ui, &items, selected);
                 },
-                Some(egui::Id::new("Home")),
+                Some(egui::Id::unique("Home")),
             );
         harness.run_steps(4);
         let first = harness.get_by_label("Home").rect();
@@ -249,7 +258,7 @@ fn floating_tabs_stay_inside_viewport_and_can_be_selected_by_keyboard() {
         harness.run();
         harness.key_press(egui::Key::Enter);
         harness.run_steps(4);
-        assert_eq!(*harness.state(), Some(egui::Id::new("Localization")));
+        assert_eq!(*harness.state(), Some(egui::Id::unique("Localization")));
         assert_eq!(
             harness
                 .get_by_label("Localization")
@@ -262,8 +271,8 @@ fn floating_tabs_stay_inside_viewport_and_can_be_selected_by_keyboard() {
 
 #[test]
 fn floating_tabs_commit_drag_on_release_and_ignore_hover_or_disabled_targets() {
-    let home = egui::Id::new("Home");
-    let controls = egui::Id::new("Controls");
+    let home = egui::Id::unique("Home");
+    let controls = egui::Id::unique("Controls");
     let mut harness = Harness::builder()
         .with_size(egui::vec2(360.0, 500.0))
         .build_ui_state(
@@ -271,9 +280,9 @@ fn floating_tabs_commit_drag_on_release_and_ignore_hover_or_disabled_targets() {
                 let items = [
                     NavigationItem::new(home, "Home"),
                     NavigationItem::new(controls, "Controls"),
-                    NavigationItem::new(egui::Id::new("Disabled"), "Disabled").enabled(false),
+                    NavigationItem::new(egui::Id::unique("Disabled"), "Disabled").enabled(false),
                 ];
-                temivu::FloatingNavigation::new(egui::Id::new("drag-tabs"), &Theme::light())
+                temivu::FloatingNavigation::new(egui::Id::unique("drag-tabs"), &Theme::light())
                     .select_on_drag(true)
                     .show(ui, &items, selected);
             },

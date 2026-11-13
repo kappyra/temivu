@@ -41,8 +41,12 @@ fn horizontal_modes_preserve_order_and_child_only_works() {
                 .show(ui, |ui| ui.button("Control"));
         });
         harness.run();
-        let label = harness.get_by_label("Label").rect();
-        let button = harness.get_by_label("Control").rect();
+        let label = harness
+            .get_by_role_and_label(egui::Role::Label, "Label")
+            .rect();
+        let button = harness
+            .get_by_role_and_label(egui::Role::Button, "Label")
+            .rect();
         assert!(harness.get_by_label("Help").rect().is_positive());
         assert!(harness.get_by_label("Error").rect().is_positive());
         if layout == LabelLayout::HorizontalLeading {

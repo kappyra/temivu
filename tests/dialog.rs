@@ -8,7 +8,7 @@ use temivu::Dialog;
 fn escape_closes_open_dialog_and_closed_dialog_is_absent() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, open: &mut bool| {
-            Dialog::new(egui::Id::new("example-dialog"), "Example").show(ui.ctx(), open, |ui| {
+            Dialog::new(egui::Id::unique("example-dialog"), "Example").show(ui.ctx(), open, |ui| {
                 ui.label("Dialog content");
             });
         },
@@ -39,7 +39,7 @@ fn backdrop_blocks_background_and_respects_dismiss_policy() {
                     if ui.button("Background action").clicked() {
                         state.1 = true;
                     }
-                    Dialog::new(egui::Id::new("backdrop-dialog"), "Example")
+                    Dialog::new(egui::Id::unique("backdrop-dialog"), "Example")
                         .barrier_dismissible(dismissible)
                         .show(ui.ctx(), &mut state.0, |ui| {
                             ui.label("Modal content");
@@ -60,7 +60,7 @@ fn keyboard_navigation_stays_in_modal_while_open() {
     let mut harness = Harness::builder().build_ui(|ui| {
         let _ = ui.button("Background");
         let mut open = true;
-        Dialog::new(egui::Id::new("focus-dialog"), "Example").show(ui.ctx(), &mut open, |ui| {
+        Dialog::new(egui::Id::unique("focus-dialog"), "Example").show(ui.ctx(), &mut open, |ui| {
             let _ = ui.button("Dialog action");
         });
     });
@@ -90,7 +90,7 @@ fn dismissal_restores_focus_to_the_trigger() {
             if ui.button("Open dialog").clicked() {
                 *open = true;
             }
-            Dialog::new(egui::Id::new("restore-focus"), "Example").show(ui.ctx(), open, |ui| {
+            Dialog::new(egui::Id::unique("restore-focus"), "Example").show(ui.ctx(), open, |ui| {
                 let _ = ui.button("Dialog action");
             });
         },
@@ -129,7 +129,7 @@ fn themed_dialog_draws_card_border_rounded_corners_and_barrier() {
     let border = theme.border;
     let mut harness = Harness::builder().build_ui_state(
         |ui, open: &mut bool| {
-            Dialog::new(egui::Id::new("themed-dialog"), "Example")
+            Dialog::new(egui::Id::unique("themed-dialog"), "Example")
                 .theme(&theme)
                 .show(ui.ctx(), open, |ui| {
                     ui.label("Themed content");
@@ -186,7 +186,7 @@ fn anchored_droplet_dialog_morphs_and_its_exit_does_not_run_content() {
                 ..Default::default()
             },
             |ui| {
-                Dialog::new(egui::Id::new("droplet-modal"), "Example")
+                Dialog::new(egui::Id::unique("droplet-modal"), "Example")
                     .theme(&theme)
                     .liquid(temivu::liquid::LiquidStyle::droplet())
                     .source(egui::Rect::from_min_size(
@@ -221,8 +221,8 @@ fn modal_frame_and_input_stay_in_sync_with_custom_area() {
         .build_ui_state(
             move |ui, open| {
                 let ctx = ui.ctx();
-                let area = egui::Modal::default_area(egui::Id::new("physical-modal-area"));
-                Dialog::new(egui::Id::new("logical-modal"), "Example")
+                let area = egui::Modal::default_area(egui::Id::unique("physical-modal-area"));
+                Dialog::new(egui::Id::unique("logical-modal"), "Example")
                     .theme(&theme)
                     .area(area)
                     .liquid(temivu::liquid::LiquidStyle::bloom())
@@ -307,7 +307,7 @@ fn centered_droplet_dialog_starts_as_a_small_surface() {
                 ..Default::default()
             },
             |ui| {
-                Dialog::new(egui::Id::new("center-expansion"), "Example")
+                Dialog::new(egui::Id::unique("center-expansion"), "Example")
                     .theme(&theme)
                     .liquid(temivu::liquid::LiquidStyle::droplet())
                     .frame(egui::Frame::new().fill(fill).corner_radius(24))
@@ -354,7 +354,7 @@ fn overlapping_droplet_dialog_matches_the_trigger_in_both_directions() {
                 ..Default::default()
             },
             |ui| {
-                Dialog::new(egui::Id::new("overlapping-source"), "Example")
+                Dialog::new(egui::Id::unique("overlapping-source"), "Example")
                     .theme(&theme)
                     .liquid(temivu::liquid::LiquidStyle::droplet())
                     .source(Rect::from_center_size(pos2(230.0, 210.0), vec2(44.0, 44.0)))

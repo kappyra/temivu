@@ -20,19 +20,19 @@ fn pointer_click_selects_row_and_exposes_accessible_selection() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, state: &mut PickerState| {
             let items = [
-                PickerItem::new(egui::Id::new(SMALL), "Small"),
-                PickerItem::new(egui::Id::new(MEDIUM), "Medium"),
-                PickerItem::new(egui::Id::new(LARGE), "Large"),
+                PickerItem::new(egui::Id::unique(SMALL), "Small"),
+                PickerItem::new(egui::Id::unique(MEDIUM), "Medium"),
+                PickerItem::new(egui::Id::unique(LARGE), "Large"),
             ];
             let output = Picker::new(&mut state.selected, &items, &Theme::light())
                 .label("Size")
-                .id(egui::Id::new("size-picker"))
+                .id(egui::Id::unique("size-picker"))
                 .show(ui);
             state.changed |= output.changed;
             state.reported = output.selected;
         },
         PickerState {
-            selected: Some(egui::Id::new(MEDIUM)),
+            selected: Some(egui::Id::unique(MEDIUM)),
             ..Default::default()
         },
     );
@@ -52,8 +52,8 @@ fn pointer_click_selects_row_and_exposes_accessible_selection() {
         .click();
     harness.run();
 
-    assert_eq!(harness.state().selected, Some(egui::Id::new(LARGE)));
-    assert_eq!(harness.state().reported, Some(egui::Id::new(LARGE)));
+    assert_eq!(harness.state().selected, Some(egui::Id::unique(LARGE)));
+    assert_eq!(harness.state().reported, Some(egui::Id::unique(LARGE)));
     assert!(
         harness.state().changed,
         "the response should report the change"
@@ -76,9 +76,9 @@ fn keyboard_navigation_skips_disabled_rows_and_clamps() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, state: &mut PickerState| {
             let items = [
-                PickerItem::new(egui::Id::new("first"), "First"),
-                PickerItem::new(egui::Id::new("skipped"), "Skipped").enabled(false),
-                PickerItem::new(egui::Id::new("third"), "Third"),
+                PickerItem::new(egui::Id::unique("first"), "First"),
+                PickerItem::new(egui::Id::unique("skipped"), "Skipped").enabled(false),
+                PickerItem::new(egui::Id::unique("third"), "Third"),
             ];
             let output = Picker::new(&mut state.selected, &items, &Theme::light())
                 .label("Level")
@@ -102,13 +102,13 @@ fn keyboard_navigation_skips_disabled_rows_and_clamps() {
 
     harness.key_press(egui::Key::ArrowDown);
     harness.run();
-    assert_eq!(harness.state().selected, Some(egui::Id::new("first")));
+    assert_eq!(harness.state().selected, Some(egui::Id::unique("first")));
 
     harness.key_press(egui::Key::ArrowDown);
     harness.run();
     assert_eq!(
         harness.state().selected,
-        Some(egui::Id::new("third")),
+        Some(egui::Id::unique("third")),
         "disabled rows should be skipped"
     );
 
@@ -116,13 +116,13 @@ fn keyboard_navigation_skips_disabled_rows_and_clamps() {
     harness.run();
     assert_eq!(
         harness.state().selected,
-        Some(egui::Id::new("third")),
+        Some(egui::Id::unique("third")),
         "non-looping navigation should clamp"
     );
 
     harness.key_press(egui::Key::ArrowUp);
     harness.run();
-    assert_eq!(harness.state().selected, Some(egui::Id::new("first")));
+    assert_eq!(harness.state().selected, Some(egui::Id::unique("first")));
     let wheel = harness.get_by_role_and_label(egui::accesskit::Role::ListBox, "Level");
     assert_eq!(wheel.accesskit_node().value().as_deref(), Some("First"));
     assert!(wheel.is_focused(), "keyboard navigation keeps wheel focus");
@@ -135,7 +135,7 @@ fn wheel_scroll_selects_the_nearest_row_and_stops_repainting() {
         .build_ui_state(
             |ui, state: &mut PickerState| {
                 let items: [PickerItem<'_>; 10] = std::array::from_fn(|index| {
-                    PickerItem::new(egui::Id::new(("number", index)), NUMBER_LABELS[index])
+                    PickerItem::new(egui::Id::unique(("number", index)), NUMBER_LABELS[index])
                 });
                 let output = Picker::new(&mut state.selected, &items, &Theme::light())
                     .label("Number")
@@ -144,7 +144,7 @@ fn wheel_scroll_selects_the_nearest_row_and_stops_repainting() {
                 state.reported = output.selected;
             },
             PickerState {
-                selected: Some(egui::Id::new(("number", 0))),
+                selected: Some(egui::Id::unique(("number", 0))),
                 ..Default::default()
             },
         );
@@ -156,6 +156,7 @@ fn wheel_scroll_selects_the_nearest_row_and_stops_repainting() {
 
     for _ in 0..3 {
         harness.input_mut().events.push(egui::Event::MouseWheel {
+            source: egui::MouseWheelSource::Wheel,
             unit: egui::MouseWheelUnit::Point,
             delta: egui::vec2(0.0, -40.0),
             phase: egui::TouchPhase::Move,
@@ -166,7 +167,10 @@ fn wheel_scroll_selects_the_nearest_row_and_stops_repainting() {
     harness.run_steps(30);
 
     assert!(harness.state().changed, "scrolling should select a new row");
-    assert_ne!(harness.state().selected, Some(egui::Id::new(("number", 0))));
+    assert_ne!(
+        harness.state().selected,
+        Some(egui::Id::unique(("number", 0)))
+    );
     let selected = harness
         .state()
         .selected
@@ -188,8 +192,8 @@ fn disabled_picker_ignores_pointer_and_keyboard_input() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, state: &mut PickerState| {
             let items = [
-                PickerItem::new(egui::Id::new("one"), "One"),
-                PickerItem::new(egui::Id::new("two"), "Two"),
+                PickerItem::new(egui::Id::unique("one"), "One"),
+                PickerItem::new(egui::Id::unique("two"), "Two"),
             ];
             let output = Picker::new(&mut state.selected, &items, &Theme::light())
                 .label("Disabled wheel")
@@ -198,7 +202,7 @@ fn disabled_picker_ignores_pointer_and_keyboard_input() {
             state.changed |= output.changed;
         },
         PickerState {
-            selected: Some(egui::Id::new("one")),
+            selected: Some(egui::Id::unique("one")),
             ..Default::default()
         },
     );
@@ -219,7 +223,7 @@ fn disabled_picker_ignores_pointer_and_keyboard_input() {
     harness.run();
     harness.key_press(egui::Key::ArrowDown);
     harness.run();
-    assert_eq!(harness.state().selected, Some(egui::Id::new("one")));
+    assert_eq!(harness.state().selected, Some(egui::Id::unique("one")));
     assert!(!harness.state().changed);
 }
 

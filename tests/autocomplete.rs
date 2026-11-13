@@ -21,7 +21,7 @@ fn fruit_options(disabled: Option<&'static str>) -> Vec<AutocompleteOption<'stat
     ]
     .into_iter()
     .map(|(id, label)| {
-        let option = AutocompleteOption::new(egui::Id::new(id), label);
+        let option = AutocompleteOption::new(egui::Id::unique(id), label);
         match disabled {
             Some(disabled) if disabled == label => option.enabled(false),
             _ => option,
@@ -118,7 +118,7 @@ fn keyboard_navigation_skips_disabled_and_accepts() {
         "Apple",
         "disabled Apricot is skipped by keyboard navigation"
     );
-    assert_eq!(harness.state().accepted, Some(egui::Id::new("apple")));
+    assert_eq!(harness.state().accepted, Some(egui::Id::unique("apple")));
     assert!(harness.state().changed);
     assert!(
         !harness.state().open,
@@ -202,7 +202,7 @@ fn pointer_click_accepts_a_suggestion_and_returns_focus() {
     harness.get_by_label("Apricot").click();
     harness.run();
     assert_eq!(harness.state().query, "Apricot");
-    assert_eq!(harness.state().accepted, Some(egui::Id::new("apricot")));
+    assert_eq!(harness.state().accepted, Some(egui::Id::unique("apricot")));
     assert!(!harness.state().open);
     assert_eq!(
         harness

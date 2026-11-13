@@ -313,7 +313,7 @@ impl DemoVideo {
             }
         }
         let path = TextField::new(&mut self.path, theme, "Local video path")
-            .id(Id::new("demo-video-path"))
+            .id(Id::unique("demo-video-path"))
             .hint("/path/to/video.mp4")
             .show(ui)
             .response;
@@ -404,8 +404,13 @@ impl DemoVideo {
         self.status.fullscreen = fullscreen;
         let viewport_height = ui.ctx().content_rect().height();
         let height = (viewport_height * 0.43).clamp(160.0, 440.0);
-        let mut view = VideoPlayer::new(Id::new("demo-video"), "Video preview", theme, self.status)
-            .max_height(height);
+        let mut view = VideoPlayer::new(
+            Id::unique("demo-video"),
+            "Video preview",
+            theme,
+            self.status,
+        )
+        .max_height(height);
         if let Some(texture) = &self.texture {
             view = view.frame(egui::load::SizedTexture::from_handle(texture));
         }

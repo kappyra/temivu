@@ -5,7 +5,7 @@ use crate::{
     liquid::{self, DropletAnchor, LiquidStyle, SurfaceTransition, fade_shape},
     motion,
 };
-use egui::{Id, Rect, Response, RichText, Ui, WidgetInfo, WidgetType, vec2};
+use egui::{Id, Rect, Response, RichText, Role, Ui, WidgetInfo, vec2};
 use std::time::Duration;
 
 #[derive(Clone, Debug)]
@@ -300,7 +300,7 @@ impl<'a> Toast<'a> {
             || self.title.to_owned(),
             |text| format!("{}: {text}", self.title),
         );
-        response.widget_info(|| WidgetInfo::labeled(WidgetType::Other, ui.is_enabled(), &label));
+        response.widget_info(|| WidgetInfo::labeled(Role::Unknown, ui.is_enabled(), &label));
         ui.ctx().accesskit_node_builder(response.id, |node| {
             node.set_role(egui::accesskit::Role::Alert);
             node.set_label(label);

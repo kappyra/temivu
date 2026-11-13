@@ -166,7 +166,7 @@ fn calendar_button_opens_a_popover_and_selection_writes_the_text() {
         .click();
     harness.run();
     assert!(harness.state().open);
-    let popup = harness.get_by_role_and_label(egui::accesskit::Role::Group, "Choose date");
+    let popup = harness.get_by_role_and_label(egui::accesskit::Role::Dialog, "Choose date");
     assert!(
         popup.rect().width() <= 340.0,
         "calendar popup expanded beyond its compact surface: {:?}",

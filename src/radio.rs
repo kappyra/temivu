@@ -1,6 +1,6 @@
 //! A standalone radio control with spring selection feedback.
 use crate::Theme;
-use egui::{FontId, Response, Stroke, Ui, WidgetInfo, WidgetType, vec2};
+use egui::{FontId, Response, Role, Stroke, Ui, WidgetInfo, vec2};
 
 pub struct Radio<'a> {
     value: &'a mut bool,
@@ -73,7 +73,7 @@ impl<'a> Radio<'a> {
             response.mark_changed();
         }
         response.widget_info(|| {
-            WidgetInfo::selected(WidgetType::RadioButton, enabled, *self.value, self.label)
+            WidgetInfo::selected(Role::RadioButton, enabled, *self.value, self.label)
         });
         let active = crate::motion::spring_bool(
             ui.ctx(),

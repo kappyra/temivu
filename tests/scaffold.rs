@@ -7,7 +7,7 @@ fn regions_are_arranged_and_content_is_interactive() {
         .with_size(egui::vec2(600.0, 400.0))
         .build_ui_state(
             |ui, clicked: &mut bool| {
-                Scaffold::new(egui::Id::new("scaffold"), &Theme::light())
+                Scaffold::new(egui::Id::unique("scaffold"), &Theme::light())
                     .sidebar(140.0)
                     .unwrap()
                     .header(true)
@@ -48,19 +48,19 @@ fn regions_are_arranged_and_content_is_interactive() {
 #[test]
 fn narrow_sidebar_leaves_room_for_content_and_invalid_sizes_fail() {
     assert!(
-        Scaffold::new(egui::Id::new("invalid"), &Theme::light())
+        Scaffold::new(egui::Id::unique("invalid"), &Theme::light())
             .sidebar(f32::NAN)
             .is_err()
     );
     assert!(
-        Scaffold::new(egui::Id::new("invalid"), &Theme::light())
+        Scaffold::new(egui::Id::unique("invalid"), &Theme::light())
             .sidebar(0.0)
             .is_err()
     );
     let mut harness = Harness::builder()
         .with_size(egui::vec2(200.0, 300.0))
         .build_ui(|ui| {
-            Scaffold::new(egui::Id::new("narrow"), &Theme::light())
+            Scaffold::new(egui::Id::unique("narrow"), &Theme::light())
                 .sidebar(180.0)
                 .unwrap()
                 .content_padding(false)
@@ -83,7 +83,7 @@ fn narrow_sidebar_leaves_room_for_content_and_invalid_sizes_fail() {
 #[test]
 fn disabled_regions_are_not_built() {
     let mut harness = Harness::builder().build_ui(|ui| {
-        Scaffold::new(egui::Id::new("content-only"), &Theme::light()).show(
+        Scaffold::new(egui::Id::unique("content-only"), &Theme::light()).show(
             ui,
             |_| panic!("sidebar must not build"),
             |_| panic!("header must not build"),
@@ -103,7 +103,7 @@ fn default_content_padding_matches_source_page_padding() {
         let mut harness = Harness::builder()
             .with_size(egui::vec2(300.0, 200.0))
             .build_ui(move |ui| {
-                Scaffold::new(egui::Id::new("padding"), &Theme::light())
+                Scaffold::new(egui::Id::unique("padding"), &Theme::light())
                     .content_padding(padding)
                     .show(
                         ui,

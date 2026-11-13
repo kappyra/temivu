@@ -137,7 +137,7 @@ impl Vesper {
         if style.is_some_and(|style| style.spill.is_some()) {
             spill::install(ctx);
         }
-        let id = Id::new("temivu-vesper-default");
+        let id = Id::unique("temivu-vesper-default");
         if Self::context(ctx) == style {
             return;
         }
@@ -152,7 +152,7 @@ impl Vesper {
     }
 
     pub fn context(ctx: &Context) -> Option<Self> {
-        ctx.data(|data| data.get_temp(Id::new("temivu-vesper-default")))
+        ctx.data(|data| data.get_temp(Id::unique("temivu-vesper-default")))
     }
 
     /// Paint lighting using this response as the interaction source.

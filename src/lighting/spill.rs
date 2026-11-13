@@ -403,7 +403,7 @@ mod tests {
                 }
                 receive_background_at(
                     painter,
-                    Id::new("receiver"),
+                    Id::unique("receiver"),
                     receiver,
                     12.0.into(),
                     &recipient,
@@ -414,14 +414,16 @@ mod tests {
                 if let Some((clip, separate_layer)) = source {
                     let painter = painter.with_clip_rect(clip);
                     let painter = if separate_layer {
-                        painter
-                            .with_layer_id(LayerId::new(egui::Order::Foreground, Id::new("other")))
+                        painter.with_layer_id(LayerId::new(
+                            egui::Order::Foreground,
+                            Id::unique("other"),
+                        ))
                     } else {
                         painter
                     };
                     emit(
                         &painter,
-                        Id::new("emitter"),
+                        Id::unique("emitter"),
                         emitter,
                         &style,
                         Sample {

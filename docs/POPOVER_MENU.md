@@ -10,7 +10,7 @@ let anchor = ui.button("Actions");
 if anchor.clicked() {
     *open = !*open;
 }
-PopoverMenu::new(egui::Id::new("actions-menu"), "Actions", open).show(&anchor, |ui, menu| {
+PopoverMenu::new(egui::Id::unique("actions-menu"), "Actions", open).show(&anchor, |ui, menu| {
     if menu.item(ui, Item::new("Rename", theme)).clicked() {
         ui.close();
     }

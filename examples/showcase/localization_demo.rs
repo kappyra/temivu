@@ -1,4 +1,4 @@
-use egui::{FontId, RichText, Ui};
+use egui::{RichText, Ui};
 use temivu::{Button, ButtonVariant, Messages, PaginationState, Theme};
 
 const LOCALES: [(&str, &str); 6] = [
@@ -32,16 +32,10 @@ pub(super) fn install_fonts(ctx: &egui::Context) {
         let name = format!("showcase-{code}");
         ctx.add_font(FontInsert {
             data: egui::FontData::from_static(bytes),
-            families: vec![
-                InsertFontFamily {
-                    family: egui::FontFamily::Proportional,
-                    priority: FontPriority::Lowest,
-                },
-                InsertFontFamily {
-                    family: egui::FontFamily::Name(name.clone().into()),
-                    priority: FontPriority::Highest,
-                },
-            ],
+            families: vec![InsertFontFamily {
+                family: egui::FontFamily::Proportional,
+                priority: FontPriority::Lowest,
+            }],
             name,
         });
     }
@@ -130,15 +124,6 @@ impl LocalizationDemo {
 
         let (code, _) = LOCALES[self.locale];
         let messages = Messages::for_locale(code);
-        let preview_font = FontId::new(
-            21.0,
-            if SCRIPT_FONTS.iter().any(|(script, _)| code == *script) {
-                egui::FontFamily::Name(format!("showcase-{code}").into())
-            } else {
-                egui::FontFamily::Proportional
-            },
-        );
-
         super::studio_panel(
             ui,
             theme,
@@ -150,7 +135,7 @@ impl LocalizationDemo {
                         .size(11.0)
                         .color(theme.muted_foreground),
                 );
-                ui.label(RichText::new(messages.progress).font(preview_font.clone()));
+                ui.label(RichText::new(messages.progress).size(21.0));
                 ui.add_space(12.0);
                 ui.separator();
                 ui.add_space(12.0);
@@ -158,7 +143,7 @@ impl LocalizationDemo {
                     let number = self.pagination.page() + 1;
                     ui.label(
                         RichText::new(messages.page_label(number))
-                            .font(preview_font)
+                            .size(21.0)
                             .strong(),
                     );
                     ui.label(

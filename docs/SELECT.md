@@ -11,10 +11,10 @@ use temivu::{Select, SelectOption};
 
 fn example(ui: &mut egui::Ui, selected: &mut Option<egui::Id>) {
     let options = [
-        SelectOption::new(egui::Id::new("red"), "Red"),
-        SelectOption::new(egui::Id::new("blue"), "Blue"),
+        SelectOption::new(egui::Id::unique("red"), "Red"),
+        SelectOption::new(egui::Id::unique("blue"), "Blue"),
     ];
-    Select::new(egui::Id::new("color"), "Color", "Choose a color", &options, selected)
+    Select::new(egui::Id::unique("color"), "Color", "Choose a color", &options, selected)
         .searchable(true)
         .show(ui);
 }
@@ -40,10 +40,10 @@ use temivu::{MultiSelect, SelectOption};
 
 fn example(ui: &mut egui::Ui, selected: &mut Vec<egui::Id>) {
     let options = [
-        SelectOption::new(egui::Id::new("email"), "Email"),
-        SelectOption::new(egui::Id::new("sms"), "SMS"),
+        SelectOption::new(egui::Id::unique("email"), "Email"),
+        SelectOption::new(egui::Id::unique("sms"), "SMS"),
     ];
-    MultiSelect::new(egui::Id::new("channels"), "Channels", "Choose channels", &options, selected)
+    MultiSelect::new(egui::Id::unique("channels"), "Channels", "Choose channels", &options, selected)
         .show(ui);
 }
 ```

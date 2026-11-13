@@ -4,7 +4,7 @@ use temivu::Theme;
 use temivu::motion::{animate_bool, animate_f32, reset};
 
 fn animation_id() -> egui::Id {
-    egui::Id::new("temivu-motion-test")
+    egui::Id::unique("temivu-motion-test")
 }
 
 /// `egui_kittest` disables animation by default; enable a non-zero animation

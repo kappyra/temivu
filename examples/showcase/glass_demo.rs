@@ -191,7 +191,7 @@ impl SampleMotion {
             egui::Sense::click_and_drag(),
         );
         handle.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Other, true, format!("Drag {label}"))
+            egui::WidgetInfo::labeled(egui::Role::Unknown, true, format!("Drag {label}"))
         });
         if let Some(delta) = handle.total_drag_delta() {
             let origin = *self.drag_origin.get_or_insert(self.position);

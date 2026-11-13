@@ -262,7 +262,7 @@ fn rail_position(
     };
     let inset = (extent * aspect / 2.5).min(length * 0.5);
     if vertical {
-        let range = rect.y_range().shrink(inset).flip();
+        let range = rect.y_range().shrink(inset).flipped();
         egui::pos2(
             rect.center().x,
             egui::lerp(range.min..=range.max, value as f32),

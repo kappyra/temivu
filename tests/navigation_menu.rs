@@ -13,12 +13,12 @@ fn build(presentation: MenuPresentation) -> Harness<'static, (bool, Option<egui:
                 theme.apply(ui.ctx());
                 let trigger = ui.button("Open navigation");
                 let items = [
-                    NavigationItem::new(egui::Id::new("home"), "Home"),
-                    NavigationItem::new(egui::Id::new("locked"), "Locked").enabled(false),
-                    NavigationItem::new(egui::Id::new("settings"), "Settings"),
+                    NavigationItem::new(egui::Id::unique("home"), "Home"),
+                    NavigationItem::new(egui::Id::unique("locked"), "Locked").enabled(false),
+                    NavigationItem::new(egui::Id::unique("settings"), "Settings"),
                 ];
                 NavigationMenu::new(
-                    egui::Id::new("navigation"),
+                    egui::Id::unique("navigation"),
                     "Navigation",
                     &mut state.0,
                     &theme,
@@ -59,7 +59,7 @@ fn both_presentations_select_and_dismiss_with_escape() {
         assert!(settings.rect().right() <= 390.0);
         settings.click();
         harness.run();
-        assert_eq!(harness.state().1, Some(egui::Id::new("settings")));
+        assert_eq!(harness.state().1, Some(egui::Id::unique("settings")));
         assert!(!harness.state().0);
         harness.get_by_label("Open navigation").click();
         harness.run();

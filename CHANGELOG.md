@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
+## [Unreleased]
+
+- Updated egui, eframe, and egui_kittest to 0.37.0.
+- Showcase pages use elastic scrolling on touchscreens. Pulling past either edge
+  increases resistance, and the page springs back when released. Reduced motion
+  disables edge bounce and inertial coasting.
+- Added downloadable Showcase previews for Android, Linux, and Windows.
+
 ## [0.1.4] - 2026-11-13
 
 - Unified spring, tween, and inertial motion under typed animation tracks.

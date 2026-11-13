@@ -1,6 +1,6 @@
 //! Rounded, animated checkbox with caller-owned state and keyboard semantics.
 use crate::Theme;
-use egui::{FontId, Response, Sense, Stroke, Ui, WidgetInfo, WidgetType};
+use egui::{FontId, Response, Role, Sense, Stroke, Ui, WidgetInfo};
 
 /// A controlled checkbox. The caller owns its value across frames.
 pub struct Checkbox<'a> {
@@ -66,9 +66,8 @@ impl<'a> Checkbox<'a> {
             *self.value = !*self.value;
             response.mark_changed();
         }
-        response.widget_info(|| {
-            WidgetInfo::selected(WidgetType::Checkbox, enabled, *self.value, self.label)
-        });
+        response
+            .widget_info(|| WidgetInfo::selected(Role::CheckBox, enabled, *self.value, self.label));
         if self.error {
             ui.ctx().accesskit_node_builder(response.id, |node| {
                 node.set_invalid(egui::accesskit::Invalid::True)

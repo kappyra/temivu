@@ -1,5 +1,11 @@
 # Linux accessibility dependency advisories
 
+After the egui 0.37.0 upgrade, the Linux showcase uses
+`eframe 0.37.0 → egui-winit 0.37.0 → accesskit_winit 0.34.2 →
+accesskit_unix 0.24.1 → atspi 0.29.0 / zbus 5.19.0`.
+The three informational notices below still apply. The lockfile also updates
+the yanked `async-executor` 1.14.0 to 1.14.1.
+
 Rechecked again on 1 November 2026 (second pass) using `cargo tree --offline --locked
 --all-features -i ...`, cargo-deny 0.20.2 (`cargo deny --offline check`), the RustSec
 advisory database, the offline crate/archive cache, the crates.io sparse index and API, and

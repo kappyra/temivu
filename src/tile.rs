@@ -14,7 +14,7 @@ use egui::{Id, Response, Ui};
 /// use temivu::{Theme, Tile};
 /// let theme = Theme::light();
 /// if Tile::new("Bluetooth", &theme)
-///     .id(egui::Id::new("bluetooth"))
+///     .id(egui::Id::unique("bluetooth"))
 ///     .description("Connect devices")
 ///     .selected(*selected)
 ///     .show(ui)

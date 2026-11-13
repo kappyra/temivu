@@ -1,6 +1,6 @@
 //! Experimental Forui alert port. Visual and live-region parity remain under review.
 use crate::Theme;
-use egui::{Color32, Frame, Margin, Response, RichText, Stroke, Ui, WidgetInfo, WidgetType};
+use egui::{Color32, Frame, Margin, Response, RichText, Role, Stroke, Ui, WidgetInfo};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum AlertVariant {
@@ -154,7 +154,7 @@ impl<'a> Alert<'a> {
             Some(subtitle) => format!("{}: {subtitle}", self.title),
             None => self.title.to_owned(),
         };
-        response.widget_info(|| WidgetInfo::labeled(WidgetType::Other, ui.is_enabled(), &label));
+        response.widget_info(|| WidgetInfo::labeled(Role::Unknown, ui.is_enabled(), &label));
         ui.ctx().accesskit_node_builder(response.id, |node| {
             node.set_role(egui::accesskit::Role::Alert);
             node.set_live(if self.live {

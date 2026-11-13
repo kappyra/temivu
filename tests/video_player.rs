@@ -32,7 +32,7 @@ fn player_emits_play_seek_speed_and_fullscreen_actions() {
                     duration: 20.0,
                     ..Default::default()
                 };
-                VideoPlayer::new(egui::Id::new("video"), "Clip", &Theme::light(), status)
+                VideoPlayer::new(egui::Id::unique("video"), "Clip", &Theme::light(), status)
                     .max_height(220.0)
                     .show(ui, &mut state.0, |action| state.1.push(action));
             },
@@ -69,7 +69,7 @@ fn focused_video_surface_supports_seek_shortcuts() {
         .build_ui_state(
             |ui, state: &mut (VideoPlayerState, Vec<VideoAction>)| {
                 VideoPlayer::new(
-                    egui::Id::new("keyboard-video"),
+                    egui::Id::unique("keyboard-video"),
                     "Clip",
                     &Theme::light(),
                     VideoStatus {
@@ -111,7 +111,7 @@ fn default_player_is_monochrome_and_mint_is_opt_in() {
         let harness = Harness::builder().build_ui_state(
             |ui, state| {
                 VideoPlayer::new(
-                    egui::Id::new("palette"),
+                    egui::Id::unique("palette"),
                     "Clip",
                     &theme,
                     VideoStatus {
@@ -142,7 +142,7 @@ fn fullscreen_overlays_the_controls_and_restores_them_after_idle() {
         .build_ui_state(
             |ui, state: &mut (VideoPlayerState, Vec<VideoAction>)| {
                 VideoPlayer::new(
-                    egui::Id::new("fullscreen"),
+                    egui::Id::unique("fullscreen"),
                     "Clip",
                     &Theme::light(),
                     VideoStatus {

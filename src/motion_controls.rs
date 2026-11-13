@@ -189,9 +189,8 @@ fn icon_button(ui: &mut Ui, theme: &Theme, label: &str, glyph: Icon, enabled: bo
     let response = ui
         .add_enabled_ui(enabled, |ui| button_response(ui, Vec2::splat(side)))
         .inner;
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), label)
-    });
+    response
+        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, response.enabled(), label));
     let press = press_amount(&response, theme);
     let (rect, ink) = paint_pill(ui, theme, &response, press, 0.0);
     let stretch = motion::spring_bool(
@@ -360,7 +359,7 @@ pub fn quantity_stepper(
         }
         let response = ui.new_child(builder).interact(rect, id, Sense::click());
         response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), label)
+            egui::WidgetInfo::labeled(egui::Role::Button, response.enabled(), label)
         });
         let press = press_amount(&response, theme);
         let hover = motion::animate_bool(ui.ctx(), id.with("hover"), response.hovered(), theme);
@@ -482,9 +481,8 @@ pub fn layout_toggle(
         response.mark_changed();
     }
     let label = labels[mode.index()];
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), label)
-    });
+    response
+        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, response.enabled(), label));
     let press = press_amount(&response, theme);
     let (_, ink) = paint_pill(ui, theme, &response, press, 0.0);
     let center = egui::pos2(rect.left() + 22.0, rect.center().y);
@@ -528,12 +526,7 @@ pub fn toggle_button(
     }
     let label = labels[usize::from(*selected)];
     response.widget_info(|| {
-        egui::WidgetInfo::selected(
-            egui::WidgetType::Button,
-            response.enabled(),
-            *selected,
-            label,
-        )
+        egui::WidgetInfo::selected(egui::Role::Button, response.enabled(), *selected, label)
     });
     ui.ctx().accesskit_node_builder(response.id, |node| {
         node.set_toggled(if *selected {
@@ -680,7 +673,7 @@ pub fn direction_pad(ui: &mut Ui, theme: &Theme, labels: [&str; 4]) -> Option<Di
         let response = ui.interact(rect, id.with(index), Sense::click());
         ids[index] = response.id;
         response.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), labels[index])
+            egui::WidgetInfo::labeled(egui::Role::Button, response.enabled(), labels[index])
         });
         let press = press_amount(&response, theme);
         paint_petal(ui, theme, &response, direction, press);
@@ -801,7 +794,7 @@ pub fn search_box(
     let press = if !show_field {
         let trigger = ui.interact(trigger_rect, trigger_id, Sense::click());
         trigger.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Button, trigger.enabled(), label)
+            egui::WidgetInfo::labeled(egui::Role::Button, trigger.enabled(), label)
         });
         if !*open && (pending_focus || focused == Some(input_id) || focused == Some(close_id)) {
             trigger.request_focus();
@@ -859,7 +852,7 @@ pub fn search_box(
         // Overlay the allocated capsule without advancing the parent cursor again.
         let mut input_ui = ui.new_child(
             egui::UiBuilder::new()
-                .id(id.with("field"))
+                .scope_id(id.with("field"))
                 .max_rect(field_rect)
                 .layout(egui::Layout::centered_and_justified(
                     egui::Direction::TopDown,
@@ -872,7 +865,7 @@ pub fn search_box(
                 .id(input_id)
                 .hint_text(label)
                 .margin(egui::Margin::ZERO)
-                .vertical_align(egui::Align::Center)
+                .align(egui::Align2::LEFT_CENTER)
                 .desired_width(field_rect.width())
                 .frame(egui::Frame::NONE),
         );
@@ -880,7 +873,7 @@ pub fn search_box(
         ui.ctx()
             .accesskit_node_builder(field.id, |node| node.set_label(label));
         close.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Button, close.enabled(), close_label)
+            egui::WidgetInfo::labeled(egui::Role::Button, close.enabled(), close_label)
         });
         if pending_focus || focused == Some(trigger_id) {
             field.request_focus();

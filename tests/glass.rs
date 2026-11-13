@@ -130,7 +130,7 @@ fn live_glass_adds_a_paint_callback_without_moving_the_dialog_content() {
                 glass.then(|| Glass::default().mode(GlassMode::Frost)),
             );
             let mut open = true;
-            Dialog::new(egui::Id::new("glass-dialog"), "Glass dialog")
+            Dialog::new(egui::Id::unique("glass-dialog"), "Glass dialog")
                 .theme(&theme)
                 .show(ui.ctx(), &mut open, |ui| ui.label("Stable content"));
         },
@@ -191,7 +191,7 @@ fn droplet_retains_a_solid_surface_until_the_filtered_backdrop_is_ready() {
                 ..Default::default()
             },
             |ui| {
-                Dialog::new(egui::Id::new("solid-droplet"), "Example")
+                Dialog::new(egui::Id::unique("solid-droplet"), "Example")
                     .theme(&theme)
                     .source(Rect::from_center_size(pos2(230.0, 210.0), vec2(44.0, 44.0)))
                     .frame(frame)

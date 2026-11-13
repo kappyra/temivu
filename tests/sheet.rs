@@ -24,7 +24,7 @@ fn view(ui: &mut egui::Ui, state: &mut State) {
     if ui.button("Open sheet").clicked() {
         *open = true;
     }
-    Sheet::new(egui::Id::new("filters-sheet"), "Filters", &theme).show(ui.ctx(), open, |ui| {
+    Sheet::new(egui::Id::unique("filters-sheet"), "Filters", &theme).show(ui.ctx(), open, |ui| {
         if ui.button("Apply filters").clicked() {
             *applied += 1;
         }
@@ -93,7 +93,7 @@ fn backdrop_blocks_background_input_and_respects_dismiss_policy() {
                     if ui.button("Open sheet").clicked() {
                         *open = true;
                     }
-                    Sheet::new(egui::Id::new("backdrop-sheet"), "Filters", &theme)
+                    Sheet::new(egui::Id::unique("backdrop-sheet"), "Filters", &theme)
                         .barrier_dismissible(dismissible)
                         .show(ui.ctx(), open, |ui| {
                             if ui.button("Apply filters").clicked() {
@@ -146,7 +146,7 @@ fn ui_close_inside_the_content_dismisses_the_sheet() {
                 if ui.button("Open sheet").clicked() {
                     *open = true;
                 }
-                Sheet::new(egui::Id::new("apply-sheet"), "Filters", &theme).show(
+                Sheet::new(egui::Id::unique("apply-sheet"), "Filters", &theme).show(
                     ui.ctx(),
                     open,
                     |ui| {
@@ -194,13 +194,17 @@ fn compact_sheet_keeps_its_header_visible_and_dismisses_by_grip() {
         .with_size(egui::vec2(340.0, 300.0))
         .build_ui_state(
             |ui, open| {
-                Sheet::new(egui::Id::new("compact-sheet"), "Filters", &Theme::light())
-                    .description("Choose which items are shown.")
-                    .show(ui.ctx(), open, |ui| {
-                        for index in 0..30 {
-                            ui.label(format!("Filter {index}"));
-                        }
-                    });
+                Sheet::new(
+                    egui::Id::unique("compact-sheet"),
+                    "Filters",
+                    &Theme::light(),
+                )
+                .description("Choose which items are shown.")
+                .show(ui.ctx(), open, |ui| {
+                    for index in 0..30 {
+                        ui.label(format!("Filter {index}"));
+                    }
+                });
             },
             true,
         );

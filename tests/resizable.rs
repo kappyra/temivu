@@ -36,7 +36,7 @@ fn view(ui: &mut egui::Ui, state: &mut State) {
     } = state;
     *recorded_total = total;
     let response = Resizable::new(
-        egui::Id::new("editor-split"),
+        egui::Id::unique("editor-split"),
         ResizableAxis::Horizontal,
         fraction,
         &theme,
@@ -152,7 +152,7 @@ fn arrow_keys_resize_the_focused_divider_and_keep_focus() {
                 } = state;
                 *recorded_total = total;
                 let response = Resizable::new(
-                    egui::Id::new("keyboard-split"),
+                    egui::Id::unique("keyboard-split"),
                     ResizableAxis::Horizontal,
                     fraction,
                     &theme,
@@ -221,7 +221,7 @@ fn vertical_axis_uses_vertical_arrows() {
                 } = state;
                 *recorded_total = total;
                 let response = Resizable::new(
-                    egui::Id::new("vertical-split"),
+                    egui::Id::unique("vertical-split"),
                     ResizableAxis::Vertical,
                     fraction,
                     &theme,
@@ -297,7 +297,7 @@ fn invalid_keyboard_steps_are_ignored() {
                 } = state;
                 *recorded_total = total;
                 let response = Resizable::new(
-                    egui::Id::new("invalid-step-split"),
+                    egui::Id::unique("invalid-step-split"),
                     ResizableAxis::Horizontal,
                     fraction,
                     &theme,

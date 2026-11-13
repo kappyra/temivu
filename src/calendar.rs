@@ -923,7 +923,7 @@ impl<'a> Calendar<'a> {
         let id = self
             .id
             .unwrap_or_else(|| ui.next_auto_id().with("temivu-calendar"));
-        ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
+        ui.scope_builder(egui::UiBuilder::new().scope_id(id), |ui| {
             ui.set_width(
                 ui.available_width()
                     .min(self.config.sizes.calendar.max(40.0) * 7.0),
@@ -1289,7 +1289,7 @@ impl<'a> Calendar<'a> {
         let mut clicked_date = None;
         ui.scope_builder(
             egui::UiBuilder::new()
-                .id(id.with("cells"))
+                .scope_id(id.with("cells"))
                 .accessibility_parent(grid_id),
             |ui| {
                 let painter = ui.painter();
@@ -1658,7 +1658,7 @@ fn show_calendar_picker(
                 let mut clicked = None;
                 let mut focus_candidate = None;
                 let mut focus_selected = None;
-                ui.scope_builder(egui::UiBuilder::new().id(grid_id), |ui| {
+                ui.scope_builder(egui::UiBuilder::new().scope_id(grid_id), |ui| {
                     ui.spacing_mut().item_spacing = Vec2::splat(2.0);
                     for row in 0..4 {
                         ui.horizontal(|ui| {
@@ -1783,7 +1783,7 @@ fn show_calendar_picker(
                 let mut clicked = None;
                 let mut focus_candidate = None;
                 let mut focus_selected = None;
-                ui.scope_builder(egui::UiBuilder::new().id(grid_id), |ui| {
+                ui.scope_builder(egui::UiBuilder::new().scope_id(grid_id), |ui| {
                     ui.spacing_mut().item_spacing = Vec2::splat(2.0);
                     for row in 0..3 {
                         ui.horizontal(|ui| {

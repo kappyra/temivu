@@ -6,8 +6,8 @@ use temivu::{Select, SelectOption};
 
 #[test]
 fn selecting_an_option_updates_caller_state_and_response() {
-    let red = egui::Id::new("red");
-    let blue = egui::Id::new("blue");
+    let red = egui::Id::unique("red");
+    let blue = egui::Id::unique("blue");
     let mut harness = Harness::builder().build_ui_state(
         move |ui, state: &mut (Option<egui::Id>, bool)| {
             let options = [
@@ -15,7 +15,7 @@ fn selecting_an_option_updates_caller_state_and_response() {
                 SelectOption::new(blue, "Blue"),
             ];
             let response = Select::new(
-                egui::Id::new("color"),
+                egui::Id::unique("color"),
                 "Color",
                 "Choose a color",
                 &options,
@@ -51,9 +51,9 @@ fn disabled_option_ignores_stale_accessibility_click() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, selected: &mut Option<egui::Id>| {
             let options =
-                [SelectOption::new(egui::Id::new("blocked"), "Unavailable").enabled(false)];
+                [SelectOption::new(egui::Id::unique("blocked"), "Unavailable").enabled(false)];
             Select::new(
-                egui::Id::new("choices"),
+                egui::Id::unique("choices"),
                 "Choice",
                 "Choose",
                 &options,
@@ -84,12 +84,12 @@ fn disabled_option_ignores_stale_accessibility_click() {
 
 #[test]
 fn keyboard_can_open_and_choose_an_option() {
-    let target = egui::Id::new("keyboard-target");
+    let target = egui::Id::unique("keyboard-target");
     let mut harness = Harness::builder().build_ui_state(
         move |ui, selected: &mut Option<egui::Id>| {
             let options = [SelectOption::new(target, "Keyboard option")];
             Select::new(
-                egui::Id::new("keyboard-select"),
+                egui::Id::unique("keyboard-select"),
                 "Choices",
                 "Choose",
                 &options,
@@ -120,9 +120,9 @@ fn disabling_an_open_select_blocks_stale_option_actions() {
                 if inherited && !state.1 {
                     ui.disable();
                 }
-                let options = [SelectOption::new(egui::Id::new("target"), "Target")];
+                let options = [SelectOption::new(egui::Id::unique("target"), "Target")];
                 Select::new(
-                    egui::Id::new("disable-open"),
+                    egui::Id::unique("disable-open"),
                     "Choices",
                     "Choose",
                     &options,
@@ -165,9 +165,9 @@ fn popup_identity_survives_a_preceding_conditional_widget() {
             if state.1 {
                 ui.label("Extra");
             }
-            let options = [SelectOption::new(egui::Id::new("target"), "Target")];
+            let options = [SelectOption::new(egui::Id::unique("target"), "Target")];
             Select::new(
-                egui::Id::new("stable-select"),
+                egui::Id::unique("stable-select"),
                 "Choices",
                 "Choose",
                 &options,
@@ -186,20 +186,20 @@ fn popup_identity_survives_a_preceding_conditional_widget() {
     harness.run();
     harness.get_by_label("Target").click();
     harness.run();
-    assert_eq!(harness.state().0, Some(egui::Id::new("target")));
+    assert_eq!(harness.state().0, Some(egui::Id::unique("target")));
 }
 
 #[test]
 fn narrow_select_keeps_long_values_accessible_and_inside_viewport() {
     let long = "A very long localized selection value for this device";
-    let option_id = egui::Id::new("long-option");
+    let option_id = egui::Id::unique("long-option");
     let mut harness = Harness::builder()
         .with_size(egui::vec2(200.0, 350.0))
         .build_ui_state(
             move |ui, selected: &mut Option<egui::Id>| {
                 let options = [SelectOption::new(option_id, long)];
                 Select::new(
-                    egui::Id::new("narrow-select"),
+                    egui::Id::unique("narrow-select"),
                     "Choice",
                     "Choose an option",
                     &options,
@@ -224,9 +224,9 @@ fn keyboard_dismissal_and_acceptance_restore_focus_to_select() {
     for key in [egui::Key::Escape, egui::Key::Enter] {
         let mut harness = Harness::builder().build_ui_state(
             |ui, selected: &mut Option<egui::Id>| {
-                let options = [SelectOption::new(egui::Id::new("target"), "Choice one")];
+                let options = [SelectOption::new(egui::Id::unique("target"), "Choice one")];
                 Select::new(
-                    egui::Id::new("select"),
+                    egui::Id::unique("select"),
                     "Choices",
                     "Choose",
                     &options,
@@ -259,11 +259,11 @@ fn search_filters_options_and_reports_no_results() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, selected: &mut Option<egui::Id>| {
             let options = [
-                SelectOption::new(egui::Id::new("kbd"), "Keyboard"),
-                SelectOption::new(egui::Id::new("mouse"), "Mouse"),
+                SelectOption::new(egui::Id::unique("kbd"), "Keyboard"),
+                SelectOption::new(egui::Id::unique("mouse"), "Mouse"),
             ];
             Select::new(
-                egui::Id::new("search-select"),
+                egui::Id::unique("search-select"),
                 "Device",
                 "Choose",
                 &options,
@@ -298,15 +298,15 @@ fn search_filters_options_and_reports_no_results() {
 
 #[test]
 fn a_filtered_option_can_be_selected_from_search() {
-    let target = egui::Id::new("mouse");
+    let target = egui::Id::unique("mouse");
     let mut harness = Harness::builder().build_ui_state(
         move |ui, selected: &mut Option<egui::Id>| {
             let options = [
-                SelectOption::new(egui::Id::new("kbd"), "Keyboard"),
+                SelectOption::new(egui::Id::unique("kbd"), "Keyboard"),
                 SelectOption::new(target, "Mouse"),
             ];
             let response = Select::new(
-                egui::Id::new("search-select-2"),
+                egui::Id::unique("search-select-2"),
                 "Device",
                 "Choose",
                 &options,
@@ -345,11 +345,11 @@ fn escape_from_the_search_field_restores_focus_to_the_field() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, selected: &mut Option<egui::Id>| {
             let options = [
-                SelectOption::new(egui::Id::new("kbd"), "Keyboard"),
-                SelectOption::new(egui::Id::new("mouse"), "Mouse"),
+                SelectOption::new(egui::Id::unique("kbd"), "Keyboard"),
+                SelectOption::new(egui::Id::unique("mouse"), "Mouse"),
             ];
             Select::new(
-                egui::Id::new("escape-search"),
+                egui::Id::unique("escape-search"),
                 "Device",
                 "Choose",
                 &options,
@@ -388,11 +388,11 @@ fn search_query_is_cleared_when_the_popup_reopens() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, selected: &mut Option<egui::Id>| {
             let options = [
-                SelectOption::new(egui::Id::new("kbd"), "Keyboard"),
-                SelectOption::new(egui::Id::new("mouse"), "Mouse"),
+                SelectOption::new(egui::Id::unique("kbd"), "Keyboard"),
+                SelectOption::new(egui::Id::unique("mouse"), "Mouse"),
             ];
             Select::new(
-                egui::Id::new("reopen-search"),
+                egui::Id::unique("reopen-search"),
                 "Device",
                 "Choose",
                 &options,
@@ -436,11 +436,11 @@ fn an_outside_click_dismisses_the_popup_without_stealing_focus() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, selected: &mut Option<egui::Id>| {
             let options = [
-                SelectOption::new(egui::Id::new("kbd"), "Keyboard"),
-                SelectOption::new(egui::Id::new("mouse"), "Mouse"),
+                SelectOption::new(egui::Id::unique("kbd"), "Keyboard"),
+                SelectOption::new(egui::Id::unique("mouse"), "Mouse"),
             ];
             Select::new(
-                egui::Id::new("outside-search"),
+                egui::Id::unique("outside-search"),
                 "Device",
                 "Choose",
                 &options,
@@ -481,11 +481,11 @@ fn escape_with_focus_on_the_combo_restores_field_focus() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, selected: &mut Option<egui::Id>| {
             let options = [
-                SelectOption::new(egui::Id::new("kbd"), "Keyboard"),
-                SelectOption::new(egui::Id::new("mouse"), "Mouse"),
+                SelectOption::new(egui::Id::unique("kbd"), "Keyboard"),
+                SelectOption::new(egui::Id::unique("mouse"), "Mouse"),
             ];
             Select::new(
-                egui::Id::new("combo-focus-escape"),
+                egui::Id::unique("combo-focus-escape"),
                 "Device",
                 "Choose",
                 &options,

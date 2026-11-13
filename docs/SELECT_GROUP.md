@@ -6,13 +6,13 @@ A labelled grouping container for select fields. It draws a shared heading, an o
 use temivu::{Select, SelectGroup, SelectOption, Theme};
 
 fn example(ui: &mut egui::Ui, theme: &Theme, color: &mut Option<egui::Id>) {
-let options = [SelectOption::new(egui::Id::new("red"), "Red")];
-SelectGroup::new(egui::Id::new("shipping"), "Shipping color", theme)
+let options = [SelectOption::new(egui::Id::unique("red"), "Red")];
+SelectGroup::new(egui::Id::unique("shipping"), "Shipping color", theme)
     .description("Used on the label")
     .error("Choose a color")
     .show(ui, |ui| {
         Select::new(
-            egui::Id::new("shipping-color"),
+            egui::Id::unique("shipping-color"),
             "Color",
             "Choose a color",
             &options,

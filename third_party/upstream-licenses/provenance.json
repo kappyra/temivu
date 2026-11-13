@@ -1,5 +1,5 @@
 {
-  "scope": "59 packages lacking a recognized root or declared file in the original local inventory",
+  "scope": "Packages lacking a recognized root or declared license file in the source archive",
   "limitations": "Provenance and hashes are not license compliance or proof that crate contents match the recorded Git revision. Some files describe terms rather than supplying complete texts. Empty file lists remain unresolved.",
   "packages": [
     {
@@ -7,6 +7,22 @@
       "version": "0.24.1",
       "repository": "https://github.com/AccessKit/accesskit",
       "vcs_revision": "a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969",
+      "files": [
+        {
+          "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        }
+      ]
+    },
+    {
+      "name": "accesskit",
+      "version": "0.25.2",
+      "repository": "https://github.com/AccessKit/accesskit",
+      "vcs_revision": "f3026222559c7f5f46d8f25cb7404de68eb149f0",
       "files": [
         {
           "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-MIT",
@@ -30,6 +46,22 @@
         },
         {
           "path": "accesskit/f40dfc01a0c0e76de535969f82fb35e19513737d/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        }
+      ]
+    },
+    {
+      "name": "accesskit_atspi_common",
+      "version": "0.21.1",
+      "repository": "https://github.com/AccessKit/accesskit",
+      "vcs_revision": "f3026222559c7f5f46d8f25cb7404de68eb149f0",
+      "files": [
+        {
+          "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-APACHE",
           "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
         }
       ]
@@ -83,6 +115,22 @@
       ]
     },
     {
+      "name": "accesskit_consumer",
+      "version": "0.39.2",
+      "repository": "https://github.com/AccessKit/accesskit",
+      "vcs_revision": "f3026222559c7f5f46d8f25cb7404de68eb149f0",
+      "files": [
+        {
+          "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        }
+      ]
+    },
+    {
       "name": "accesskit_macos",
       "version": "0.26.3",
       "repository": "https://github.com/AccessKit/accesskit",
@@ -115,6 +163,22 @@
       ]
     },
     {
+      "name": "accesskit_unix",
+      "version": "0.24.1",
+      "repository": "https://github.com/AccessKit/accesskit",
+      "vcs_revision": "f3026222559c7f5f46d8f25cb7404de68eb149f0",
+      "files": [
+        {
+          "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        }
+      ]
+    },
+    {
       "name": "accesskit_windows",
       "version": "0.32.1",
       "repository": "https://github.com/AccessKit/accesskit",
@@ -131,6 +195,22 @@
       ]
     },
     {
+      "name": "accesskit_windows",
+      "version": "0.35.2",
+      "repository": "https://github.com/AccessKit/accesskit",
+      "vcs_revision": "f3026222559c7f5f46d8f25cb7404de68eb149f0",
+      "files": [
+        {
+          "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        }
+      ]
+    },
+    {
       "name": "accesskit_winit",
       "version": "0.32.2",
       "repository": "https://github.com/AccessKit/accesskit",
@@ -142,6 +222,18 @@
         },
         {
           "path": "accesskit/1bbcf100942bac96c2c3a4a91cb67b0b20201a24/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        }
+      ]
+    },
+    {
+      "name": "accesskit_winit",
+      "version": "0.34.2",
+      "repository": "https://github.com/AccessKit/accesskit",
+      "vcs_revision": "f3026222559c7f5f46d8f25cb7404de68eb149f0",
+      "files": [
+        {
+          "path": "accesskit/a55d3e1a18bb9ef0e4bccc9083fb13c3e0ad8969/LICENSE-APACHE",
           "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
         }
       ]
@@ -225,6 +317,22 @@
       ]
     },
     {
+      "name": "ecolor",
+      "version": "0.37.0",
+      "repository": "https://github.com/emilk/egui",
+      "vcs_revision": "0.37.0",
+      "files": [
+        {
+          "path": "egui/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+        },
+        {
+          "path": "egui/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+        }
+      ]
+    },
+    {
       "name": "eframe",
       "version": "0.36.2",
       "repository": "https://github.com/emilk/egui/tree/main/crates/eframe",
@@ -241,10 +349,42 @@
       ]
     },
     {
+      "name": "eframe",
+      "version": "0.37.0",
+      "repository": "https://github.com/emilk/egui/tree/main/crates/eframe",
+      "vcs_revision": "0.37.0",
+      "files": [
+        {
+          "path": "egui/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+        },
+        {
+          "path": "egui/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+        }
+      ]
+    },
+    {
       "name": "egui",
       "version": "0.36.2",
       "repository": "https://github.com/emilk/egui",
       "vcs_revision": "49682f8baa058bf49e011035cfbd6e825f88a5ef",
+      "files": [
+        {
+          "path": "egui/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+        },
+        {
+          "path": "egui/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+        }
+      ]
+    },
+    {
+      "name": "egui",
+      "version": "0.37.0",
+      "repository": "https://github.com/emilk/egui",
+      "vcs_revision": "0.37.0",
       "files": [
         {
           "path": "egui/LICENSE-MIT",
@@ -289,10 +429,42 @@
       ]
     },
     {
+      "name": "egui-winit",
+      "version": "0.37.0",
+      "repository": "https://github.com/emilk/egui/tree/main/crates/egui-winit",
+      "vcs_revision": "0.37.0",
+      "files": [
+        {
+          "path": "egui/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+        },
+        {
+          "path": "egui/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+        }
+      ]
+    },
+    {
       "name": "egui_glow",
       "version": "0.36.2",
       "repository": "https://github.com/emilk/egui/tree/main/crates/egui_glow",
       "vcs_revision": "49682f8baa058bf49e011035cfbd6e825f88a5ef",
+      "files": [
+        {
+          "path": "egui/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+        },
+        {
+          "path": "egui/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+        }
+      ]
+    },
+    {
+      "name": "egui_glow",
+      "version": "0.37.0",
+      "repository": "https://github.com/emilk/egui/tree/main/crates/egui_glow",
+      "vcs_revision": "0.37.0",
       "files": [
         {
           "path": "egui/LICENSE-MIT",
@@ -337,6 +509,22 @@
       ]
     },
     {
+      "name": "emath",
+      "version": "0.37.0",
+      "repository": "https://github.com/emilk/egui/tree/main/crates/emath",
+      "vcs_revision": "0.37.0",
+      "files": [
+        {
+          "path": "egui/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+        },
+        {
+          "path": "egui/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+        }
+      ]
+    },
+    {
       "name": "epaint",
       "version": "0.36.2",
       "repository": "https://github.com/emilk/egui/tree/main/crates/epaint",
@@ -353,10 +541,42 @@
       ]
     },
     {
+      "name": "epaint",
+      "version": "0.37.0",
+      "repository": "https://github.com/emilk/egui/tree/main/crates/epaint",
+      "vcs_revision": "0.37.0",
+      "files": [
+        {
+          "path": "egui/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+        },
+        {
+          "path": "egui/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+        }
+      ]
+    },
+    {
       "name": "epaint_default_fonts",
       "version": "0.36.2",
       "repository": "https://github.com/emilk/egui/tree/main/crates/epaint_default_fonts",
       "vcs_revision": "49682f8baa058bf49e011035cfbd6e825f88a5ef",
+      "files": [
+        {
+          "path": "egui/LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+        },
+        {
+          "path": "egui/LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+        }
+      ]
+    },
+    {
+      "name": "epaint_default_fonts",
+      "version": "0.37.0",
+      "repository": "https://github.com/emilk/egui/tree/main/crates/epaint_default_fonts",
+      "vcs_revision": "0.37.0",
       "files": [
         {
           "path": "egui/LICENSE-MIT",

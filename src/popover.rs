@@ -13,7 +13,7 @@ use egui::{Id, InnerResponse, Key, Response, Ui};
 /// use temivu::Popover;
 /// let anchor = ui.button("Options");
 /// if anchor.clicked() { *open = !*open; }
-/// let _ = Popover::new(egui::Id::new("options-popover"), "Options", open)
+/// let _ = Popover::new(egui::Id::unique("options-popover"), "Options", open)
 ///     .focus_on_open(true)
 ///     .show(&anchor, |ui| ui.button("Apply"));
 /// # }
@@ -98,6 +98,7 @@ impl<'a> Popover<'a> {
             self.id,
             self.open,
             crate::liquid::PopupSurface {
+                label: Some(self.label),
                 match_compact_trigger: self.match_compact_trigger,
                 width: self.width,
                 frame,
@@ -144,12 +145,6 @@ impl<'a> Popover<'a> {
             && focus_not_redirected
         {
             anchor.request_focus();
-        }
-        if let Some(popup) = &result {
-            ctx.accesskit_node_builder(popup.response.id, |node| {
-                node.set_role(egui::accesskit::Role::Group);
-                node.set_label(self.label);
-            });
         }
         result
     }

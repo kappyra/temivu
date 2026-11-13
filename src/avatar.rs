@@ -1,8 +1,8 @@
 //! Experimental avatar; loading, image errors and transitions remain caller-managed.
 use crate::Theme;
 use egui::{
-    Align2, Color32, FontId, Mesh, Pos2, Rect, Response, Sense, Shape, Stroke, TextureId, Ui, Vec2,
-    WidgetInfo, WidgetType,
+    Align2, Color32, FontId, Mesh, Pos2, Rect, Response, Role, Sense, Shape, Stroke, TextureId, Ui,
+    Vec2, WidgetInfo,
 };
 
 /// A square avatar with circular clipping and optional initials or a loaded texture.
@@ -60,8 +60,7 @@ impl<'a> Avatar<'a> {
     }
     pub fn show(self, ui: &mut Ui) -> Response {
         let (rect, response) = ui.allocate_exact_size(Vec2::splat(self.size), Sense::hover());
-        response
-            .widget_info(|| WidgetInfo::labeled(WidgetType::Other, ui.is_enabled(), self.label));
+        response.widget_info(|| WidgetInfo::labeled(Role::Unknown, ui.is_enabled(), self.label));
         ui.ctx().accesskit_node_builder(response.id, |node| {
             node.set_role(egui::accesskit::Role::Image)
         });

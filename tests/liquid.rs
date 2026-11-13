@@ -28,7 +28,7 @@ fn morph_emits_valid_bounded_geometry_and_exit_is_paint_only() {
             |ui, state: &mut (bool, usize)| {
                 let theme = Theme::light();
                 let anchor = ui.button("Open");
-                Popover::new(egui::Id::new("liquid"), "Liquid options", &mut state.0)
+                Popover::new(egui::Id::unique("liquid"), "Liquid options", &mut state.0)
                     .theme(&theme)
                     .liquid(LiquidStyle {
                         transition: SurfaceTransition::Merge,
@@ -180,7 +180,7 @@ fn droplet_join_tracks_the_trigger_and_panel_colors_in_both_directions() {
             },
             |ui| {
                 let anchor = temivu::Button::new("Open settings", &theme).show(ui);
-                Popover::new(egui::Id::new("color-morph"), "Settings", &mut open)
+                Popover::new(egui::Id::unique("color-morph"), "Settings", &mut open)
                     .theme(&theme)
                     .frame(
                         egui::Frame::new()
@@ -259,7 +259,7 @@ fn compact_command_menu_replaces_the_trigger_with_one_moving_outline() {
                     .inner;
                 trigger = anchor.rect;
                 menu = temivu::PopoverMenu::new(
-                    egui::Id::new("compact-command"),
+                    egui::Id::unique("compact-command"),
                     "Commands",
                     &mut open,
                 )
@@ -365,7 +365,7 @@ fn popup_content_remains_visible_through_reopen_and_exit() {
             },
             |ui| {
                 let anchor = ui.button("Open");
-                Popover::new(egui::Id::new("reopen"), "Options", &mut open)
+                Popover::new(egui::Id::unique("reopen"), "Options", &mut open)
                     .theme(&theme)
                     .width(240.0)
                     .show(&anchor, |ui| ui.label("Visible content"));
@@ -481,7 +481,7 @@ fn bloom_popup_expands_from_the_trigger_without_shrinking_text() {
             },
             |ui| {
                 let anchor = ui.button("Open");
-                target = Popover::new(egui::Id::new("expand"), "Options", &mut open)
+                target = Popover::new(egui::Id::unique("expand"), "Options", &mut open)
                     .theme(&theme)
                     .liquid(LiquidStyle::bloom())
                     .width(240.0)
@@ -586,7 +586,7 @@ fn context_preset_is_inherited_and_widget_override_takes_precedence() {
                 },
                 |ui| {
                     let anchor = ui.button("Open");
-                    let mut popup = Popover::new(egui::Id::new("inherit"), "Options", &mut open)
+                    let mut popup = Popover::new(egui::Id::unique("inherit"), "Options", &mut open)
                         .width(240.0)
                         .theme(&theme);
                     if explicit_bloom {
@@ -619,7 +619,7 @@ fn three_droplets_form_one_filled_surface_and_separate_again() {
     let theme = Theme::light();
     theme.apply(&ctx);
     let style = LiquidStyle::droplet();
-    let id = egui::Id::new("group");
+    let id = egui::Id::unique("group");
     let parts = [80.0, 150.0, 220.0].map(|x| DropletPart {
         rect: Rect::from_center_size(pos2(x, 100.0), vec2(50.0, 40.0)),
         corners: 20.into(),
@@ -699,7 +699,7 @@ fn wide_popup_uses_the_current_click_and_retains_the_contact_on_external_close()
                     if anchor.clicked() {
                         *open = !*open;
                     }
-                    Popover::new(egui::Id::new("contact"), "Options", open)
+                    Popover::new(egui::Id::unique("contact"), "Options", open)
                         .width(200.0)
                         .show(&anchor, |ui| ui.label("Content"));
                 },

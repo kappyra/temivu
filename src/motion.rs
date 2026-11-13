@@ -292,9 +292,9 @@ pub(crate) fn rounded_shape(
     stroke: egui::Stroke,
     kind: egui::StrokeKind,
 ) -> egui::Shape {
-    use egui::epaint::{PathShape, PathStroke, tessellator::path};
+    use egui::epaint::{PathShape, PathStroke, RoundedRect, tessellator::path};
     let mut points = Vec::new();
-    path::rounded_rectangle(&mut points, rect, corners);
+    path::rounded_rectangle(&mut points, RoundedRect::new(rect, corners));
     PathShape::convex_polygon(points, fill, PathStroke::from(stroke).with_kind(kind)).into()
 }
 

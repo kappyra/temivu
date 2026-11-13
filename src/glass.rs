@@ -146,7 +146,7 @@ impl Glass {
     /// Install or remove a graphics backend for live blur and refraction.
     /// Install once per context. The backend owns its graphics resources.
     pub fn set_renderer(ctx: &Context, renderer: Option<Arc<dyn GlassRenderer>>) {
-        let id = Id::new("temivu-glass-renderer");
+        let id = Id::unique("temivu-glass-renderer");
         ctx.data_mut(|data| {
             if let Some(renderer) = renderer {
                 data.insert_temp(id, renderer);
@@ -158,8 +158,10 @@ impl Glass {
     }
 
     fn renderer(ctx: &Context) -> Option<Arc<dyn GlassRenderer>> {
-        ctx.data(|data| data.get_temp::<Arc<dyn GlassRenderer>>(Id::new("temivu-glass-renderer")))
-            .filter(|renderer| renderer.available())
+        ctx.data(|data| {
+            data.get_temp::<Arc<dyn GlassRenderer>>(Id::unique("temivu-glass-renderer"))
+        })
+        .filter(|renderer| renderer.available())
     }
 
     /// Enable glass on floating Temivu surfaces in this context.
@@ -169,7 +171,7 @@ impl Glass {
             return;
         }
         ctx.data_mut(|data| {
-            let id = Id::new("temivu-glass-material");
+            let id = Id::unique("temivu-glass-material");
             if let Some(glass) = glass {
                 data.insert_temp(id, glass);
             } else {
@@ -180,7 +182,7 @@ impl Glass {
     }
 
     pub fn context(ctx: &Context) -> Option<Self> {
-        ctx.data(|data| data.get_temp(Id::new("temivu-glass-material")))
+        ctx.data(|data| data.get_temp(Id::unique("temivu-glass-material")))
     }
 
     /// Wrap arbitrary content in a glass frame. Use an egui `Area` or overlay

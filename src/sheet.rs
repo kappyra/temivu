@@ -14,7 +14,7 @@ use egui::{Context, Id, Ui, Vec2};
 /// ```
 /// # fn example(ui: &mut egui::Ui, theme: &temivu::Theme, open: &mut bool) {
 /// use temivu::Sheet;
-/// Sheet::new(egui::Id::new("filters-sheet"), "Filters", theme).show(
+/// Sheet::new(egui::Id::unique("filters-sheet"), "Filters", theme).show(
 ///     ui.ctx(),
 ///     open,
 ///     |ui| {

@@ -8,10 +8,10 @@ description = "Motion-first UI components for Rust and egui"
 publish = false
 
 [dependencies]
-egui = "=0.36.2"
+egui = { version = "=0.37.0", features = ["default_fonts"] }
 
 [dev-dependencies]
-egui_kittest = "=0.36.2"
+egui_kittest = "=0.37.0"
 
 [features]
 default = []
@@ -19,13 +19,13 @@ demo = ["dep:eframe"]
 android-showcase = ["demo", "dep:android-activity", "eframe/android-native-activity"]
 
 [dependencies.eframe]
-version = "=0.36.2"
+version = "=0.37.0"
 optional = true
 default-features = false
 features = ["default_fonts", "glow"]
 
 [target.'cfg(not(target_os = "android"))'.dependencies.eframe]
-version = "=0.36.2"
+version = "=0.37.0"
 optional = true
 default-features = false
 features = ["accesskit", "x11"]

@@ -257,7 +257,7 @@ fn format_time(time: Time, with_seconds: bool) -> String {
 }
 
 fn item_id(unit: &'static str, index: usize) -> Id {
-    Id::new(("temivu-time-picker-item", unit, index))
+    Id::unique(("temivu-time-picker-item", unit, index))
 }
 
 fn hours() -> &'static [PickerItem<'static>] {
@@ -425,7 +425,7 @@ impl<'a> TimePicker<'a> {
             layout,
         } = self;
         let id = id.unwrap_or_else(|| ui.next_auto_id().with("temivu-time-picker"));
-        ui.scope_builder(egui::UiBuilder::new().id(id), |ui| {
+        ui.scope_builder(egui::UiBuilder::new().scope_id(id), |ui| {
             if layout == TimePickerLayout::Stepper {
                 let before = *time;
                 let mut values = [time.hour(), time.minute(), time.second()];

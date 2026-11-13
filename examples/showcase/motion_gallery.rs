@@ -302,7 +302,7 @@ impl Gallery {
             self.menu = !self.menu;
         }
         PopoverMenu::new(
-            Id::new("motion-gallery-menu"),
+            Id::unique("motion-gallery-menu"),
             "Item actions",
             &mut self.menu,
         )
@@ -321,9 +321,9 @@ impl Gallery {
 
     fn category(&mut self, ui: &mut Ui, theme: &Theme) {
         let options = ["Design", "Development", "Research"]
-            .map(|label| SelectOption::new(Id::new(label), label));
+            .map(|label| SelectOption::new(Id::unique(label), label));
         Select::new(
-            Id::new("motion-gallery-category"),
+            Id::unique("motion-gallery-category"),
             "Collection",
             "Choose category",
             &options,

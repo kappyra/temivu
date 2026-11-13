@@ -359,7 +359,7 @@ fn draw_pagination(
         ui.spacing_mut().item_spacing.y = 6.0;
         let width = button_width(ui, theme, previous_label, max_width);
         let previous = button_slot(ui, theme, width, |ui| {
-            ui.scope_builder(egui::UiBuilder::new().id(id.with("previous")), |ui| {
+            ui.scope_builder(egui::UiBuilder::new().scope_id(id.with("previous")), |ui| {
                 crate::button::press_native(ui, theme, |ui| {
                     ui.add_enabled(
                         state.page > 0,
@@ -418,9 +418,10 @@ fn draw_pagination(
                         button = button.fill(theme.primary);
                     }
                     let response = button_slot(ui, theme, width, |ui| {
-                        ui.scope_builder(egui::UiBuilder::new().id(id.with(("page", page))), |ui| {
-                            crate::button::press_native(ui, theme, |ui| ui.add(button))
-                        })
+                        ui.scope_builder(
+                            egui::UiBuilder::new().scope_id(id.with(("page", page))),
+                            |ui| crate::button::press_native(ui, theme, |ui| ui.add(button)),
+                        )
                         .inner
                     });
                     ui.ctx().accesskit_node_builder(response.id, |node| {
@@ -505,7 +506,7 @@ fn draw_pagination(
         }
         let width = button_width(ui, theme, next_label, max_width);
         let next = button_slot(ui, theme, width, |ui| {
-            ui.scope_builder(egui::UiBuilder::new().id(id.with("next")), |ui| {
+            ui.scope_builder(egui::UiBuilder::new().scope_id(id.with("next")), |ui| {
                 crate::button::press_native(ui, theme, |ui| {
                     ui.add_enabled(
                         state.page + 1 < state.pages,

@@ -67,7 +67,7 @@ fn hidden_tooltip_does_not_consume_escape() {
 fn escape_inside_a_dialog_closes_it_instead_of_hiding_the_tooltip() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, open: &mut bool| {
-            Dialog::new(egui::Id::new("tooltip-dialog"), "Confirm").show(ui.ctx(), open, |ui| {
+            Dialog::new(egui::Id::unique("tooltip-dialog"), "Confirm").show(ui.ctx(), open, |ui| {
                 let response = ui.button("Inside dialog");
                 tooltip::tooltip(response, "Dialog tooltip");
             });

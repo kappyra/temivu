@@ -244,13 +244,13 @@ fn horizontal_marks_align_with_the_rail_and_labels_stay_centred() {
     // The default egui style uses the rectangular handle with aspect ratio 0.75,
     // so the rail is inset by (height / 2.5) * 0.75 = 0.3 * height on each side.
     assert!(
-        (rect.height() - 18.0).abs() < 0.5,
-        "expected the default 18-point slider thickness, got {}",
+        (rect.height() - 20.0).abs() < 0.5,
+        "expected the default 20-point slider thickness, got {}",
         rect.height()
     );
-    // Independent absolute expectation: egui's default inset is 5.4 pt for the
-    // 18 pt desktop thickness (7.2 * 0.75).
-    let expected = [rect.left() + 5.4, rect.center().x, rect.right() - 5.4];
+    // Independent absolute expectation: egui's default inset is 6 pt for the
+    // 20 pt desktop thickness (8 * 0.75).
+    let expected = [rect.left() + 6.0, rect.center().x, rect.right() - 6.0];
     let mut centers = tick_centers(&harness);
     centers.sort_by(|a, b| a.x.partial_cmp(&b.x).unwrap());
     assert_eq!(centers.len(), 3, "three ticks expected, got {centers:?}");

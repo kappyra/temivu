@@ -193,7 +193,7 @@ fn page_focus_survives_window_shift_and_instances_do_not_share_ids() {
                     &Theme::light(),
                     "Previous A",
                     "Next A",
-                    egui::Id::new("pagination-a"),
+                    egui::Id::unique("pagination-a"),
                 );
                 temivu::pagination_with_id(
                     ui,
@@ -201,7 +201,7 @@ fn page_focus_survives_window_shift_and_instances_do_not_share_ids() {
                     &Theme::light(),
                     "Previous B",
                     "Next B",
-                    egui::Id::new("pagination-b"),
+                    egui::Id::unique("pagination-b"),
                 );
             },
             [

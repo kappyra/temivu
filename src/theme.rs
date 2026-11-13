@@ -258,7 +258,7 @@ impl Easing {
 ///
 /// The helper in [`crate::motion`] snaps to the target when [`Self::enabled`]
 /// is false, when [`Self::reduced_motion`] is set, or when egui's active style
-/// has `animation_time == 0.0` (in egui 0.36 that style is
+/// has `animation_time == 0.0` (in egui that style is
 /// `Context::global_style()`; older releases call it `Context::style()`). egui does not read the operating
 /// system's reduced-motion preference, so applications that observe it must set
 /// [`Self::reduced_motion`] themselves.
@@ -787,6 +787,7 @@ impl Theme {
                     strength: 0.0,
                     size: 0.0,
                 },
+                kinetic: style.spacing.scroll.kinetic,
                 ..egui::style::ScrollStyle::floating()
             };
         });

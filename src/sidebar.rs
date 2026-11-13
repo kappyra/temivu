@@ -75,7 +75,7 @@ pub struct SidebarItem<'a> {
     pub id: Id,
     /// Visible label and accessible name.
     pub label: &'a str,
-    /// An interim text glyph rendered before the label, for example `"▤"`.
+    /// An interim text glyph rendered before the label, for example `"="`.
     /// Real iconography is not migrated.
     pub icon: Option<&'a str>,
     /// Whether the entry can be activated. Disabled entries stay visible.
@@ -173,15 +173,15 @@ pub struct SidebarResponse {
 /// # fn example(ui: &mut egui::Ui, theme: &temivu::Theme, state: &mut temivu::sidebar::SidebarState) {
 /// use temivu::sidebar::{Sidebar, SidebarGroup, SidebarItem};
 /// let mut selected = None;
-/// let inbox = [SidebarItem::new(egui::Id::new("inbox"), "Inbox")];
-/// let groups = [SidebarGroup::new(egui::Id::new("mail"), &inbox).label("Mail")];
+/// let inbox = [SidebarItem::new(egui::Id::unique("inbox"), "Inbox")];
+/// let groups = [SidebarGroup::new(egui::Id::unique("mail"), &inbox).label("Mail")];
 /// let width = if state.collapsed {
 ///     Sidebar::COLLAPSED_WIDTH
 /// } else {
 ///     Sidebar::DEFAULT_WIDTH
 /// };
 /// // `Scaffold::new(...).sidebar(width)` then show inside that slot:
-/// let response = Sidebar::new(egui::Id::new("sidebar"), "Main navigation", theme, state)
+/// let response = Sidebar::new(egui::Id::unique("sidebar"), "Main navigation", theme, state)
 ///     .show(ui, &groups, &mut selected);
 /// assert!(response.response.rect.width() <= width);
 /// # }
@@ -288,7 +288,7 @@ impl<'a> Sidebar<'a> {
         let mut activated = None;
         let mut toggled = None;
         let mut collapsed_changed = false;
-        let scope = ui.scope_builder(UiBuilder::new().id(id).sense(Sense::hover()), |ui| {
+        let scope = ui.scope_builder(UiBuilder::new().scope_id(id).sense(Sense::hover()), |ui| {
             ui.set_width(width);
             let margin = if framed { 7 } else { 0 };
             egui::Frame::new()
@@ -411,7 +411,7 @@ fn draw_group(
     entries: &mut Vec<ItemEntry>,
 ) {
     let group_id = sidebar_id.with(("sidebar-group", group.id));
-    let scope = ui.scope_builder(UiBuilder::new().id(group_id), |ui| {
+    let scope = ui.scope_builder(UiBuilder::new().scope_id(group_id), |ui| {
         if !collapsed {
             if let Some(label) = group.label {
                 ui.add(
@@ -581,9 +581,9 @@ fn item_text(
     if collapsed || !has_children {
         base
     } else if expanded {
-        format!("{base}   ▾")
+        format!("{base}   v")
     } else {
-        format!("{base}   ▸")
+        format!("{base}   ›")
     }
 }
 
@@ -655,7 +655,7 @@ mod tests {
         let theme = Theme::light();
         let mut state = SidebarState::new();
         {
-            let sidebar = Sidebar::new(Id::new("sidebar"), "Navigation", &theme, &mut state)
+            let sidebar = Sidebar::new(Id::unique("sidebar"), "Navigation", &theme, &mut state)
                 .width(f32::NAN)
                 .width(0.0)
                 .width(-12.0)
@@ -664,7 +664,7 @@ mod tests {
             assert_eq!(sidebar.width, DEFAULT_WIDTH);
             assert_eq!(sidebar.collapsed_width, COLLAPSED_WIDTH);
         }
-        let sidebar = Sidebar::new(Id::new("sidebar"), "Navigation", &theme, &mut state)
+        let sidebar = Sidebar::new(Id::unique("sidebar"), "Navigation", &theme, &mut state)
             .width(320.0)
             .collapsed_width(48.0);
         assert_eq!(sidebar.width, 320.0);
@@ -682,7 +682,7 @@ mod tests {
     #[test]
     fn expansion_state_follows_stable_item_ids() {
         let mut state = SidebarState::new();
-        let projects = Id::new("projects");
+        let projects = Id::unique("projects");
         assert!(!state.is_expanded(projects));
         assert!(state.toggle_expanded(projects));
         assert!(state.is_expanded(projects));

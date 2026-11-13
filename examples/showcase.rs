@@ -129,11 +129,11 @@ impl Page {
 
     fn id(self) -> Id {
         match self {
-            Self::Overview => Id::new("demo-page-overview"),
-            Self::Controls => Id::new("demo-page-controls"),
-            Self::Overlays => Id::new("demo-page-overlays"),
-            Self::Data => Id::new("demo-page-data"),
-            Self::Localization => Id::new("demo-page-localization"),
+            Self::Overview => Id::unique("demo-page-overview"),
+            Self::Controls => Id::unique("demo-page-controls"),
+            Self::Overlays => Id::unique("demo-page-overlays"),
+            Self::Data => Id::unique("demo-page-data"),
+            Self::Localization => Id::unique("demo-page-localization"),
         }
     }
 
@@ -223,7 +223,7 @@ impl Default for DemoState {
             catalog_query: String::new(),
             video: video_demo::DemoVideo::default(),
             breadcrumb_root: false,
-            catalog_navigation: Some(Id::new("catalog-nav-home")),
+            catalog_navigation: Some(Id::unique("catalog-nav-home")),
             accepted: false,
             notifications: false,
             name: String::new(),
@@ -266,7 +266,7 @@ impl Default for DemoState {
             menu_choice: None,
             query: String::new(),
             channels: Vec::new(),
-            picker_choice: Some(Id::new("demo-medium")),
+            picker_choice: Some(Id::unique("demo-medium")),
             time_picker_time: Time::new(9, 30).expect("constant time is valid"),
             date_time: None,
             otp: String::new(),
@@ -611,7 +611,7 @@ fn motion_controls(
     });
     if let Some(anchor) = preview {
         Popover::new(
-            Id::new("demo-surface-preview"),
+            Id::unique("demo-surface-preview"),
             "Motion preview",
             &mut state.surface_preview_open,
         )
@@ -756,7 +756,7 @@ fn control_project(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
             tooltip(hovered, "Soft motion. Precise feedback.");
             ui.add_space(8.0);
             TextField::new(&mut state.name, theme, "Name")
-                .id(Id::new("demo-name"))
+                .id(Id::unique("demo-name"))
                 .hint("Enter your name")
                 .show(ui);
             ui.add_space(4.0);
@@ -765,7 +765,7 @@ fn control_project(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
                     .then(|| "Enter an address that contains @".to_owned())
             };
             TextField::new(&mut state.email, theme, "Email")
-                .id(Id::new("demo-email-input"))
+                .id(Id::unique("demo-email-input"))
                 .hint("name@example.com")
                 .description("We only use this for notifications.")
                 .validator(&email_validator)
@@ -862,14 +862,14 @@ fn control_choices(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
         "Search, choose and make it yours.",
         |ui| {
             let options = [
-                SelectOption::new(Id::new("demo-red"), "Red"),
-                SelectOption::new(Id::new("demo-blue"), "Blue"),
+                SelectOption::new(Id::unique("demo-red"), "Red"),
+                SelectOption::new(Id::unique("demo-blue"), "Blue"),
             ];
-            SelectGroup::new(Id::new("demo-select-group"), "Appearance", theme)
+            SelectGroup::new(Id::unique("demo-select-group"), "Appearance", theme)
                 .description("Choose the accent color")
                 .show(ui, |ui| {
                     Select::new(
-                        Id::new("demo-select"),
+                        Id::unique("demo-select"),
                         "Color",
                         "Choose a color",
                         &options,
@@ -881,12 +881,12 @@ fn control_choices(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
                 });
             ui.add_space(8.0);
             let channels = [
-                SelectOption::new(Id::new("demo-email"), "Email digest"),
-                SelectOption::new(Id::new("demo-sms"), "SMS alerts"),
-                SelectOption::new(Id::new("demo-push"), "Push notifications"),
+                SelectOption::new(Id::unique("demo-email"), "Email digest"),
+                SelectOption::new(Id::unique("demo-sms"), "SMS alerts"),
+                SelectOption::new(Id::unique("demo-push"), "Push notifications"),
             ];
             MultiSelect::new(
-                Id::new("demo-channels"),
+                Id::unique("demo-channels"),
                 "Notification channels",
                 "Choose channels",
                 &channels,
@@ -896,25 +896,25 @@ fn control_choices(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
             .show(ui);
             ui.add_space(8.0);
             let fruits = [
-                AutocompleteOption::new(Id::new("demo-apple"), "Apple"),
-                AutocompleteOption::new(Id::new("demo-apricot"), "Apricot"),
-                AutocompleteOption::new(Id::new("demo-banana"), "Banana"),
-                AutocompleteOption::new(Id::new("demo-blueberry"), "Blueberry"),
+                AutocompleteOption::new(Id::unique("demo-apple"), "Apple"),
+                AutocompleteOption::new(Id::unique("demo-apricot"), "Apricot"),
+                AutocompleteOption::new(Id::unique("demo-banana"), "Banana"),
+                AutocompleteOption::new(Id::unique("demo-blueberry"), "Blueberry"),
             ];
             let _ = Autocomplete::new(&mut state.query, theme, "Fruit", &fruits)
                 .hint("Type to search")
-                .id(Id::new("demo-autocomplete"))
+                .id(Id::unique("demo-autocomplete"))
                 .show(ui);
             ui.add_space(8.0);
             let sizes = [
-                PickerItem::new(Id::new("demo-small"), "Small"),
-                PickerItem::new(Id::new("demo-medium"), "Medium"),
-                PickerItem::new(Id::new("demo-large"), "Large"),
+                PickerItem::new(Id::unique("demo-small"), "Small"),
+                PickerItem::new(Id::unique("demo-medium"), "Medium"),
+                PickerItem::new(Id::unique("demo-large"), "Large"),
             ];
             let _ = Picker::new(&mut state.picker_choice, &sizes, theme)
                 .label("Size")
                 .visible_rows(3)
-                .id(Id::new("demo-picker"))
+                .id(Id::unique("demo-picker"))
                 .show(ui);
             ui.add_space(8.0);
         },
@@ -1072,7 +1072,7 @@ fn show_toast_stack(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
         )
     };
     temivu::Toaster::new(&mut state.toaster, theme, "Dismiss")
-        .id(Id::new("demo-overlay-notifications"))
+        .id(Id::unique("demo-overlay-notifications"))
         .anchor(anchor)
         .offset(offset)
         .show_with_center(ui, &mut state.notification_center_open, Default::default());
@@ -1117,7 +1117,7 @@ fn overlay_dialog(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
                     spread: 0,
                     color: egui::Color32::from_black_alpha(if theme.dark { 90 } else { 40 }),
                 });
-            let dialog = Dialog::new(Id::new("demo-dialog"), "Confirm action")
+            let dialog = Dialog::new(Id::unique("demo-dialog"), "Confirm action")
                 .theme(theme)
                 .frame(frame);
             let dialog = if state.dialog_from_center {
@@ -1180,7 +1180,7 @@ fn overlay_sheet(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
             } else {
                 "Showing all items"
             });
-            Sheet::new(Id::new("demo-sheet"), "Filters", theme)
+            Sheet::new(Id::unique("demo-sheet"), "Filters", theme)
                 .description("Choose which items are shown in the collection.")
                 .show(ui.ctx(), &mut state.sheet_open, |ui| {
                     Switch::new(&mut state.draft_filter, theme)
@@ -1219,7 +1219,7 @@ fn overlay_actions(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
                 state.popover_open = !state.popover_open;
             }
             Popover::new(
-                Id::new("demo-popover"),
+                Id::unique("demo-popover"),
                 "Demo popover",
                 &mut state.popover_open,
             )
@@ -1240,9 +1240,9 @@ fn overlay_actions(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
             if menu_anchor.clicked() {
                 state.popover_menu_open = !state.popover_menu_open;
             }
-            let pin_id = Id::new("demo-menu-pin");
+            let pin_id = Id::unique("demo-menu-pin");
             PopoverMenu::new(
-                Id::new("demo-popover-menu"),
+                Id::unique("demo-popover-menu"),
                 "Demo menu",
                 &mut state.popover_menu_open,
             )
@@ -1252,7 +1252,7 @@ fn overlay_actions(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
                 if menu
                     .item(
                         ui,
-                        Item::new("Rename", theme).id(Id::new("demo-menu-rename")),
+                        Item::new("Rename", theme).id(Id::unique("demo-menu-rename")),
                     )
                     .clicked()
                 {
@@ -1283,7 +1283,7 @@ fn overlay_actions(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
                         ui,
                         Item::new("Delete", theme)
                             .variant(ItemVariant::Destructive)
-                            .id(Id::new("demo-menu-delete")),
+                            .id(Id::unique("demo-menu-delete")),
                     )
                     .clicked()
                 {
@@ -1348,7 +1348,7 @@ fn overlay_notifications(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme
                     let index = state.next_toast;
                     state.toaster.push(
                         ToastEntry::new(
-                            Id::new(("queued-toast", index)),
+                            Id::unique(("queued-toast", index)),
                             format!("Queued notification {index}"),
                         )
                         .description(if index.is_multiple_of(2) {
@@ -1503,7 +1503,7 @@ fn data_collection(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
             }
             ui.add_space(8.0);
             if Item::new("Project brief", theme)
-                .icon("▤")
+                .icon("=")
                 .flat(true)
                 .radius(12)
                 .description("Planning notes and key decisions")
@@ -1515,8 +1515,8 @@ fn data_collection(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
             }
             ui.add_space(6.0);
             if Tile::new("Bluetooth", theme)
-                .id(Id::new("demo-bluetooth-tile"))
-                .icon("◈")
+                .id(Id::unique("demo-bluetooth-tile"))
+                .icon("◇")
                 .radius(14)
                 .description("Nearby devices")
                 .selected(state.tile_selected)
@@ -1527,13 +1527,13 @@ fn data_collection(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
             }
             ui.add_space(8.0);
             let tiles = [
-                SelectTile::new(Id::new("demo-wifi"), "Airplane mode")
+                SelectTile::new(Id::unique("demo-wifi"), "Airplane mode")
                     .description("Disable radios"),
-                SelectTile::new(Id::new("demo-bluetooth"), "Power saving")
+                SelectTile::new(Id::unique("demo-bluetooth"), "Power saving")
                     .description("Reduce battery use"),
             ];
             SelectTileGroup::new(
-                Id::new("demo-radios"),
+                Id::unique("demo-radios"),
                 "Radios",
                 theme,
                 &tiles,
@@ -1670,13 +1670,13 @@ fn data_explorer(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
         "Browse folders in a split workspace with an adjustable divider on wide screens.",
         |ui| {
             let inbox = [
-                SidebarItem::new(Id::new("demo-inbox"), "Inbox").icon("▣"),
-                SidebarItem::new(Id::new("demo-sent"), "Sent").icon("↗"),
+                SidebarItem::new(Id::unique("demo-inbox"), "Inbox").icon("+"),
+                SidebarItem::new(Id::unique("demo-sent"), "Sent").icon(">"),
             ];
-            let history = [SidebarItem::new(Id::new("demo-archive"), "Archive").icon("▤")];
+            let history = [SidebarItem::new(Id::unique("demo-archive"), "Archive").icon("=")];
             let groups = [
-                SidebarGroup::new(Id::new("demo-mail"), &inbox).label("Workspace"),
-                SidebarGroup::new(Id::new("demo-history"), &history).label("History"),
+                SidebarGroup::new(Id::unique("demo-mail"), &inbox).label("Workspace"),
+                SidebarGroup::new(Id::unique("demo-history"), &history).label("History"),
             ];
             let previous = state.sidebar_selected;
             let folder = inbox
@@ -1686,7 +1686,7 @@ fn data_explorer(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
             let mut folders = |ui: &mut egui::Ui| {
                 data_pane(ui, theme, "Folders", |ui| {
                     Sidebar::new(
-                        Id::new("demo-sidebar"),
+                        Id::unique("demo-sidebar"),
                         "Demo navigation",
                         theme,
                         &mut state.sidebar,
@@ -1735,7 +1735,7 @@ fn data_explorer(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
                     |ui| {
                         ui.set_max_size(egui::vec2(width, 286.0));
                         Resizable::new(
-                            Id::new("demo-split"),
+                            Id::unique("demo-split"),
                             ResizableAxis::Horizontal,
                             &mut state.split_fraction,
                             theme,
@@ -1817,7 +1817,7 @@ fn data_time(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
                 TimePickerLayout::Wheels
             };
             TimePicker::new(&mut state.time_picker_time, theme)
-                .id(Id::new("demo-time-picker"))
+                .id(Id::unique("demo-time-picker"))
                 .sizes(theme.sizes)
                 .layout(layout)
                 .show(ui);
@@ -1919,8 +1919,18 @@ impl eframe::App for Showcase {
             } else {
                 theme.motion.fast
             };
-            ui.ctx()
-                .all_styles_mut(|style| style.animation_time = animation_time);
+            ui.ctx().all_styles_mut(|style| {
+                style.animation_time = animation_time;
+                style.spacing.scroll.kinetic = if self.reduced_motion {
+                    egui::style::KineticScrollStyle {
+                        decay_time: 0.0,
+                        rubber_band: false,
+                        ..Default::default()
+                    }
+                } else {
+                    egui::style::KineticScrollStyle::default()
+                };
+            });
             self.applied_reduced_motion = Some(self.reduced_motion);
         }
         // The root Ui exists before this frame applies a changed theme.
@@ -1968,7 +1978,7 @@ impl eframe::App for Showcase {
             };
             NavigationItem::new(page.id(), page.label()).icon(icon)
         });
-        Scaffold::new(Id::new("demo-scaffold"), &theme)
+        Scaffold::new(Id::unique("demo-scaffold"), &theme)
             .floating_header(true)
             .show(
                 ui,
@@ -2010,7 +2020,7 @@ impl eframe::App for Showcase {
                         }
                         if !can_go_back
                             && let Some(destination) = NavigationMenu::new(
-                                Id::new("demo-full-menu"),
+                                Id::unique("demo-full-menu"),
                                 "Temivu",
                                 &mut self.menu_open,
                                 &theme,
@@ -2041,7 +2051,7 @@ impl eframe::App for Showcase {
                                 node.set_label("Quick menu");
                             });
                             if let Some(destination) = NavigationMenu::new(
-                                Id::new("demo-island-menu"),
+                                Id::unique("demo-island-menu"),
                                 "Quick navigation",
                                 &mut self.island_open,
                                 &theme,
@@ -2110,7 +2120,7 @@ impl eframe::App for Showcase {
                         });
                 },
             );
-        FloatingNavigation::new(Id::new("demo-navigation"), &theme)
+        FloatingNavigation::new(Id::unique("demo-navigation"), &theme)
             .select_on_drag(true)
             .show(ui, &items, &mut self.destination);
         if self.applied_theme != Some((self.dark, self.high_contrast, self.neutral)) {

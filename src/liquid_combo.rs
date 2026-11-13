@@ -105,6 +105,7 @@ impl<'a> LiquidCombo<'a> {
             popup_id,
             &mut open,
             crate::liquid::PopupSurface {
+                label: None,
                 match_compact_trigger: false,
                 width: Some(response.rect.width()),
                 frame: self

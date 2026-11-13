@@ -678,7 +678,7 @@ fn picker_escape_does_not_also_close_a_hosting_dialog() {
     let mut harness = Harness::builder().build_ui_state(
         |ui, state: &mut (CalendarState, bool)| {
             let theme = Theme::light();
-            Dialog::new(egui::Id::new("calendar-host-dialog"), "Pick a date").show(
+            Dialog::new(egui::Id::unique("calendar-host-dialog"), "Pick a date").show(
                 ui.ctx(),
                 &mut state.1,
                 |ui| {

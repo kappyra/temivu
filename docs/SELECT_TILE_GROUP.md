@@ -7,12 +7,12 @@ use temivu::{SelectTile, SelectTileGroup, Theme};
 
 fn example(ui: &mut egui::Ui, theme: &Theme, selected: &mut Vec<egui::Id>) {
 let tiles = [
-    SelectTile::new(egui::Id::new("wifi"), "Wi-Fi").description("Wireless networks"),
-    SelectTile::new(egui::Id::new("bluetooth"), "Bluetooth"),
-    SelectTile::new(egui::Id::new("nfc"), "NFC").enabled(false),
+    SelectTile::new(egui::Id::unique("wifi"), "Wi-Fi").description("Wireless networks"),
+    SelectTile::new(egui::Id::unique("bluetooth"), "Bluetooth"),
+    SelectTile::new(egui::Id::unique("nfc"), "NFC").enabled(false),
 ];
 let group = SelectTileGroup::new(
-    egui::Id::new("radios"),
+    egui::Id::unique("radios"),
     "Radios",
     theme,
     &tiles,

@@ -173,7 +173,7 @@ fn floating_surface_travels_and_disables_its_children_during_exit() {
             |ui| {
                 result = temivu::FloatingMotion::flight(vec2(0.0, 52.0)).show(
                     ui.ctx(),
-                    egui::Id::new("floating-preview-test"),
+                    egui::Id::unique("floating-preview-test"),
                     (egui::Align2::LEFT_TOP, vec2(16.0, 20.0)),
                     open,
                     EffectSurface::new(theme),

@@ -271,12 +271,12 @@ fn navigation(state: &mut DemoState, ui: &mut Ui, theme: &Theme) {
         "The app frame demonstrates Scaffold, FloatingNavigation and both header menus.",
         |ui| {
             let items = [
-                NavigationItem::new(Id::new("catalog-nav-home"), "Home"),
-                NavigationItem::new(Id::new("catalog-nav-library"), "Library"),
+                NavigationItem::new(Id::unique("catalog-nav-home"), "Home"),
+                NavigationItem::new(Id::unique("catalog-nav-library"), "Library"),
             ];
             bottom_navigation(
                 ui,
-                Id::new("catalog-nav"),
+                Id::unique("catalog-nav"),
                 &items,
                 &mut state.catalog_navigation,
                 theme,

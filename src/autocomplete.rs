@@ -16,8 +16,8 @@
 //!
 //! let theme = Theme::light();
 //! let fruits = [
-//!     AutocompleteOption::new(egui::Id::new("apple"), "Apple"),
-//!     AutocompleteOption::new(egui::Id::new("banana"), "Banana"),
+//!     AutocompleteOption::new(egui::Id::unique("apple"), "Apple"),
+//!     AutocompleteOption::new(egui::Id::unique("banana"), "Banana"),
 //! ];
 //! let output = Autocomplete::new(query, &theme, "Fruit", &fruits)
 //!     .hint("Start typing")
@@ -207,8 +207,10 @@ impl<'a> Autocomplete<'a> {
         let id = self
             .id
             .unwrap_or_else(|| ui.next_auto_id().with("temivu-autocomplete"));
-        ui.scope_builder(egui::UiBuilder::new().id(id), |ui| self.show_inner(ui, id))
-            .inner
+        ui.scope_builder(egui::UiBuilder::new().scope_id(id), |ui| {
+            self.show_inner(ui, id)
+        })
+        .inner
     }
 
     fn show_inner(self, ui: &mut Ui, id: Id) -> AutocompleteResponse {
@@ -334,6 +336,7 @@ impl<'a> Autocomplete<'a> {
             popup_id,
             &mut popup_open,
             crate::liquid::PopupSurface {
+                label: None,
                 match_compact_trigger: false,
                 width: Some(width),
                 frame: crate::surface::popup_frame(theme, 12),
@@ -609,31 +612,31 @@ mod tests {
     #[test]
     fn highlight_steps_skip_disabled_and_wrap() {
         let candidates = [
-            AutocompleteOption::new(Id::new("a"), "Alpha"),
-            AutocompleteOption::new(Id::new("b"), "Beta").enabled(false),
-            AutocompleteOption::new(Id::new("c"), "Gamma"),
-            AutocompleteOption::new(Id::new("d"), "Delta"),
+            AutocompleteOption::new(Id::unique("a"), "Alpha"),
+            AutocompleteOption::new(Id::unique("b"), "Beta").enabled(false),
+            AutocompleteOption::new(Id::unique("c"), "Gamma"),
+            AutocompleteOption::new(Id::unique("d"), "Delta"),
         ];
         assert_eq!(
             step_highlight(&candidates, "a", None, None, 1),
-            Some(Id::new("a"))
+            Some(Id::unique("a"))
         );
         assert_eq!(
-            step_highlight(&candidates, "a", None, Some(Id::new("a")), 1),
-            Some(Id::new("c")),
+            step_highlight(&candidates, "a", None, Some(Id::unique("a")), 1),
+            Some(Id::unique("c")),
             "disabled suggestions are skipped"
         );
         assert_eq!(
-            step_highlight(&candidates, "a", None, Some(Id::new("c")), -1),
-            Some(Id::new("a"))
+            step_highlight(&candidates, "a", None, Some(Id::unique("c")), -1),
+            Some(Id::unique("a"))
         );
         assert_eq!(
             step_highlight(&candidates, "a", None, None, -1),
-            Some(Id::new("d"))
+            Some(Id::unique("d"))
         );
         assert_eq!(
-            step_highlight(&candidates, "a", None, Some(Id::new("d")), 1),
-            Some(Id::new("a")),
+            step_highlight(&candidates, "a", None, Some(Id::unique("d")), 1),
+            Some(Id::unique("a")),
             "navigation wraps around"
         );
         assert_eq!(step_highlight(&candidates, "zzz", None, None, 1), None);

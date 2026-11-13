@@ -144,9 +144,8 @@ fn media_button(
 ) -> Response {
     let size = if theme.touch { 48.0 } else { 42.0 };
     let response = crate::motion_controls::button_response(ui, Vec2::splat(size));
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), label)
-    });
+    response
+        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, response.enabled(), label));
     let press = crate::motion_controls::press_amount(&response, theme);
     let (rect, ink) = crate::motion_controls::paint_pill(ui, theme, &response, press, 0.0);
     icon(ui.painter(), rect.center(), ink, response.id);
@@ -283,7 +282,7 @@ impl<'a> VideoPlayer<'a> {
                     let play_label = if self.status.playing { "Pause" } else { "Play" };
                     response.widget_info(|| {
                         egui::WidgetInfo::labeled(
-                            egui::WidgetType::Button,
+                            egui::Role::Button,
                             response.enabled(),
                             format!("{play_label} {}", self.title),
                         )
@@ -700,7 +699,7 @@ impl<'a> VideoPlayer<'a> {
             } else {
                 "Play video"
             };
-            egui::WidgetInfo::labeled(egui::WidgetType::Button, response.enabled(), label)
+            egui::WidgetInfo::labeled(egui::Role::Button, response.enabled(), label)
         });
 
         if !menu_open {

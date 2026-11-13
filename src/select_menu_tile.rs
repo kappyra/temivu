@@ -24,13 +24,13 @@ use egui::{Id, Response, Ui};
 /// use temivu::SelectMenuTile;
 /// let mut selected = None;
 /// let response = SelectMenuTile::new("Compact", theme)
-///     .id(egui::Id::new("density-compact"))
-///     .icon("◫")
+///     .id(egui::Id::unique("density-compact"))
+///     .icon("=")
 ///     .description("Show more rows")
-///     .selected(selected == Some(egui::Id::new("density-compact")))
+///     .selected(selected == Some(egui::Id::unique("density-compact")))
 ///     .show(ui);
 /// if response.clicked() {
-///     selected = Some(egui::Id::new("density-compact"));
+///     selected = Some(egui::Id::unique("density-compact"));
 ///     ui.close();
 /// }
 /// # }

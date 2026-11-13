@@ -178,8 +178,7 @@ impl<'a> TextField<'a> {
                 self.max_chars,
                 self.id,
             )
-            .horizontal_align(alignment.x())
-            .vertical_align(alignment.y())
+            .align(alignment)
             .frame(frame)
             .min_size(egui::vec2(
                 0.0,
@@ -353,7 +352,7 @@ pub(crate) fn show_native(
         ui.add_enabled(
             enabled,
             edit.margin(egui::Margin::symmetric(14, 8))
-                .vertical_align(egui::Align::Center)
+                .align(egui::Align2::LEFT_CENTER)
                 .min_size(egui::vec2(0.0, height)),
         )
     })

@@ -19,14 +19,14 @@ fn view(ui: &mut egui::Ui, state: &mut State) {
         extra,
     } = state;
     if SelectMenuTile::new("Compact", &theme)
-        .id(egui::Id::new("compact-open"))
-        .icon("◫")
+        .id(egui::Id::unique("compact-open"))
+        .icon("=")
         .description("Show more rows")
-        .selected(*selected == Some(egui::Id::new("compact")))
+        .selected(*selected == Some(egui::Id::unique("compact")))
         .show(ui)
         .clicked()
     {
-        *selected = Some(egui::Id::new("compact"));
+        *selected = Some(egui::Id::unique("compact"));
     }
     let _ = extra;
     let _ = open;
@@ -55,7 +55,7 @@ fn select_menu_tile_exposes_menu_item_role_label_and_selection() {
     harness.run();
     assert_eq!(
         harness.state().selected,
-        Some(egui::Id::new("compact")),
+        Some(egui::Id::unique("compact")),
         "a click is reported through the response"
     );
 }
@@ -67,13 +67,13 @@ fn disabled_select_menu_tile_ignores_pointer_and_stale_activation() {
         .build_ui_state(
             |ui, selected: &mut Option<egui::Id>| {
                 if SelectMenuTile::new("Archive", &Theme::light())
-                    .id(egui::Id::new("archive"))
+                    .id(egui::Id::unique("archive"))
                     .selected(false)
                     .enabled(false)
                     .show(ui)
                     .clicked()
                 {
-                    *selected = Some(egui::Id::new("archive"));
+                    *selected = Some(egui::Id::unique("archive"));
                 }
             },
             None,
@@ -110,41 +110,41 @@ fn menu_view(ui: &mut egui::Ui, state: &mut State) {
     if anchor.clicked() {
         *open = !*open;
     }
-    PopoverMenu::new(egui::Id::new("density-menu"), "Density menu", open).show(
+    PopoverMenu::new(egui::Id::unique("density-menu"), "Density menu", open).show(
         &anchor,
         |ui, menu| {
             if *extra {
                 let _ = menu.select_menu_tile(
                     ui,
-                    SelectMenuTile::new("Extra", &theme).id(egui::Id::new("extra")),
+                    SelectMenuTile::new("Extra", &theme).id(egui::Id::unique("extra")),
                 );
             }
             if menu
                 .select_menu_tile(
                     ui,
                     SelectMenuTile::new("Compact", &theme)
-                        .id(egui::Id::new("compact"))
-                        .selected(*selected == Some(egui::Id::new("compact"))),
+                        .id(egui::Id::unique("compact"))
+                        .selected(*selected == Some(egui::Id::unique("compact"))),
                 )
                 .clicked()
             {
-                *selected = Some(egui::Id::new("compact"));
+                *selected = Some(egui::Id::unique("compact"));
                 ui.close();
             }
             let _ = menu.select_menu_tile(
                 ui,
                 SelectMenuTile::new("Comfortable", &theme)
-                    .id(egui::Id::new("comfortable"))
+                    .id(egui::Id::unique("comfortable"))
                     .enabled(false),
             );
             if menu
                 .select_menu_tile(
                     ui,
-                    SelectMenuTile::new("Roomy", &theme).id(egui::Id::new("roommy")),
+                    SelectMenuTile::new("Roomy", &theme).id(egui::Id::unique("roommy")),
                 )
                 .clicked()
             {
-                *selected = Some(egui::Id::new("roommy"));
+                *selected = Some(egui::Id::unique("roommy"));
                 ui.close();
             }
         },
@@ -183,7 +183,7 @@ fn popover_menu_focuses_and_activates_a_select_menu_tile() {
         .get_by_role_and_label(egui::accesskit::Role::MenuItem, "Roomy")
         .click();
     harness.run();
-    assert_eq!(harness.state().selected, Some(egui::Id::new("roommy")));
+    assert_eq!(harness.state().selected, Some(egui::Id::unique("roommy")));
     assert!(!harness.state().open, "ui.close() should dismiss the menu");
 }
 

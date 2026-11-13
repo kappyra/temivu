@@ -29,8 +29,8 @@ impl Default for State {
 fn view(ui: &mut egui::Ui, state: &mut State) {
     let theme = Theme::light();
     let options = [
-        SelectOption::new(egui::Id::new("red"), "Red"),
-        SelectOption::new(egui::Id::new("blue"), "Blue"),
+        SelectOption::new(egui::Id::unique("red"), "Red"),
+        SelectOption::new(egui::Id::unique("blue"), "Blue"),
     ];
     let State {
         color,
@@ -40,7 +40,7 @@ fn view(ui: &mut egui::Ui, state: &mut State) {
         inherited_error,
         changed,
     } = state;
-    let mut group = SelectGroup::new(egui::Id::new("shipping"), "Shipping color", &theme)
+    let mut group = SelectGroup::new(egui::Id::unique("shipping"), "Shipping color", &theme)
         .description("Used on the label")
         .enabled(*enabled);
     if let Some(error) = *error {
@@ -50,7 +50,7 @@ fn view(ui: &mut egui::Ui, state: &mut State) {
         *inherited_error = inherited_select_error(ui);
         *saw_enabled = ui.is_enabled();
         Select::new(
-            egui::Id::new("shipping-color"),
+            egui::Id::unique("shipping-color"),
             "Color",
             "Choose a color",
             &options,
@@ -93,7 +93,7 @@ fn pointer_selection_still_works_inside_an_enabled_group() {
     harness.run();
     harness.get_by_label("Blue").click();
     harness.run();
-    assert_eq!(harness.state().color, Some(egui::Id::new("blue")));
+    assert_eq!(harness.state().color, Some(egui::Id::unique("blue")));
 }
 
 #[test]
@@ -162,12 +162,12 @@ fn a_valid_sibling_group_does_not_inherit_the_previous_error() {
         .build_ui_state(
             |ui, color: &mut Option<egui::Id>| {
                 let theme = Theme::light();
-                let options = [SelectOption::new(egui::Id::new("red"), "Red")];
-                SelectGroup::new(egui::Id::new("invalid-group"), "Invalid group", &theme)
+                let options = [SelectOption::new(egui::Id::unique("red"), "Red")];
+                SelectGroup::new(egui::Id::unique("invalid-group"), "Invalid group", &theme)
                     .error("Must choose")
                     .show(ui, |ui| {
                         Select::new(
-                            egui::Id::new("invalid-field"),
+                            egui::Id::unique("invalid-field"),
                             "First",
                             "Choose",
                             &options,
@@ -175,11 +175,11 @@ fn a_valid_sibling_group_does_not_inherit_the_previous_error() {
                         )
                         .show(ui);
                     });
-                SelectGroup::new(egui::Id::new("valid-group"), "Valid group", &theme).show(
+                SelectGroup::new(egui::Id::unique("valid-group"), "Valid group", &theme).show(
                     ui,
                     |ui| {
                         let _ = Select::new(
-                            egui::Id::new("valid-field"),
+                            egui::Id::unique("valid-field"),
                             "Second",
                             "Choose",
                             &options,

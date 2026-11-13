@@ -27,27 +27,33 @@ fn view(ui: &mut egui::Ui, state: &mut State) {
     if anchor.clicked() {
         *open = !*open;
     }
-    PopoverMenu::new(egui::Id::new("actions-menu"), "Actions menu", open).show(
+    PopoverMenu::new(egui::Id::unique("actions-menu"), "Actions menu", open).show(
         &anchor,
         |ui, menu| {
             if *extra_item {
-                let _ = menu.item(ui, Item::new("Help", &theme).id(egui::Id::new("help")));
+                let _ = menu.item(ui, Item::new("Help", &theme).id(egui::Id::unique("help")));
             }
             let _ = menu.item(
                 ui,
                 Item::new("Archive", &theme)
-                    .id(egui::Id::new("archive"))
+                    .id(egui::Id::unique("archive"))
                     .enabled(false),
             );
             if menu
-                .item(ui, Item::new("Rename", &theme).id(egui::Id::new("rename")))
+                .item(
+                    ui,
+                    Item::new("Rename", &theme).id(egui::Id::unique("rename")),
+                )
                 .clicked()
             {
                 *activated = "rename";
                 ui.close();
             }
             if menu
-                .item(ui, Item::new("Delete", &theme).id(egui::Id::new("delete")))
+                .item(
+                    ui,
+                    Item::new("Delete", &theme).id(egui::Id::unique("delete")),
+                )
                 .clicked()
             {
                 *activated = "delete";

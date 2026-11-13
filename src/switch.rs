@@ -1,6 +1,6 @@
 //! Capsule and rail switches with spring-driven thumb travel.
 use crate::{Theme, Vesper};
-use egui::{FontId, Rect, Response, Sense, Stroke, Ui, Vec2, Widget, WidgetInfo, WidgetType};
+use egui::{FontId, Rect, Response, Role, Sense, Stroke, Ui, Vec2, Widget, WidgetInfo};
 
 /// Switch silhouette and thumb behavior.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -117,9 +117,8 @@ impl Widget for Switch<'_> {
             response.mark_changed();
             ui.ctx().request_repaint();
         }
-        response.widget_info(|| {
-            WidgetInfo::selected(WidgetType::Checkbox, enabled, *self.value, self.label)
-        });
+        response
+            .widget_info(|| WidgetInfo::selected(Role::CheckBox, enabled, *self.value, self.label));
         ui.ctx().accesskit_node_builder(response.id, |node| {
             node.set_role(egui::accesskit::Role::Switch);
             if let Some(description) = self.description {

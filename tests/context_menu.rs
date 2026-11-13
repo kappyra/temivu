@@ -177,7 +177,7 @@ fn egui_escape_also_surrenders_focus_without_a_menu() {
 
 #[test]
 fn action_can_redirect_focus_without_anchor_overriding_it() {
-    let destination = egui::Id::new("destination");
+    let destination = egui::Id::unique("destination");
     let mut harness = Harness::builder().build_ui(move |ui| {
         let anchor = ui.button("Target");
         context_menu(&anchor, |ui| {
@@ -190,9 +190,7 @@ fn action_can_redirect_focus_without_anchor_overriding_it() {
         });
         let (rect, _) = ui.allocate_exact_size(egui::vec2(90.0, 32.0), egui::Sense::hover());
         let other = ui.interact(rect, destination, egui::Sense::click());
-        other.widget_info(|| {
-            egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Destination")
-        });
+        other.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Destination"));
     });
     harness.run();
     harness.get_by_label("Target").focus();

@@ -11,9 +11,9 @@ use temivu::{Picker, PickerItem, Theme};
 fn example(ui: &mut egui::Ui, selected: &mut Option<egui::Id>) {
     let theme = Theme::light();
     let items = [
-        PickerItem::new(egui::Id::new("small"), "Small"),
-        PickerItem::new(egui::Id::new("medium"), "Medium"),
-        PickerItem::new(egui::Id::new("large"), "Large"),
+        PickerItem::new(egui::Id::unique("small"), "Small"),
+        PickerItem::new(egui::Id::unique("medium"), "Medium"),
+        PickerItem::new(egui::Id::unique("large"), "Large"),
     ];
     let output = Picker::new(selected, &items, &theme)
         .label("Size")

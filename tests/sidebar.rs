@@ -15,15 +15,15 @@ struct State {
 fn view(ui: &mut egui::Ui, state: &mut State) {
     let theme = Theme::light();
     let children = [
-        SidebarItem::new(egui::Id::new("settings"), "Settings"),
-        SidebarItem::new(egui::Id::new("members"), "Members").enabled(false),
+        SidebarItem::new(egui::Id::unique("settings"), "Settings"),
+        SidebarItem::new(egui::Id::unique("members"), "Members").enabled(false),
     ];
     let items = [
-        SidebarItem::new(egui::Id::new("inbox"), "Inbox").icon("▤"),
-        SidebarItem::new(egui::Id::new("projects"), "Projects").children(&children),
-        SidebarItem::new(egui::Id::new("trash"), "Trash").enabled(false),
+        SidebarItem::new(egui::Id::unique("inbox"), "Inbox").icon("="),
+        SidebarItem::new(egui::Id::unique("projects"), "Projects").children(&children),
+        SidebarItem::new(egui::Id::unique("trash"), "Trash").enabled(false),
     ];
-    let groups = [SidebarGroup::new(egui::Id::new("main"), &items).label("Main")];
+    let groups = [SidebarGroup::new(egui::Id::unique("main"), &items).label("Main")];
     let State {
         sidebar,
         selected,
@@ -31,9 +31,14 @@ fn view(ui: &mut egui::Ui, state: &mut State) {
         other,
     } = state;
     let _ = other;
-    let response = Sidebar::new(egui::Id::new("sidebar"), "Main navigation", &theme, sidebar)
-        .title("Workspace")
-        .show(ui, &groups, selected);
+    let response = Sidebar::new(
+        egui::Id::unique("sidebar"),
+        "Main navigation",
+        &theme,
+        sidebar,
+    )
+    .title("Workspace")
+    .show(ui, &groups, selected);
     if let Some(id) = response.selected {
         *activated = Some(id);
     }
@@ -87,8 +92,8 @@ fn pointer_activation_updates_caller_owned_selection() {
 
     harness.get_by_label("Inbox").click();
     harness.run();
-    assert_eq!(harness.state().selected, Some(egui::Id::new("inbox")));
-    assert_eq!(harness.state().activated, Some(egui::Id::new("inbox")));
+    assert_eq!(harness.state().selected, Some(egui::Id::unique("inbox")));
+    assert_eq!(harness.state().activated, Some(egui::Id::unique("inbox")));
     assert_eq!(
         harness
             .get_by_role_and_label(egui::accesskit::Role::TreeItem, "Inbox")
@@ -144,7 +149,7 @@ fn arrow_keys_move_focus_and_skip_disabled_entries() {
 
     harness.key_press(egui::Key::Enter);
     harness.run();
-    assert_eq!(harness.state().selected, Some(egui::Id::new("inbox")));
+    assert_eq!(harness.state().selected, Some(egui::Id::unique("inbox")));
 }
 
 #[test]
@@ -160,7 +165,7 @@ fn right_and_left_expand_and_collapse_an_entry_with_children() {
         harness
             .state()
             .sidebar
-            .is_expanded(egui::Id::new("projects"))
+            .is_expanded(egui::Id::unique("projects"))
     );
     harness.get_by_label("Settings");
     assert_eq!(
@@ -178,7 +183,7 @@ fn right_and_left_expand_and_collapse_an_entry_with_children() {
         !harness
             .state()
             .sidebar
-            .is_expanded(egui::Id::new("projects"))
+            .is_expanded(egui::Id::unique("projects"))
     );
     assert!(harness.query_by_label("Settings").is_none());
 }
@@ -210,26 +215,26 @@ fn narrow_windows_clamp_the_sidebar_inside_a_scaffold_slot() {
             |ui, state: &mut State| {
                 let theme = Theme::light();
                 let children = [
-                    SidebarItem::new(egui::Id::new("settings"), "Settings"),
-                    SidebarItem::new(egui::Id::new("members"), "Members").enabled(false),
+                    SidebarItem::new(egui::Id::unique("settings"), "Settings"),
+                    SidebarItem::new(egui::Id::unique("members"), "Members").enabled(false),
                 ];
                 let items = [
-                    SidebarItem::new(egui::Id::new("inbox"), "Inbox").icon("▤"),
-                    SidebarItem::new(egui::Id::new("projects"), "Projects").children(&children),
-                    SidebarItem::new(egui::Id::new("trash"), "Trash").enabled(false),
+                    SidebarItem::new(egui::Id::unique("inbox"), "Inbox").icon("="),
+                    SidebarItem::new(egui::Id::unique("projects"), "Projects").children(&children),
+                    SidebarItem::new(egui::Id::unique("trash"), "Trash").enabled(false),
                 ];
-                let groups = [SidebarGroup::new(egui::Id::new("main"), &items).label("Main")];
+                let groups = [SidebarGroup::new(egui::Id::unique("main"), &items).label("Main")];
                 let State {
                     sidebar, selected, ..
                 } = state;
-                Scaffold::new(egui::Id::new("app-shell"), &theme)
+                Scaffold::new(egui::Id::unique("app-shell"), &theme)
                     .sidebar(256.0)
                     .unwrap()
                     .show(
                         ui,
                         |ui| {
                             Sidebar::new(
-                                egui::Id::new("sidebar"),
+                                egui::Id::unique("sidebar"),
                                 "Main navigation",
                                 &theme,
                                 sidebar,

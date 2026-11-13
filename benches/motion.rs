@@ -7,7 +7,7 @@ use temivu::{Theme, motion::spring_f32};
 fn run(count: usize, animated: bool) -> f64 {
     let ctx = Context::default();
     let theme = Theme::light();
-    let ids: Vec<_> = (0..count).map(Id::new).collect();
+    let ids: Vec<_> = (0..count).map(Id::unique).collect();
     let frame = |index: i32| {
         let target = if animated && (index / 24) % 2 == 0 {
             1.0

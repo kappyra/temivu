@@ -10,23 +10,23 @@ let anchor = ui.button("Density");
 if anchor.clicked() {
     *open = !*open;
 }
-PopoverMenu::new(egui::Id::new("density-menu"), "Density menu", open).show(&anchor, |ui, menu| {
+PopoverMenu::new(egui::Id::unique("density-menu"), "Density menu", open).show(&anchor, |ui, menu| {
     if menu
         .select_menu_tile(
             ui,
             SelectMenuTile::new("Compact", theme)
-                .id(egui::Id::new("density-compact"))
-                .selected(*selected == Some(egui::Id::new("density-compact"))),
+                .id(egui::Id::unique("density-compact"))
+                .selected(*selected == Some(egui::Id::unique("density-compact"))),
         )
         .clicked()
     {
-        *selected = Some(egui::Id::new("density-compact"));
+        *selected = Some(egui::Id::unique("density-compact"));
         ui.close();
     }
     let _ = menu.select_menu_tile(
         ui,
         SelectMenuTile::new("Comfortable", theme)
-            .id(egui::Id::new("density-comfortable"))
+            .id(egui::Id::unique("density-comfortable"))
             .enabled(false),
     );
 });

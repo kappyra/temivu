@@ -312,7 +312,7 @@ fn menu_contents(
                     })
                     .inner;
                 response.widget_info(|| {
-                    egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, item.label)
+                    egui::WidgetInfo::labeled(egui::Role::Button, enabled, item.label)
                 });
                 let press = crate::motion_controls::press_amount(&response, theme);
                 let hover = crate::motion::animate_bool(
