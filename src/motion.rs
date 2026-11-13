@@ -1,7 +1,7 @@
 //! Shared motion clocks, physics, presets, and rendering helpers.
 #![doc = include_str!("../docs/MOTION.md")]
 use crate::theme::{Easing, MotionSettings, Theme};
-use egui::{Context, Id};
+use egui::{Context, Id, Response, Vec2};
 
 mod physics;
 mod track;
@@ -63,6 +63,77 @@ impl SpringPreset {
             Self::Responsive => (1.00, 0.72),
         };
         Spring::response(settings.normal * pace, damping)
+    }
+}
+
+/// Bounded drag offset with increasing resistance and a spring back to zero.
+/// The caller owns the drag response, layout, and painting.
+#[derive(Clone, Copy, Debug)]
+pub struct ElasticDrag {
+    travel: Vec2,
+    spring: SpringPreset,
+}
+
+impl ElasticDrag {
+    /// Set the maximum visual displacement in points along each axis.
+    pub fn new(travel: Vec2) -> Self {
+        let bound = |v: f32| if v.is_finite() { v.max(0.0) } else { 0.0 };
+        Self {
+            travel: egui::vec2(bound(travel.x), bound(travel.y)),
+            spring: SpringPreset::Bouncy,
+        }
+    }
+
+    /// Choose how the offset settles after release.
+    pub fn spring(mut self, spring: SpringPreset) -> Self {
+        self.spring = spring;
+        self
+    }
+
+    /// Read the current offset for a control with drag or click-and-drag sense.
+    /// Call once per frame with the same response ID. Reduced motion retains
+    /// the direct gesture and returns to zero immediately on release.
+    pub fn offset(self, response: &Response, settings: MotionSettings) -> Vec2 {
+        let id = response.id.with("elastic-drag");
+        let track = MotionTrack::new(&response.ctx, id, settings);
+        let clamp = |offset: Vec2| offset.clamp(-self.travel, self.travel);
+        if let Some(delta) = response.total_drag_delta() {
+            let origin_key = id.with("grab");
+            let origin = if response.drag_started() {
+                let origin = track
+                    .inspect::<Vec2, 2>()
+                    .map_or(Vec2::ZERO, |pose| clamp(pose.value));
+                response
+                    .ctx
+                    .data_mut(|data| data.insert_temp(origin_key, origin));
+                origin
+            } else {
+                response
+                    .ctx
+                    .data(|data| data.get_temp(origin_key))
+                    .unwrap_or(Vec2::ZERO)
+            };
+            let pull = |distance: f32, start: f32, limit: f32| {
+                start + rubber_band(distance, limit - start * distance.signum())
+            };
+            let offset = clamp(egui::vec2(
+                pull(delta.x, origin.x, self.travel.x),
+                pull(delta.y, origin.y, self.travel.y),
+            ));
+            // Keep the release anchored at the last displayed pose. A fast
+            // outward gesture cannot launch the control past its visual bounds.
+            track.follow(offset, [0.0; 2]);
+            return offset;
+        }
+        clamp(
+            track
+                .sample(
+                    Vec2::ZERO,
+                    Vec2::ZERO,
+                    MotionSpec::Spring(self.spring.spring(settings)),
+                )
+                .value,
+        )
     }
 }
 

@@ -3,6 +3,16 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
+## [0.1.6] - 2026-11-13
+
+- Refined Frost, Soft Prism and Prism with smooth backdrop filtering and
+  distinct optical treatments. Multiple materials can share a frame or nest.
+- Updated Glass Studio with a shared photographic backdrop and elastic
+  samples. Added the reusable `motion::ElasticDrag` API.
+- Improved page-edge bounce for touch and trackpads, and added slide selection
+  for menu rows and button groups.
+- Made Vesper's contact light easier to see on pale surfaces.
+
 ## [0.1.5] - 2026-11-13
 
 - Updated egui, eframe, and egui_kittest to 0.37.0.

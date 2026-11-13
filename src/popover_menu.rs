@@ -1,6 +1,6 @@
 //! Preliminary popover menu. Submenus, scrolling, hover-to-focus and full
 //! parity remain open.
-use crate::{Item, Popover, SelectMenuTile};
+use crate::{Item, Popover, SelectMenuTile, SlideSelect};
 use egui::{Id, Response, Ui};
 
 /// The items drawn in a [`PopoverMenu`], in reading order.
@@ -10,6 +10,7 @@ use egui::{Id, Response, Ui};
 #[derive(Default)]
 pub struct MenuItems {
     first_enabled: Option<Response>,
+    slide: Option<SlideSelect>,
 }
 
 impl MenuItems {
@@ -23,7 +24,7 @@ impl MenuItems {
     /// item to dismiss the menu.
     pub fn item(&mut self, ui: &mut Ui, item: Item<'_>) -> Response {
         let enabled = item.is_enabled();
-        let response = item.show(ui);
+        let response = item.menu_slide(self.slide).flat(true).show(ui);
         ui.ctx().accesskit_node_builder(response.id, |node| {
             node.set_role(egui::accesskit::Role::MenuItem);
         });
@@ -39,7 +40,7 @@ impl MenuItems {
     /// [`Response::clicked`] and call [`Ui::close`] after acting on it.
     pub fn select_menu_tile(&mut self, ui: &mut Ui, tile: SelectMenuTile<'_>) -> Response {
         let enabled = tile.is_enabled();
-        let response = tile.show(ui);
+        let response = tile.menu_slide(self.slide).show(ui);
         if enabled && self.first_enabled.is_none() {
             self.first_enabled = Some(response.clone());
         }
@@ -129,7 +130,10 @@ impl<'a> PopoverMenu<'a> {
             frame,
             theme,
         } = self;
-        let mut items = MenuItems::new();
+        let mut items = MenuItems {
+            slide: Some(SlideSelect::new(id)),
+            ..MenuItems::default()
+        };
         let popup = Popover::new(id, label, open)
             .focus_on_open(true)
             .match_compact_trigger();

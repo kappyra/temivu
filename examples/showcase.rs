@@ -1862,10 +1862,23 @@ impl Showcase {
 }
 
 impl eframe::App for Showcase {
-    #[cfg(target_os = "android")]
-    fn raw_input_hook(&mut self, ctx: &egui::Context, input: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, input: &mut egui::RawInput) {
+        #[cfg(target_os = "android")]
         if let Some(app) = &self.android_app {
-            input.safe_area_insets = super::safe_area(app, ctx, input);
+            input.safe_area_insets = super::safe_area(app, _ctx, input);
+        }
+        // Winit does not identify the source of pixel deltas on some desktops.
+        // Leave line/page deltas and explicitly classified mouse wheels alone.
+        for event in &mut input.events {
+            if let egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                source,
+                ..
+            } = event
+                && *source == egui::MouseWheelSource::Unknown
+            {
+                *source = egui::MouseWheelSource::Trackpad;
+            }
         }
     }
 
@@ -2077,7 +2090,10 @@ impl eframe::App for Showcase {
                     let header_bottom =
                         ui.ctx().content_rect().top() + if theme.touch { 76.0 } else { 68.0 };
                     let header_clearance = (header_bottom - ui.next_widget_position().y).max(0.0);
+                    let viewport_height = ui.available_height();
+                    let elastic = !self.reduced_motion;
                     egui::ScrollArea::vertical()
+                        .scroll_source(egui::scroll_area::ScrollSource::ALL)
                         .id_salt(
                             current
                                 .id()
@@ -2117,6 +2133,10 @@ impl eframe::App for Showcase {
                                 );
                             });
                             ui.add_space(FloatingNavigation::BOTTOM_CLEARANCE);
+                            if elastic {
+                                // egui enables edge bounce only on scrollable axes.
+                                ui.set_min_height(viewport_height.ceil() + 2.0);
+                            }
                         });
                 },
             );

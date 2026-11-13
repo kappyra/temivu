@@ -1,6 +1,6 @@
 use egui_kittest::Harness;
 use egui_kittest::kittest::{NodeT, Queryable};
-use temivu::{Button, ButtonSize, InputMode, Theme};
+use temivu::{Button, ButtonSize, ButtonVariant, InputMode, SlideSelect, Theme};
 
 #[test]
 fn button_clicks_and_disabled_does_not_click() {
@@ -33,6 +33,48 @@ fn button_clicks_and_disabled_does_not_click() {
     disabled.get_by_label("Disabled").click();
     disabled.run();
     assert!(!*disabled.state());
+}
+
+#[test]
+fn grouped_buttons_activate_only_the_target_on_release() {
+    let mut harness = Harness::builder().build_ui_state(
+        |ui, actions: &mut Vec<&'static str>| {
+            let theme = Theme::light();
+            let group = SlideSelect::new(ui.scope_id().with("actions"));
+            for label in ["First", "Middle", "Last"] {
+                if Button::new(label, &theme)
+                    .variant(ButtonVariant::Ghost)
+                    .slide_select(group)
+                    .show(ui)
+                    .clicked()
+                {
+                    actions.push(label);
+                }
+            }
+        },
+        Vec::new(),
+    );
+    harness.run();
+    let primary = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    let first = harness.get_by_label("First").rect().center();
+    let middle = harness.get_by_label("Middle").rect().center();
+    let last = harness.get_by_label("Last").rect().center();
+    harness.event(egui::Event::PointerMoved(first));
+    harness.event(primary(first, true));
+    harness.step();
+    for pos in [last, middle] {
+        harness.event(egui::Event::PointerMoved(pos));
+        harness.step();
+        assert!(harness.state().is_empty());
+    }
+    harness.event(primary(middle, false));
+    harness.run();
+    assert_eq!(harness.state(), &["Middle"]);
 }
 
 #[test]

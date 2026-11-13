@@ -76,3 +76,50 @@ fn both_presentations_select_and_dismiss_with_escape() {
         );
     }
 }
+
+#[test]
+fn floating_menu_commits_the_row_under_a_held_touch_on_release() {
+    let mut harness = build(MenuPresentation::Floating);
+    harness.get_by_label("Open navigation").click();
+    harness.run();
+    let center = |harness: &Harness<'_, _>, label: &str| {
+        harness
+            .get_by_role_and_label(egui::Role::MenuItem, label)
+            .rect()
+            .center()
+    };
+    let touch = |pos, phase| egui::Event::Touch {
+        device_id: egui::TouchDeviceId(0),
+        id: egui::TouchId(1),
+        phase,
+        pos,
+        force: None,
+    };
+    let primary = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    for (destination, selected) in [("Locked", None), ("Settings", Some("settings"))] {
+        let origin = center(&harness, "Home");
+        let target = center(&harness, destination);
+        harness.event(egui::Event::PointerMoved(origin));
+        harness.event(touch(origin, egui::TouchPhase::Start));
+        harness.event(primary(origin, true));
+        harness.step();
+        harness.event(egui::Event::PointerMoved(target));
+        harness.event(touch(target, egui::TouchPhase::Move));
+        harness.step();
+        assert!(harness.state().0);
+        assert_eq!(harness.state().1, None);
+        harness.input_mut().events.extend([
+            touch(target, egui::TouchPhase::End),
+            primary(target, false),
+            egui::Event::PointerGone,
+        ]);
+        harness.run();
+        assert_eq!(harness.state().1, selected.map(egui::Id::unique));
+        assert_eq!(harness.state().0, selected.is_none());
+    }
+}

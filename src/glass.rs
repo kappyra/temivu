@@ -19,6 +19,8 @@ pub struct Glass {
 pub enum GlassMode {
     /// Even backdrop diffusion with a translucent matte tint.
     Frost,
+    /// A softer, lightly tinted lens with a satin finish.
+    SoftPrism,
     /// Optical glass with a clearer core and a refracting bevel.
     #[default]
     Prism,
@@ -100,13 +102,19 @@ impl Glass {
         Self::default().with_tint(tint)
     }
 
-    /// Prism with the softer diffusion and restrained bevel of the earlier material.
+    /// Diffuse backdrop glass with a matte surface.
+    pub fn frost() -> Self {
+        Self::new(0.24).mode(GlassMode::Frost)
+    }
+
+    /// Clear optical glass with a polished, refracting rim.
+    pub fn prism() -> Self {
+        Self::new(0.22)
+    }
+
+    /// Optical glass with more diffusion and a softer, milkier finish.
     pub fn soft_prism() -> Self {
-        Self::new(0.28).with_tuning(GlassTuning {
-            blur: 1.4,
-            refraction: 0.60,
-            rim: 0.68,
-        })
+        Self::new(0.28).mode(GlassMode::SoftPrism)
     }
 
     /// Set the tint between zero and one while retaining the current material.
@@ -187,7 +195,9 @@ impl Glass {
 
     /// Wrap arbitrary content in a glass frame. Use an egui `Area` or overlay
     /// to float the frame above other content. The caller owns placement,
-    /// spacing, shape, and interaction.
+    /// spacing, shape, and interaction. Choose a material per surface. Nest
+    /// calls to place a lens inside a frosted surface. The inner glass samples
+    /// the outer material with a live renderer installed.
     pub fn show<R>(
         self,
         ui: &mut egui::Ui,
@@ -269,7 +279,14 @@ impl Glass {
             let band = (rect.size().min_elem() * 0.26).min(18.0);
             let bend = match self.mode {
                 GlassMode::Frost => 0.0,
-                GlassMode::Prism => band * (1.0 - 0.5 * self.tint) * 1.10 * self.tuning.refraction,
+                GlassMode::SoftPrism | GlassMode::Prism => {
+                    let lens = if self.mode == GlassMode::SoftPrism {
+                        0.92
+                    } else {
+                        1.28
+                    };
+                    band * (1.0 - 0.5 * self.tint) * lens * self.tuning.refraction
+                }
             };
             let feather = (band * 0.25).min(1.0);
             for (inset, offset, alpha) in [
@@ -341,9 +358,10 @@ impl Glass {
         }
         let [r, g, b, alpha] = frame.fill.to_srgba_unmultiplied();
         let minimum = match (self.mode, has_backdrop) {
-            (GlassMode::Frost, true) => 0.57,
-            (GlassMode::Prism, true) => 0.44,
-            (GlassMode::Frost, false) => 0.91,
+            (GlassMode::Frost, true) => 0.40,
+            (GlassMode::SoftPrism, true) => 0.40,
+            (GlassMode::Prism, true) => 0.24,
+            (GlassMode::Frost | GlassMode::SoftPrism, false) => 0.91,
             (GlassMode::Prism, false) => 0.85,
         };
         let opacity = egui::lerp(minimum..=1.0, self.tint);
@@ -352,15 +370,17 @@ impl Glass {
         if frame.stroke.width > 0.0 {
             let edge = match (self.mode, theme.dark) {
                 (GlassMode::Frost, true) => Color32::from_white_alpha(16),
+                (GlassMode::SoftPrism, true) => Color32::from_white_alpha(33),
                 (GlassMode::Prism, true) => Color32::from_white_alpha(49),
                 (GlassMode::Frost, false) => Color32::from_black_alpha(12),
+                (GlassMode::SoftPrism, false) => Color32::from_black_alpha(19),
                 (GlassMode::Prism, false) => Color32::from_black_alpha(30),
             };
             frame.stroke = Stroke::new(frame.stroke.width, edge.gamma_multiply(self.tuning.rim));
         }
         let shadow = match self.mode {
             GlassMode::Frost => 0.55,
-            GlassMode::Prism => 0.65,
+            GlassMode::SoftPrism | GlassMode::Prism => 0.65,
         };
         frame.shadow.color = frame.shadow.color.gamma_multiply(shadow);
         frame

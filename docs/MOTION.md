@@ -38,6 +38,28 @@ Leave hit targets at their logical positions. Existing `spring_*`,
 `animate_*` and Droplet helpers keep their signatures. Code that passed
 ratios above one to the legacy spring helpers now gets actual overdamping.
 
+## Elastic drag
+
+`ElasticDrag` takes an egui drag response and returns a bounded visual offset.
+Resistance increases as the pointer moves farther from the starting point.
+On release the offset springs back to zero. Choose the per-axis travel and
+optionally change the spring preset. The Glass Studio uses this API for each
+sample. Reduced motion returns the surface immediately on release.
+
+```rust
+use temivu::{Theme, motion::{ElasticDrag, SpringPreset}};
+
+fn elastic_tile(ui: &mut egui::Ui, theme: &Theme) {
+    let (space, _) = ui.allocate_exact_size(egui::vec2(180.0, 104.0), egui::Sense::hover());
+    let home = egui::Rect::from_center_size(space.center(), egui::vec2(100.0, 44.0));
+    let grip = ui.interact(home, ui.make_persistent_id("elastic tile"), egui::Sense::drag());
+    let offset = ElasticDrag::new(egui::vec2(36.0, 26.0))
+        .spring(SpringPreset::Bouncy)
+        .offset(&grip, theme.motion);
+    ui.painter().rect_filled(home.translate(offset), 16, theme.primary);
+}
+```
+
 ## Rhythm and accessibility
 
 | Role | Treatment |

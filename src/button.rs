@@ -1,5 +1,5 @@
 //! A first, intentionally incomplete port of Forui's button.
-use crate::{Sizes, SurfaceShape, Theme, Vesper};
+use crate::{Sizes, SlideSelect, SurfaceShape, Theme, Vesper};
 use egui::{Color32, Response, RichText, Stroke, Ui, Vec2};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -71,6 +71,7 @@ pub struct Button<'a> {
     icon: Option<&'a str>,
     radius: Option<u8>,
     lighting: Option<Option<Vesper>>,
+    slide: Option<SlideSelect>,
 }
 
 impl<'a> Button<'a> {
@@ -89,6 +90,7 @@ impl<'a> Button<'a> {
             icon: None,
             radius: None,
             lighting: None,
+            slide: None,
         }
     }
     pub fn variant(mut self, variant: ButtonVariant) -> Self {
@@ -123,6 +125,12 @@ impl<'a> Button<'a> {
     /// Override the inherited lighting. Pass `None` to disable it for this button.
     pub fn lighting(mut self, lighting: Option<Vesper>) -> Self {
         self.lighting = Some(lighting);
+        self
+    }
+
+    /// Allow a held press to move between buttons sharing the same group.
+    pub fn slide_select(mut self, group: SlideSelect) -> Self {
+        self.slide = Some(group);
         self
     }
 
@@ -196,17 +204,18 @@ impl<'a> Button<'a> {
             && previous.is_some_and(|(rect, id)| {
                 let focused = ui.memory(|memory| memory.has_focus(id));
                 let pointer_over = ui.rect_contains_pointer(rect);
-                ui.input(|input| {
-                    (pointer_over
-                        && input.pointer.primary_down()
-                        && input
-                            .pointer
-                            .press_origin()
-                            .is_some_and(|pos| rect.contains(pos)))
-                        || (focused
-                            && (input.key_down(egui::Key::Space)
-                                || input.key_down(egui::Key::Enter)))
-                })
+                self.slide.is_some_and(|group| group.is_previewed(ui, rect))
+                    || ui.input(|input| {
+                        (pointer_over
+                            && input.pointer.primary_down()
+                            && input
+                                .pointer
+                                .press_origin()
+                                .is_some_and(|pos| rect.contains(pos)))
+                            || (focused
+                                && (input.key_down(egui::Key::Space)
+                                    || input.key_down(egui::Key::Enter)))
+                    })
             });
         let tapped = self.enabled
             && ui.is_enabled()
@@ -229,9 +238,14 @@ impl<'a> Button<'a> {
             .frame(true)
             .corner_radius(radius)
             .min_size(Vec2::splat(height));
+        let button = if self.slide.is_some() {
+            button.sense(egui::Sense::click_and_drag())
+        } else {
+            button
+        };
         let center = previous.map_or(egui::Pos2::ZERO, |(rect, _)| rect.center());
         let transform = crate::motion::scale_around(center, crate::motion::press_scale(press));
-        let response = ui
+        let mut response = ui
             .with_visual_transform(transform, |ui| {
                 ui.spacing_mut().interact_size.y = height;
                 ui.spacing_mut().button_padding = self.size.padding(self.input);
@@ -290,6 +304,14 @@ impl<'a> Button<'a> {
                 response
             })
             .inner;
+        if self
+            .slide
+            .is_some_and(|group| group.row(ui, &response).released)
+        {
+            response
+                .flags
+                .insert(egui::response::Flags::FAKE_PRIMARY_CLICKED);
+        }
         ui.ctx()
             .data_mut(|data| data.insert_temp(press_key, (response.rect, response.id)));
         let painted = transform.mul_rect(response.rect);
@@ -310,7 +332,7 @@ impl<'a> Button<'a> {
         let attention = crate::motion::animate_bool(
             ui.ctx(),
             response.id.with("hover-ring"),
-            response.hovered() && self.enabled,
+            response.hovered() && self.enabled && self.variant != ButtonVariant::Ghost,
             self.theme,
         );
         let ring = if response.has_focus() {

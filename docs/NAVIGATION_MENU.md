@@ -23,6 +23,15 @@ Call `show` every frame, including when closed. The trigger toggles the menu. Se
 
 `Close`, Escape and selection dismiss the menu. Outside clicks dismiss through egui's modal/popover handling. Keyboard Up/Down skips disabled destinations, Tab traverses controls and focus returns to the trigger after dismissal. egui supplies touch/pointer input. The drawer expands from the edge and the floating surface expands from its trigger. Both use Droplet by default and replay paint while closing. Reduced motion snaps both.
 
+Floating menu rows are borderless at rest. Press a row, slide to another and
+release to choose it. Long navigation lists reserve the gesture for scrolling.
+Use `NavigationMenu::select_on_drag(false)` to turn off slide selection.
+`PopoverMenu` also supports press-and-slide rows. For a group of standalone
+buttons, pass the same `SlideSelect::new(stable_id)` to each
+`Button::slide_select`. Read the result with `Response::clicked()` as usual.
+For custom controls, use click-and-drag sense and call `SlideSelect::row`
+to read preview and release separately.
+
 `NavigationMenu::frame(egui::Frame)` overrides padding, corners, shadow, border and fill without introducing a separate styling language. The same egui implementation is used across targets. Tests cover drawer, full-screen and floating presentations in a narrow viewport, selection, disabled semantics and Escape/focus restoration. Native mobile deployment and assistive-device testing remain separate work.
 
 Demo: `cargo run --features demo --example showcase -- --menu` or `--island`; combine with `--mobile` for a narrow preview.

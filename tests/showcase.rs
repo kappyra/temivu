@@ -976,3 +976,75 @@ fn touch_overscroll_resists_drag_and_returns_to_edge() {
     }
     assert!((heading(&harness) - initial).abs() < 1.0);
 }
+
+#[test]
+fn page_end_bounces_on_trackpad_and_touch_and_settles() {
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(390.0, 660.0))
+        .build_ui_state(
+            |ui, app: &mut showcase::Showcase| {
+                app.ui(ui, &mut eframe::Frame::_new_kittest());
+            },
+            showcase::Showcase::default(),
+        );
+    let pos = egui::pos2(40.0, 360.0);
+    let scroll = |delta: f32, phase| egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, delta),
+        phase,
+        source: egui::MouseWheelSource::Trackpad,
+        modifiers: egui::Modifiers::NONE,
+    };
+    let marker = |h: &Harness<'_, _>| h.get_by_label("Connected surfaces").rect().top();
+    harness.event(egui::Event::PointerMoved(pos));
+    harness.run_steps(4);
+    harness.event(scroll(0.0, egui::TouchPhase::Start));
+    harness.event(scroll(-10000.0, egui::TouchPhase::Move));
+    harness.event(scroll(0.0, egui::TouchPhase::End));
+    harness.run_steps(90);
+    let resting = marker(&harness);
+    harness.event(scroll(0.0, egui::TouchPhase::Start));
+    harness.event(scroll(-110.0, egui::TouchPhase::Move));
+    harness.run_steps(4);
+    assert!(marker(&harness) < resting - 10.0);
+    harness.event(scroll(0.0, egui::TouchPhase::End));
+    harness.run_steps(90);
+    assert!((marker(&harness) - resting).abs() < 1.0);
+
+    let start = egui::pos2(32.0, 525.0);
+    let touch = |pos, phase| egui::Event::Touch {
+        device_id: egui::TouchDeviceId(0),
+        id: egui::TouchId(1),
+        phase,
+        pos,
+        force: None,
+    };
+    let primary = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    harness.event(egui::Event::PointerMoved(start));
+    harness.event(touch(start, egui::TouchPhase::Start));
+    harness.step();
+    harness.event(primary(start, true));
+    harness.step();
+    for distance in [60.0, 120.0, 180.0] {
+        let pos = start - egui::vec2(0.0, distance);
+        harness.event(egui::Event::PointerMoved(pos));
+        harness.event(touch(pos, egui::TouchPhase::Move));
+        harness.run_steps(2);
+    }
+    let pulled = marker(&harness);
+    assert!(
+        pulled < resting - 10.0 && pulled > resting - 180.0,
+        "bottom pull should move the content with resistance: {resting} to {pulled}"
+    );
+    let end = start - egui::vec2(0.0, 180.0);
+    harness.event(touch(end, egui::TouchPhase::End));
+    harness.event(primary(end, false));
+    harness.event(egui::Event::PointerGone);
+    harness.run_steps(90);
+    assert!((marker(&harness) - resting).abs() < 1.0);
+}

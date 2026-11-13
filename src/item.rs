@@ -1,5 +1,5 @@
 //! Textual item port; rich content, grouping and full style parity remain open.
-use crate::{Theme, Vesper};
+use crate::{SlideSelect, Theme, Vesper};
 use egui::{
     Color32, FontId, Galley, Response, Role, Sense, Stroke, StrokeKind, TextFormat, Ui, Vec2,
     WidgetInfo, text::LayoutJob,
@@ -77,6 +77,7 @@ pub struct Item<'a> {
     id: Option<egui::Id>,
     appearance: Option<ItemAppearance>,
     flat: bool,
+    slide: Option<SlideSelect>,
     radius: Option<u8>,
     lighting: Option<Option<Vesper>>,
 }
@@ -94,6 +95,7 @@ impl<'a> Item<'a> {
             id: None,
             appearance: None,
             flat: false,
+            slide: None,
             radius: None,
             lighting: None,
         }
@@ -157,6 +159,11 @@ impl<'a> Item<'a> {
     /// Replace the resolved appearance; used by the tile port.
     pub(crate) fn appearance(mut self, appearance: ItemAppearance) -> Self {
         self.appearance = Some(appearance);
+        self
+    }
+
+    pub(crate) fn menu_slide(mut self, slide: Option<SlideSelect>) -> Self {
+        self.slide = slide;
         self
     }
 
@@ -239,12 +246,21 @@ impl<'a> Item<'a> {
                 .as_ref()
                 .map_or(0.0, |galley| title_spacing + galley.size().y);
         let height = (2.0 * appearance.content_padding.y + text_height).max(appearance.min_height);
-        let sense = if enabled {
-            Sense::click()
-        } else {
-            Sense::hover()
+        let sense = match (enabled, self.slide.is_some()) {
+            (false, _) => Sense::hover(),
+            (true, false) => Sense::click(),
+            (true, true) => Sense::click_and_drag(),
         };
-        let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), sense);
+        let (rect, mut response) = ui.allocate_exact_size(Vec2::new(width, height), sense);
+        let slide = self
+            .slide
+            .filter(|_| enabled)
+            .map_or_else(Default::default, |group| group.row(ui, &response));
+        if slide.released {
+            response
+                .flags
+                .insert(egui::response::Flags::FAKE_PRIMARY_CLICKED);
+        }
         response
             .widget_info(|| WidgetInfo::selected(Role::Button, enabled, self.selected, self.title));
         ui.ctx().accesskit_node_builder(response.id, |node| {
@@ -261,7 +277,10 @@ impl<'a> Item<'a> {
                 egui::pos2(rect.right() - appearance.outer_margin, rect.bottom()),
             );
             let active = enabled
-                && (self.selected || response.hovered() || response.is_pointer_button_down_on());
+                && (self.selected
+                    || response.hovered()
+                    || slide.previewed
+                    || (self.slide.is_none() && response.is_pointer_button_down_on()));
             let amount = crate::motion::spring_bool(
                 ui.ctx(),
                 response.id.with("item-selection"),
@@ -269,7 +288,11 @@ impl<'a> Item<'a> {
                 theme,
             )
             .clamp(0.0, 1.0);
-            let press = crate::motion_controls::press_amount(&response, theme);
+            let press = if self.slide.is_some() {
+                crate::motion_controls::press_amount_with_hold(&response, theme, slide.previewed)
+            } else {
+                crate::motion_controls::press_amount(&response, theme)
+            };
             let visual = container.scale_from_center(1.0 - 0.028 * press);
             let radius = self.radius.unwrap_or(appearance.corner_radius as u8);
             let fill = egui::Color32::from(

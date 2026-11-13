@@ -26,6 +26,7 @@ void main() {
 
     // Frost samples the evenly blurred backdrop. Prism uses the normal of
     // the same rounded silhouette for a continuous, single-sample lens.
+    vec2 bend = vec2(0.0);
     float shade = 0.0;
     float specular = 0.0;
     if (u_effect.x > 0.0 || u_effect.z > 0.0) {
@@ -39,19 +40,30 @@ void main() {
             vec2 side_normal = edge.x > edge.y ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
             vec2 normal = arc_distance > 0.001 ? max(edge, vec2(0.0)) / arc_distance : side_normal;
             normal *= mix(vec2(-1.0), vec2(1.0), step(vec2(0.0), local));
-            float displacement = min(u_effect.x, half_side * 0.72);
-            point += normal * displacement * bevel * (0.65 + 0.35 * bevel);
+            float displacement = min(u_effect.x, half_side * 0.80);
+            bend = normal * displacement * bevel * (0.66 + 0.34 * bevel);
+            point += bend;
             float facing = dot(normal, vec2(-0.6, 0.8));
             float rim = 1.0 - smoothstep(0.0, depth * 0.26, inset);
             float key = max(facing, 0.0);
-            shade = rim * u_effect.z * (0.12 + 0.17 * max(-facing, 0.0));
-            specular = rim * u_effect.z * (0.37 * key * key + 0.08 * bevel);
+            shade = rim * u_effect.z * (0.06 + 0.10 * max(-facing, 0.0));
+            specular = u_effect.z * (rim * (0.24 * key * key + 0.04)
+                + 0.065 * bevel * key);
         }
     }
 
     vec2 texel = (point - u_capture.xy) * u_capture.zw;
     vec2 uv = clamp(texel, vec2(0.5), u_texels.xy - 0.5) / u_texels.zw;
     vec3 scene = texture(u_texture, uv).rgb;
+    // Keep dispersion near the bevel and below the width of a thin rim.
+    // The center uses a single read and stays clear.
+    if (dot(bend, bend) > 1.0) {
+        vec2 dispersion = bend * u_capture.zw / u_texels.zw * (0.055 * u_effect.z);
+        vec2 low = vec2(0.5) / u_texels.zw;
+        vec2 high = (u_texels.xy - 0.5) / u_texels.zw;
+        scene.r = texture(u_texture, clamp(uv - dispersion, low, high)).r;
+        scene.b = texture(u_texture, clamp(uv + dispersion, low, high)).b;
+    }
     vec3 color = mix(scene * (1.0 - shade), vec3(1.0), specular);
     float alpha = mask * u_strength;
     pixel = vec4(color * alpha, alpha);

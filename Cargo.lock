@@ -2469,12 +2469,13 @@ dependencies = [
 
 [[package]]
 name = "temivu"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "android-activity",
  "eframe",
  "egui",
  "egui_kittest",
+ "image",
 ]
 
 [[package]]

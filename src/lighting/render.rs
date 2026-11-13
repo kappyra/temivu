@@ -41,11 +41,13 @@ impl Ink {
             return light;
         }
         let shade = (f32::from(255 - light.a()) * (shadow * self.pale).min(0.24)).round() as u8;
+        // A cool, pale reflection stays visible on white without a black halo.
+        let reflection = Color32::from_rgb(160, 187, 213).gamma_multiply(f32::from(shade) / 255.0);
         Color32::from_rgba_premultiplied(
-            light.r(),
-            light.g(),
-            light.b(),
-            light.a().saturating_add(shade),
+            light.r().saturating_add(reflection.r()),
+            light.g().saturating_add(reflection.g()),
+            light.b().saturating_add(reflection.b()),
+            light.a().saturating_add(reflection.a()),
         )
     }
 }
@@ -626,9 +628,8 @@ mod tests {
         let on_dark = Ink::new(None, dark, white).color(0.2, 0.1);
         assert_eq!(on_dark.r(), on_dark.a());
         assert!(on_pale.a() > on_dark.a());
-        assert_eq!(on_pale.r(), on_dark.r());
-        assert_eq!(on_pale.r(), on_pale.g());
-        assert_eq!(on_pale.g(), on_pale.b());
+        assert!(on_pale.r() > on_dark.r());
+        assert!(on_pale.r() < on_pale.g() && on_pale.g() < on_pale.b());
 
         let amber = Color32::from_rgb(252, 219, 180);
         assert_eq!(
@@ -664,8 +665,8 @@ mod tests {
             })
             .unwrap()
             .1;
-        assert!(on_white.iter().any(|(_, value)| *value <= 220));
-        assert!(on_white.iter().any(|(_, value)| *value + 12 <= center));
+        assert!(on_white.iter().any(|(_, value)| *value <= 240));
+        assert!(on_white.iter().any(|(_, value)| *value + 4 <= center));
         assert!(
             on_white
                 .iter()

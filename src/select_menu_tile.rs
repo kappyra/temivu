@@ -88,6 +88,11 @@ impl<'a> SelectMenuTile<'a> {
         self.item.is_selected()
     }
 
+    pub(crate) fn menu_slide(mut self, slide: Option<crate::SlideSelect>) -> Self {
+        self.item = self.item.menu_slide(slide).flat(true);
+        self
+    }
+
     /// Shows the row and returns its response.
     ///
     /// The row uses Forui's tile appearance: card background, 1-point border,

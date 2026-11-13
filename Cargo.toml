@@ -1,6 +1,6 @@
 [package]
 name = "temivu"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
@@ -15,8 +15,14 @@ egui_kittest = "=0.37.0"
 
 [features]
 default = []
-demo = ["dep:eframe"]
+demo = ["dep:eframe", "dep:image"]
 android-showcase = ["demo", "dep:android-activity", "eframe/android-native-activity"]
+
+[dependencies.image]
+version = "=0.25.10"
+optional = true
+default-features = false
+features = ["png"]
 
 [dependencies.eframe]
 version = "=0.37.0"

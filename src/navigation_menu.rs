@@ -1,5 +1,8 @@
 //! Responsive navigation surfaces using egui's modal/popover focus and dismissal.
-use crate::{Button, ButtonVariant, Dialog, NavigationItem, Popover, SurfaceShape, Theme, Vesper};
+use crate::{
+    Button, ButtonVariant, Dialog, NavigationItem, Popover, SlideSelect, SurfaceShape, Theme,
+    Vesper,
+};
 use egui::{Id, Rect, Response, Sense, Stroke, Ui, Vec2, pos2, vec2};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -25,6 +28,7 @@ pub struct NavigationMenu<'a> {
     frame: Option<egui::Frame>,
     liquid: Option<crate::liquid::LiquidStyle>,
     lighting: Option<Option<Vesper>>,
+    select_on_drag: bool,
 }
 
 impl<'a> NavigationMenu<'a> {
@@ -39,6 +43,7 @@ impl<'a> NavigationMenu<'a> {
             frame: None,
             liquid: None,
             lighting: None,
+            select_on_drag: true,
         }
     }
     /// Override the context's popup/window animation preset.
@@ -64,6 +69,13 @@ impl<'a> NavigationMenu<'a> {
     /// Override the inherited Vesper material for menu destinations.
     pub fn lighting(mut self, lighting: Option<Vesper>) -> Self {
         self.lighting = Some(lighting);
+        self
+    }
+
+    /// Preview adjacent destinations while pressing and activate on release.
+    /// Long menus reserve touch dragging for scrolling.
+    pub fn select_on_drag(mut self, enabled: bool) -> Self {
+        self.select_on_drag = enabled;
         self
     }
 
@@ -145,6 +157,7 @@ impl<'a> NavigationMenu<'a> {
                         selected: *selected,
                         lighting,
                         drawer,
+                        select_on_drag: self.select_on_drag,
                     },
                     &mut chosen,
                     if drawer {
@@ -176,6 +189,7 @@ impl<'a> NavigationMenu<'a> {
                             selected: *selected,
                             lighting,
                             drawer: false,
+                            select_on_drag: self.select_on_drag,
                         },
                         &mut chosen,
                         (viewport.height() - 112.0).clamp(44.0, 440.0),
@@ -203,6 +217,7 @@ struct MenuContent<'a> {
     selected: Option<Id>,
     lighting: Option<Vesper>,
     drawer: bool,
+    select_on_drag: bool,
 }
 
 fn menu_contents(
@@ -219,6 +234,7 @@ fn menu_contents(
         selected,
         lighting,
         drawer,
+        select_on_drag,
     } = view;
     let top = ui.next_widget_position().y;
     let close = ui
@@ -270,12 +286,16 @@ fn menu_contents(
         (true, false) | (false, true) => 48.0,
         (false, false) => 42.0,
     };
+    let row_gap = if drawer { 8.0 } else { 1.0 };
+    let wrap_height = ui.text_style_height(&egui::TextStyle::Body) * 2.0 + 14.0;
+    let fits = (min_height.max(wrap_height) + row_gap) * items.len() as f32 <= max_height;
+    let slide = (select_on_drag && fits).then(|| SlideSelect::new(id));
     egui::ScrollArea::vertical()
         .id_salt(id.with("destinations"))
         .max_height(max_height)
         .auto_shrink([false, true])
         .show(ui, |ui| {
-            ui.spacing_mut().item_spacing.y = if drawer { 8.0 } else { 1.0 };
+            ui.spacing_mut().item_spacing.y = row_gap;
             let rtl = ui.layout().prefer_right_to_left();
             let has_icons = items.iter().any(|item| item.icon.is_some());
             for item in items {
@@ -308,17 +328,32 @@ fn menu_contents(
                     .0;
                 let response = ui
                     .add_enabled_ui(enabled, |ui| {
-                        ui.interact(rect, id.with(item.id), Sense::click())
+                        let sense = if slide.is_some() {
+                            Sense::click_and_drag()
+                        } else {
+                            Sense::click()
+                        };
+                        ui.interact(rect, id.with(item.id), sense)
                     })
                     .inner;
                 response.widget_info(|| {
                     egui::WidgetInfo::labeled(egui::Role::Button, enabled, item.label)
                 });
-                let press = crate::motion_controls::press_amount(&response, theme);
+                let slide_state =
+                    slide.map_or_else(Default::default, |group| group.row(ui, &response));
+                let press = if slide.is_some() {
+                    crate::motion_controls::press_amount_with_hold(
+                        &response,
+                        theme,
+                        slide_state.previewed,
+                    )
+                } else {
+                    crate::motion_controls::press_amount(&response, theme)
+                };
                 let hover = crate::motion::animate_bool(
                     ui.ctx(),
                     response.id.with("hover"),
-                    enabled && response.hovered(),
+                    enabled && (response.hovered() || slide_state.previewed),
                     theme,
                 );
                 let surface = rect.shrink(1.0).scale_from_center(1.0 - 0.03 * press);
@@ -370,7 +405,7 @@ fn menu_contents(
                         theme.card,
                     );
                 }
-                if response.has_focus() {
+                if response.has_focus() && ui.input(|input| !input.pointer.primary_down()) {
                     ui.painter().rect_stroke(
                         surface,
                         corner,
@@ -416,7 +451,7 @@ fn menu_contents(
                     node.set_label(item.label);
                     node.set_selected(active);
                 });
-                if response.clicked() {
+                if response.clicked() || slide_state.released {
                     *chosen = Some(item.id);
                     ui.close();
                 }

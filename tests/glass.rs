@@ -31,7 +31,7 @@ fn glass_frame_wraps_arbitrary_content_and_preserves_its_bounds() {
         .inner_margin(12);
     let soft = Glass::soft_prism();
     assert_eq!(Glass::default().tuning(), GlassTuning::default());
-    assert!(soft.tuning().blur > 1.0 && soft.tuning().refraction < 1.0);
+    assert_eq!(soft.tuning(), GlassTuning::default());
     let tuned = soft.with_tuning(GlassTuning {
         blur: 3.0,
         refraction: f32::NAN,
@@ -59,6 +59,7 @@ fn glass_frame_wraps_arbitrary_content_and_preserves_its_bounds() {
         .enumerate()
         .find_map(|(index, entry)| region(&entry.shape).map(|backdrop| (index, backdrop)))
         .expect("live glass backdrop");
+    assert_eq!(backdrop.mode, GlassMode::SoftPrism);
     assert_eq!(backdrop.profile, temivu::GlassProfile::Dock);
     assert_eq!(backdrop.strength, 0.45);
     assert_eq!(
@@ -230,4 +231,33 @@ fn droplet_retains_a_solid_surface_until_the_filtered_backdrop_is_ready() {
     render(3.0, true);
     Glass::set_renderer(&ctx, None);
     assert_eq!(render(3.02, true), (Some(255), None));
+}
+
+#[test]
+fn three_glass_materials_can_share_a_context_and_nest() {
+    let ctx = Context::default();
+    Glass::set_renderer(&ctx, Some(Arc::new(TestRenderer)));
+    let theme = Theme::light();
+    let frame = Frame::new().fill(Color32::WHITE).inner_margin(12);
+    let mut output = ctx.run_ui(Default::default(), |ui| {
+        Glass::frost().show(ui, &theme, frame, temivu::GlassProfile::Floating, |ui| {
+            Glass::prism().show(ui, &theme, frame, temivu::GlassProfile::Floating, |ui| {
+                ui.allocate_space(vec2(120.0, 40.0));
+            });
+        });
+        Glass::soft_prism().show(ui, &theme, frame, temivu::GlassProfile::Dock, |ui| {
+            ui.allocate_space(vec2(120.0, 40.0));
+        });
+    });
+    output.textures_delta.clear();
+    let regions: Vec<_> = output
+        .shapes
+        .iter()
+        .filter_map(|entry| region(&entry.shape))
+        .collect();
+    assert_eq!(
+        regions.iter().map(|region| region.mode).collect::<Vec<_>>(),
+        [GlassMode::Frost, GlassMode::Prism, GlassMode::SoftPrism]
+    );
+    assert!(regions[0].rect.contains_rect(regions[1].rect));
 }
