@@ -3,6 +3,19 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
+## [0.1.7] - 2026-11-23
+
+- Added reversible shared-element transitions for cards, dialogs, popovers,
+  image viewers and panels. The spring carries velocity through retargeting
+  and gesture release. Cached content travels inside a rounded mask.
+- Added a six-dot luminous circular loading style and an interactive
+  shared-element demo in Showcase.
+- Notifications fade and defocus in place when dismissed or expired.
+- Vesper adds light on contrasting fills and glass. Its highlight can follow
+  a pointer across participating widgets and layers in the same viewport.
+- Frost, Soft Prism and Prism sample the live backdrop on a stable framebuffer
+  grid while the content or glass surface moves.
+
 ## [0.1.6] - 2026-11-13
 
 - Refined Frost, Soft Prism and Prism with smooth backdrop filtering and

@@ -5,6 +5,72 @@ use egui_kittest::{
 use temivu::{CircularProgress, CircularSize, Motion, Progress, Theme};
 
 #[test]
+fn luminous_spinner_has_six_bounded_glowing_dots_and_a_stable_static_frame() {
+    use egui::{Color32, Context, RawInput, Rect, Shape, vec2};
+    use temivu::{CircularLoading, SpinnerStyle};
+
+    let ctx = Context::default();
+    ctx.all_styles_mut(|style| style.animation_time = 0.2);
+    let theme = Theme::dark();
+    let draw = |t, motion, glow| {
+        let mut rect = Rect::NOTHING;
+        let mut output = ctx.run_ui(
+            RawInput {
+                time: Some(t),
+                ..Default::default()
+            },
+            |ui| {
+                rect = CircularProgress::new(&theme)
+                    .diameter(42.0)
+                    .unwrap()
+                    .motion(motion)
+                    .loading_style(CircularLoading::LuminousDots(SpinnerStyle {
+                        glow,
+                        color: Some(Color32::WHITE),
+                        ..Default::default()
+                    }))
+                    .show(ui)
+                    .rect;
+            },
+        );
+        output.textures_delta.clear();
+        let mesh = output
+            .shapes
+            .into_iter()
+            .find_map(|entry| match entry.shape {
+                Shape::Mesh(mesh) => Some(mesh),
+                _ => None,
+            })
+            .unwrap();
+        assert!(mesh.is_valid());
+        assert_eq!(rect.size(), vec2(42.0, 42.0));
+        assert!(rect.expand(0.001).contains_rect(mesh.calc_bounds()));
+        mesh
+    };
+    let active = draw(0.0, Motion::Enabled, 0.8);
+    let advanced = draw(0.2, Motion::Enabled, 0.8);
+    assert_eq!(active.vertices.len(), 6 * 66);
+    assert_ne!(active.vertices, advanced.vertices);
+    assert!(
+        active
+            .vertices
+            .iter()
+            .any(|v| v.color.a() == 0 && v.color.r() > 0)
+    );
+
+    let still = draw(1.0, Motion::Disabled, 0.8);
+    assert_eq!(still.vertices, draw(1.2, Motion::Disabled, 0.8).vertices);
+    let no_glow = draw(1.3, Motion::Disabled, 0.0);
+    assert_eq!(no_glow.vertices.len(), 6 * 33);
+    assert!(
+        !no_glow
+            .vertices
+            .iter()
+            .any(|v| v.color.a() == 0 && v.color.r() > 0)
+    );
+}
+
+#[test]
 fn rejects_invalid_progress_and_width() {
     let theme = Theme::light();
     for value in [-0.1, 1.1, f32::NAN, f32::INFINITY] {

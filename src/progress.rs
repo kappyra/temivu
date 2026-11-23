@@ -1,6 +1,37 @@
 //! Experimental Forui progress indicators. See coverage notes for missing parity.
 use crate::Theme;
-use egui::{Pos2, Rect, Response, Role, Sense, Shape, Stroke, Ui, Vec2, WidgetInfo};
+use egui::{
+    Color32, Painter, Pos2, Rect, Response, Role, Sense, Shape, Stroke, Ui, Vec2, WidgetInfo,
+};
+
+/// Appearance of an indeterminate circular indicator.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub enum CircularLoading {
+    #[default]
+    Arc,
+    LuminousDots(SpinnerStyle),
+}
+
+/// Light and timing for the six-dot loading indicator.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SpinnerStyle {
+    /// Seconds per pass of the brightest point around the orbit.
+    pub period: f32,
+    /// Additive halo, between zero and one.
+    pub glow: f32,
+    /// Core and halo color. The default uses the theme's foreground.
+    pub color: Option<Color32>,
+}
+
+impl Default for SpinnerStyle {
+    fn default() -> Self {
+        Self {
+            period: 1.0,
+            glow: 0.72,
+            color: None,
+        }
+    }
+}
 
 /// Whether indeterminate animations should run.
 ///
@@ -169,6 +200,7 @@ pub struct CircularProgress<'a> {
     size: CircularSize,
     touch: bool,
     motion: Motion,
+    loading: CircularLoading,
 }
 impl<'a> CircularProgress<'a> {
     pub fn new(theme: &'a Theme) -> Self {
@@ -180,6 +212,7 @@ impl<'a> CircularProgress<'a> {
             size: CircularSize::Medium,
             touch: false,
             motion: Motion::Enabled,
+            loading: CircularLoading::Arc,
         }
     }
     /// Draw a ring filled in proportion to a finite value in 0..=1.
@@ -213,6 +246,11 @@ impl<'a> CircularProgress<'a> {
         self.motion = motion;
         self
     }
+    /// Set the appearance of the indeterminate indicator.
+    pub fn loading_style(mut self, loading: CircularLoading) -> Self {
+        self.loading = loading;
+        self
+    }
     pub fn show(self, ui: &mut Ui) -> Response {
         use std::f32::consts::{FRAC_PI_2, TAU};
         let size = self
@@ -226,6 +264,27 @@ impl<'a> CircularProgress<'a> {
             info
         });
         if !ui.is_rect_visible(rect) {
+            return response;
+        }
+        if self.value.is_none()
+            && let CircularLoading::LuminousDots(style) = self.loading
+        {
+            let period = if style.period.is_finite() {
+                style.period.clamp(0.28, 5.0)
+            } else {
+                SpinnerStyle::default().period
+            };
+            let phase = if self.motion == Motion::Enabled && ui.style().animation_time > 0.0 {
+                crate::motion::cycle(
+                    ui.ctx(),
+                    self.theme.motion,
+                    f64::from(period * self.theme.motion.normal_scale().clamp(0.25, 4.0)),
+                    1.0,
+                )
+            } else {
+                None
+            };
+            paint_spinner(ui.painter(), rect, style, self.theme.foreground, phase);
             return response;
         }
         let thickness = (size * 0.10).clamp(1.5, 9.0);
@@ -266,5 +325,90 @@ impl<'a> CircularProgress<'a> {
             painter.circle_filled(point(1.0), thickness / 2.0, stroke.color);
         }
         response
+    }
+}
+
+fn paint_spinner(
+    painter: &Painter,
+    rect: Rect,
+    style: SpinnerStyle,
+    foreground: Color32,
+    phase: Option<f32>,
+) {
+    use std::f32::consts::{FRAC_PI_2, TAU};
+
+    const DOTS: usize = 6;
+    const SEGMENTS: usize = 16;
+    let size = rect.width();
+    let phase = phase.unwrap_or(0.18);
+    let glow = if style.glow.is_finite() {
+        style.glow.clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let ink = style.color.unwrap_or(foreground);
+    let mut mesh = egui::Mesh::default();
+    mesh.vertices.reserve(DOTS * (4 * SEGMENTS + 2));
+    mesh.indices.reserve(DOTS * 18 * SEGMENTS);
+    let unit =
+        std::array::from_fn::<_, SEGMENTS, _>(|i| Vec2::angled(TAU * i as f32 / SEGMENTS as f32));
+    let phase_sway = 0.13 * (TAU * phase).sin();
+    for index in 0..DOTS {
+        let spoke = index as f32 / DOTS as f32;
+        let energy = (0.5 + 0.5 * (TAU * (phase - spoke)).cos()).powi(2);
+        let normal = Vec2::angled(TAU * spoke - FRAC_PI_2 + phase_sway);
+        let center = rect.center() + normal * (size * (0.30 + 0.018 * energy));
+        let core = size * (0.048 + 0.054 * energy);
+        let stretch = 1.0 + 0.17 * energy;
+        if glow > 0.0 {
+            let emission = ink
+                .additive()
+                .gamma_multiply(glow * (0.045 + 0.44 * energy));
+            dot(
+                &mut mesh,
+                &unit,
+                center,
+                (core * 2.48).min(size * 0.18),
+                stretch,
+                normal,
+                emission,
+                0.40,
+            );
+        }
+        let core_ink = ink.gamma_multiply(0.42 + 0.58 * energy);
+        dot(
+            &mut mesh, &unit, center, core, stretch, normal, core_ink, 0.73,
+        );
+    }
+    painter.add(Shape::mesh(mesh));
+}
+
+#[allow(clippy::too_many_arguments)]
+fn dot<const N: usize>(
+    mesh: &mut egui::Mesh,
+    unit: &[Vec2; N],
+    center: Pos2,
+    radius: f32,
+    stretch: f32,
+    normal: Vec2,
+    color: Color32,
+    inner: f32,
+) {
+    let first = mesh.vertices.len() as u32;
+    mesh.colored_vertex(center, color);
+    let tangent = normal.rot90();
+    for (radius, ink) in [(radius * inner, color), (radius, Color32::TRANSPARENT)] {
+        for v in unit {
+            let offset = normal * v.x + tangent * v.y * stretch;
+            mesh.colored_vertex(center + offset * radius, ink);
+        }
+    }
+    let count = N as u32;
+    for i in 0..count {
+        let a = first + 1 + i;
+        let b = first + 1 + (i + 1) % count;
+        mesh.add_triangle(first, a, b);
+        mesh.add_triangle(a, a + count, b);
+        mesh.add_triangle(b, a + count, b + count);
     }
 }

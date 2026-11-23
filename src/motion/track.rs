@@ -256,6 +256,17 @@ impl<'a> MotionTrack<'a> {
         target: T,
         spec: MotionSpec,
     ) -> MotionSample<T, N> {
+        self.sample_with_rest(initial, target, spec, |_, _| false)
+    }
+
+    /// Let a settled layout adopt new coordinates at the same logical endpoint.
+    pub(crate) fn sample_with_rest<T: MotionValue<N>, const N: usize>(
+        self,
+        initial: T,
+        target: T,
+        spec: MotionSpec,
+        same_endpoint: impl FnOnce([f64; N], [f64; N]) -> bool,
+    ) -> MotionSample<T, N> {
         let (key, now, previous_frame) = self.key_and_time();
         let initial = initial
             .into_channels()
@@ -295,6 +306,10 @@ impl<'a> MotionTrack<'a> {
                 state.started -= state.seen - now;
             }
             let (value, velocity, running) = state.evaluate(now);
+            if !running && velocity == [0.0; N] && same_endpoint(value, target) {
+                *slot = State::rest(target, now);
+                return (target, [0.0; N], false);
+            }
             let result = if state.target != target
                 || state.following
                 || state.spec.is_some_and(|s| s != spec)

@@ -116,7 +116,9 @@ pub use pagination::{
 pub use picker::{Picker, PickerItem, PickerResponse};
 pub use popover::Popover;
 pub use popover_menu::{MenuItems, PopoverMenu};
-pub use progress::{CircularProgress, CircularSize, Motion, Progress};
+pub use progress::{
+    CircularLoading, CircularProgress, CircularSize, Motion, Progress, SpinnerStyle,
+};
 pub use radio::Radio;
 pub use range_slider::RangeSlider;
 pub use resizable::{Resizable, ResizableAxis, ResizableResponse};
@@ -153,6 +155,12 @@ mod surface;
 
 pub mod page_transition;
 pub use page_transition::PageTransition;
+pub mod shared_element;
+pub use shared_element::{
+    SharedElementDrive, SharedElementEndpoint, SharedElementFade, SharedElementFit,
+    SharedElementPose, SharedElementSide, SharedElementSnapshot, SharedElementStyle,
+    SharedElementTransition,
+};
 pub mod navigation_menu;
 pub use navigation_menu::{MenuPresentation, NavigationMenu};
 

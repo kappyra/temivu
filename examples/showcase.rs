@@ -12,6 +12,8 @@ mod localization_demo;
 mod motion_gallery;
 #[path = "showcase/motion_lab.rs"]
 mod motion_lab;
+#[path = "showcase/shared_elements.rs"]
+mod shared_elements;
 #[cfg(not(target_os = "android"))]
 #[path = "showcase/video_demo.rs"]
 mod video_demo;
@@ -150,6 +152,7 @@ impl Page {
 struct DemoState {
     surface_preview_open: bool,
     droplet_group_merged: bool,
+    shared_elements: shared_elements::SharedElements,
     show_motion_gallery: bool,
     motion_gallery: motion_gallery::Gallery,
     catalog_group: widget_catalog::Category,
@@ -217,6 +220,7 @@ impl Default for DemoState {
         Self {
             surface_preview_open: false,
             droplet_group_merged: false,
+            shared_elements: shared_elements::SharedElements::default(),
             show_motion_gallery: false,
             motion_gallery: motion_gallery::Gallery::default(),
             catalog_group: widget_catalog::Category::default(),
@@ -465,12 +469,32 @@ fn activity_panel(
             });
             ui.add_space(16.0);
             ui.horizontal(|ui| {
-                CircularProgress::determinate(theme, *progress)
-                    .expect("normalized upload progress")
-                    .diameter(40.0)
-                    .expect("static ring diameter")
-                    .label("Upload ring")
-                    .show(ui);
+                if upload_started.is_some() {
+                    egui::Frame::new()
+                        .fill(egui::Color32::from_rgb(24, 31, 43))
+                        .corner_radius(22)
+                        .inner_margin(egui::Margin::symmetric(5, 2))
+                        .show(ui, |ui| {
+                            CircularProgress::new(theme)
+                                .loading_style(temivu::CircularLoading::LuminousDots(
+                                    temivu::SpinnerStyle {
+                                        color: Some(egui::Color32::WHITE),
+                                        ..Default::default()
+                                    },
+                                ))
+                                .diameter(40.0)
+                                .expect("static indicator diameter")
+                                .label("Processing upload")
+                                .show(ui);
+                        });
+                } else {
+                    CircularProgress::determinate(theme, *progress)
+                        .expect("normalized upload progress")
+                        .diameter(40.0)
+                        .expect("static ring diameter")
+                        .label("Upload ring")
+                        .show(ui);
+                }
                 ui.label(
                     egui::RichText::new(format!("Upload progress · {:.0}%", *progress * 100.0))
                         .size(12.0)
@@ -967,6 +991,8 @@ fn overlays(state: &mut DemoState, ui: &mut egui::Ui, theme: &Theme) {
         "Compare anchored surfaces, confirmations and notifications.",
     );
     let _ = motion_controls(state, ui, theme, false);
+    ui.add_space(14.0);
+    state.shared_elements.show(ui, theme);
     ui.add_space(14.0);
     studio_pair(state, ui, theme, overlay_dialog, overlay_sheet);
     studio_pair(state, ui, theme, overlay_actions, overlay_notifications);

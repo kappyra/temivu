@@ -263,7 +263,9 @@ impl Gallery {
                 }
                 CircularProgress::determinate(theme, value).expect("normalized loading progress")
             } else {
-                CircularProgress::new(theme)
+                CircularProgress::new(theme).loading_style(temivu::CircularLoading::LuminousDots(
+                    temivu::SpinnerStyle::default(),
+                ))
             };
             ring.diameter(40.0)
                 .expect("static ring diameter")

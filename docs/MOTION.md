@@ -116,7 +116,7 @@ lists. Layout sizes and hit testing remain controlled by the widget.
 | Accordion, Toaster, Toast | Open accordion content with an opacity reveal and use a fast tween for queue actions. Toasts use timed lifetimes, a Droplet entrance and a short defocus fade on dismissal. Collapsed accordion content is not evaluated. |
 | TextField, OTP, Search | Preserve focus, selection, and direct editing. TextField and Search already use shared motion. OTP remains immediate for input clarity. |
 | Slider, RangeSlider, Resizable, Picker, TimePicker, ScrollArea | Preserve direct drag values. Keep native scroll inertia and wheel snapping. A second physics system would fight egui's input ownership. The Motion Lab demonstrates optional decay and edge resistance for custom drags. |
-| Progress and CircularProgress | Share the same cycle clock and scheduling. Determinate bar motion uses the existing tween. Determinate ring keeps exact progress. |
+| Progress and CircularProgress | Share the same cycle clock and scheduling. Determinate bar motion uses the existing tween. Determinate ring keeps exact progress. The optional luminous spinner paints an orbit of six dots. |
 | Tooltip, ContextMenu, link preview | Keep native tooltip timing, context-menu input rules, and the existing Droplet link preview. Focus and Escape remain authoritative. |
 | Vesper, Frost, Prism, EffectSurface | Vesper uses a single two-channel spring and shared exponential tracking. Local light meshes and glass backdrop passes are independent of animation state. The existing renderer and its quality limits remain in place. |
 | VideoPlayer | Preserve exact seek position and media time. Existing chrome visibility and focus tweens use the shared engine. Playback scheduling stays with the player. |
@@ -126,6 +126,16 @@ lists. Layout sizes and hit testing remain controlled by the widget.
 Use **Widgets → Find a widget → Motion lab** to inspect the regimes. Open it
 alongside **Switch**, **Segments**, **Spring resize**, and **Action menu**
 in the gallery to compare interaction and spatial motion.
+
+### Luminous loading
+
+Choose `CircularLoading::LuminousDots(SpinnerStyle::default())` through
+`CircularProgress::loading_style`. The reference recording shows six cores,
+a clockwise wave of brightness and size, a slight orbit sway, and a soft halo
+that travels with the brightest dots. Temivu uses a time-based wave and
+additive halo in one mesh. The style exposes `period`, `glow`, and `color`.
+Reduced motion and `Motion::Disabled` render a steady frame. Try **Overview →
+Start upload** on a dark contrast surface or **Circular loading** in the motion gallery.
 
 Ripple, stagger, and shimmer can be built from bounded opacity, delayed tracks,
 and the cycle clock when a component has a concrete need. No widget currently
