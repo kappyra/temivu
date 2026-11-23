@@ -87,6 +87,7 @@ pub use date_time_picker::{
 pub use dialog::Dialog;
 pub use divider::{Divider, DividerAxis, DividerStyle};
 pub use effect_surface::EffectSurface;
+pub use fade_out::{FadeOut, FadeOutState};
 pub use floating_motion::FloatingMotion;
 pub use glass::{
     Glass, GlassBackdrop, GlassMode, GlassProfile, GlassRegion, GlassRenderer, GlassTuning,
@@ -94,7 +95,7 @@ pub use glass::{
 pub use header::Header;
 pub use item::{Item, ItemVariant};
 pub use label::{FieldLabel, LabelLayout};
-pub use lighting::{LightEffects, LightQuality, LightSpill, LightTracking, Vesper};
+pub use lighting::{LightEffects, LightQuality, LightSpill, LightSurface, LightTracking, Vesper};
 pub use line_calendar::{
     LineCalendar, LineCalendarLabels, LineCalendarOrientation, LineCalendarResponse,
     LineCalendarState,
@@ -156,6 +157,7 @@ pub mod navigation_menu;
 pub use navigation_menu::{MenuPresentation, NavigationMenu};
 
 pub mod effect_surface;
+mod fade_out;
 pub mod lighting;
 pub mod liquid;
 

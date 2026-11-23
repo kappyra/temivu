@@ -1,6 +1,8 @@
-use egui::{Event, Modifiers, PointerButton, Pos2, Rect, Sense, Shape, vec2};
+use egui::{Color32, Event, Modifiers, PointerButton, Pos2, Rect, Sense, Shape, vec2};
 use egui_kittest::{Harness, kittest::Queryable};
-use temivu::{Button, LightEffects, LightTracking, Switch, Theme, Vesper};
+use temivu::{
+    Button, LightEffects, LightSpill, LightSurface, LightTracking, Switch, Theme, Vesper,
+};
 
 fn light_center(harness: &Harness<'_, impl Sized>) -> Option<f32> {
     fn accumulate(shape: &Shape, alpha: &mut f32, weighted_x: &mut f32) {
@@ -8,7 +10,8 @@ fn light_center(harness: &Harness<'_, impl Sized>) -> Option<f32> {
             Shape::Mesh(mesh) => {
                 assert!(mesh.is_valid());
                 for vertex in &mesh.vertices {
-                    let weight = f32::from(vertex.color.a());
+                    let weight =
+                        f32::from(vertex.color.r().max(vertex.color.g()).max(vertex.color.b()));
                     *alpha += weight;
                     *weighted_x += vertex.pos.x * weight;
                 }
@@ -52,6 +55,87 @@ fn touch(pos: Pos2, phase: egui::TouchPhase) -> Event {
         phase,
         pos,
         force: None,
+    }
+}
+
+#[test]
+fn held_light_crosses_the_source_clip_and_lights_only_eligible_surfaces() {
+    let source = Rect::from_min_size(egui::pos2(20.0, 20.0), vec2(70.0, 54.0));
+    let white = source.translate(vec2(130.0, 0.0));
+    let pale = source.translate(vec2(210.0, 0.0));
+    let glass = source.translate(vec2(300.0, 0.0));
+    let theme = Theme::light();
+    let style = Vesper {
+        color: Some(Color32::from_rgb(255, 225, 175)),
+        tracking: LightTracking::Direct,
+        spill: Some(LightSpill {
+            radius: 95.0,
+            intensity: 0.9,
+        }),
+        ..Vesper::subtle()
+    };
+    for touchscreen in [false, true] {
+        let mut harness = Harness::builder()
+            .with_size(vec2(435.0, 120.0))
+            .build_ui(|ui| {
+                Vesper::set_context(ui.ctx(), Some(style));
+                let response = ui.interact(
+                    source,
+                    ui.scope_id().with("source"),
+                    Sense::click_and_drag(),
+                );
+                style.paint_on(
+                    &ui.painter().with_clip_rect(source),
+                    &theme,
+                    &response,
+                    source,
+                    14.into(),
+                    Color32::DARK_GRAY,
+                );
+                for (i, (rect, material)) in [
+                    (white, Color32::WHITE.into()),
+                    (pale, Color32::from_rgb(227, 238, 247).into()),
+                    (glass, LightSurface::Glass),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    style.receive_on_surface(
+                        ui.painter(),
+                        &theme,
+                        ui.scope_id().with(i),
+                        rect,
+                        14.into(),
+                        material,
+                    );
+                }
+            });
+        let lit = |harness: &Harness<'_, ()>, rect: Rect| {
+            harness.output().shapes.iter().any(|entry| {
+                matches!(&entry.shape, Shape::Mesh(mesh)
+                    if rect.expand(0.01).contains_rect(mesh.calc_bounds())
+                        && mesh.vertices.iter().any(|vertex| vertex.color.r() > 2))
+            })
+        };
+        harness.run_steps(3);
+        let start = source.center();
+        let mut events = vec![Event::PointerMoved(start), primary(start, true)];
+        if touchscreen {
+            events.push(touch(start, egui::TouchPhase::Start));
+        }
+        step(&mut harness, 1.0, events);
+        assert!(lit(&harness, source));
+        assert!(!lit(&harness, glass));
+        for (time, point) in [(1.04, pale.center()), (1.08, glass.center())] {
+            let mut events = vec![Event::PointerMoved(point)];
+            if touchscreen {
+                events.push(touch(point, egui::TouchPhase::Move));
+            }
+            step(&mut harness, time, events);
+            assert!(!lit(&harness, source));
+            assert!(!lit(&harness, white));
+            assert!(lit(&harness, if time == 1.04 { pale } else { glass }));
+        }
     }
 }
 
@@ -108,7 +192,14 @@ fn direct_light_tracks_input_and_fades_after_release() {
                 },
                 ..Vesper::subtle()
             }
-            .paint(ui.painter(), &theme, &response, bounds, 27.into());
+            .paint_on(
+                ui.painter(),
+                &theme,
+                &response,
+                bounds,
+                27.into(),
+                Color32::DARK_GRAY,
+            );
         },
         Rect::NOTHING,
     );
@@ -155,7 +246,14 @@ fn a_held_contact_stays_lit_across_the_touch_long_press_and_on_passive_surfaces(
                 let theme = Theme::light();
                 let (bounds, response) = ui.allocate_exact_size(vec2(210.0, 54.0), sense);
                 *rect = bounds;
-                Vesper::expressive().paint(ui.painter(), &theme, &response, bounds, 27.into());
+                Vesper::expressive().paint_on(
+                    ui.painter(),
+                    &theme,
+                    &response,
+                    bounds,
+                    27.into(),
+                    Color32::DARK_GRAY,
+                );
             },
             Rect::NOTHING,
         );
@@ -217,7 +315,14 @@ fn reduced_motion_keeps_the_steady_light_and_suppresses_the_pulse() {
                 },
                 ..Vesper::subtle()
             }
-            .paint(ui.painter(), &theme, &response, bounds, 27.into());
+            .paint_on(
+                ui.painter(),
+                &theme,
+                &response,
+                bounds,
+                27.into(),
+                Color32::DARK_GRAY,
+            );
         },
         (Rect::NOTHING, true, false),
     );
@@ -259,7 +364,14 @@ fn pointer_focus_does_not_keep_the_contact_glow_after_release() {
             if response.clicked() {
                 response.request_focus();
             }
-            Vesper::subtle().paint(ui.painter(), &theme, &response, bounds, 26.into());
+            Vesper::subtle().paint_on(
+                ui.painter(),
+                &theme,
+                &response,
+                bounds,
+                26.into(),
+                Color32::DARK_GRAY,
+            );
         },
         Rect::NOTHING,
     );

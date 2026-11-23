@@ -11,8 +11,9 @@ keys to change its resting position.
   are visual references for this material. [Android window blur guidance](https://source.android.com/docs/core/display/window-blurs) · [Android 17 panel screenshots](https://9to5google.com/2026/05/19/android-17-beta-1-blur/)
 - **Soft Prism** uses stronger diffusion and gentler refraction along the
   bevel. Showcase selects this preset when glass is first enabled.
-- **Prism** keeps a clearer center and makes the polished bevel more visible.
-  It is the library's default material. [Apple's lensing design reference](https://developer.apple.com/videos/play/wwdc2025/219/)
+- **Prism** keeps a clearer center and uses stronger refraction, a fine darkened
+  inner edge and a brighter specular rim. It is the library's default material.
+  [iOS 26 lensing](https://developer.apple.com/videos/play/wwdc2025/219/?time=89) · [iOS 27 material refinements](https://developer.apple.com/videos/play/wwdc2026/102/?time=1363)
 
 **Glass tint** controls the strength of the surface color. **Optical settings**
 adjust blur, refraction and rim visibility for the chosen preset. High contrast
@@ -20,13 +21,12 @@ uses opaque surfaces.
 
 The Showcase's OpenGL renderer captures the visible region beneath each
 surface at framebuffer resolution, with a margin for blur and refraction. It
-reuses one capture texture and two work textures. When the blur radius calls
-for a lower resolution, successive 2:1 reductions smooth the region before
-two separable Gaussian passes. The filter samples neighboring texels along
-each axis. Prism bends the result along the normal of the current rounded
-edge and adds a narrow reflective rim. As the glass moves, the renderer
-samples the scene at its current screen position. Text and controls remain
-sharp. [Arm's multiscale filtering notes](https://developer.arm.com/cfs-file/__key/communityserver-blogs-components-weblogsfiles/00-00-00-20-66/siggraph2015_2D00_mmg_2D00_marius_2D00_notes.pdf)
+reuses one capture texture and two work textures. Successive 2:1 reductions
+stay aligned to the framebuffer even when the widget moves, a scroll area clips
+it or the viewport ends at an odd pixel. Two separable Gaussian passes smooth
+the reduced image. Soft Prism and Prism reproject that image along the rounded
+edge. The renderer samples current-frame content in screen coordinates and
+leaves foreground text and controls sharp. [Arm's multiscale filtering notes](https://developer.arm.com/cfs-file/__key/communityserver-blogs-components-weblogsfiles/00-00-00-20-66/siggraph2015_2D00_mmg_2D00_marius_2D00_notes.pdf)
 
 The floating navigation adds a soft scroll-edge fade through the viewport edge
 and uses a wider vertical blur. During a Droplet transition, the optical mask
@@ -74,8 +74,14 @@ fn mixer(ui: &mut egui::Ui, theme: &Theme) {
 ```
 
 Install a `GlassRenderer` to sample the live scene. Pass `None` to
-`Glass::set_context` to turn glass off. Without a live adapter, floating
+`Glass::set_context` to turn glass off. In a renderer adapter, use
+`region.with_paint_bounds(info.viewport)` to follow egui's final callback
+bounds when an overlay translates or scales. Without a live adapter, floating
 transitions use the base fill and stationary navigation uses a denser
 translucent surface. When you supply a `GlassBackdrop` texture to
 `Glass::paint`, its filtering comes from the supplied texture. Refraction,
 tint and rim settings still apply to that texture-based fallback.
+
+For custom glass widgets, combine `.glass(Some(material))` and `.lighting(Some(style))`
+on `EffectSurface`. For manually painted glass, use `Vesper::paint_on_surface`
+with `LightSurface::Glass` after the glass and before text or icons.

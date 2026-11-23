@@ -1,7 +1,7 @@
 uniform sampler2D u_texture;
 uniform vec4 u_region;
 uniform vec4 u_corners;
-uniform vec4 u_capture;
+uniform vec3 u_capture; // capture origin and inverse downsample step
 uniform vec4 u_texels;
 uniform vec3 u_effect; // lens displacement, bevel depth, polish
 uniform float u_strength;
@@ -24,46 +24,39 @@ void main() {
     float mask = 1.0 - smoothstep(-1.0, 0.0, distance_to_edge);
     if (mask <= 0.0) { discard; }
 
-    // Frost samples the evenly blurred backdrop. Prism uses the normal of
-    // the same rounded silhouette for a continuous, single-sample lens.
-    vec2 bend = vec2(0.0);
     float shade = 0.0;
     float specular = 0.0;
     if (u_effect.x > 0.0 || u_effect.z > 0.0) {
         float half_side = min(u_region.z, u_region.w);
-        float depth = min(u_effect.y, half_side * 0.82);
+        float depth = min(u_effect.y, half_side * 0.79);
         float inset = -distance_to_edge;
         float bevel = 1.0 - smoothstep(0.0, depth, inset);
         if (bevel > 0.0) {
             // Reproject in screen space. When the surface moves, each part
             // of its bevel bends a different portion of the live scene.
-            vec2 side_normal = edge.x > edge.y ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-            vec2 normal = arc_distance > 0.001 ? max(edge, vec2(0.0)) / arc_distance : side_normal;
+            float side = smoothstep(-1.25, 1.25, edge.x - edge.y);
+            vec2 normal = normalize(vec2(side, 1.0 - side));
+            if (arc_distance > 0.001) {
+                normal = normalize(mix(normal, max(edge, vec2(0.0)) / arc_distance,
+                    smoothstep(0.0, 1.25, arc_distance)));
+            }
             normal *= mix(vec2(-1.0), vec2(1.0), step(vec2(0.0), local));
-            float displacement = min(u_effect.x, half_side * 0.80);
-            bend = normal * displacement * bevel * (0.66 + 0.34 * bevel);
-            point += bend;
+            float displacement = min(u_effect.x, depth * 0.85);
+            point += normal * displacement * bevel;
             float facing = dot(normal, vec2(-0.6, 0.8));
-            float rim = 1.0 - smoothstep(0.0, depth * 0.26, inset);
+            float rim = 1.0 - smoothstep(0.0, depth * 0.18, inset);
+            float inner = smoothstep(0.0, depth * 0.14, inset)
+                * (1.0 - smoothstep(depth * 0.16, depth * 0.42, inset));
             float key = max(facing, 0.0);
-            shade = rim * u_effect.z * (0.06 + 0.10 * max(-facing, 0.0));
-            specular = u_effect.z * (rim * (0.24 * key * key + 0.04)
-                + 0.065 * bevel * key);
+            shade = inner * u_effect.z * (0.05 + 0.11 * max(-facing, 0.0));
+            specular = min(0.78, u_effect.z * (rim * (0.30 * key * key + 0.05)
+                + 0.035 * bevel * key));
         }
     }
 
-    vec2 texel = (point - u_capture.xy) * u_capture.zw;
+    vec2 texel = (point - u_capture.xy) * u_capture.z;
     vec2 uv = clamp(texel, vec2(0.5), u_texels.xy - 0.5) / u_texels.zw;
     vec3 scene = texture(u_texture, uv).rgb;
-    // Keep dispersion near the bevel and below the width of a thin rim.
-    // The center uses a single read and stays clear.
-    if (dot(bend, bend) > 1.0) {
-        vec2 dispersion = bend * u_capture.zw / u_texels.zw * (0.055 * u_effect.z);
-        vec2 low = vec2(0.5) / u_texels.zw;
-        vec2 high = (u_texels.xy - 0.5) / u_texels.zw;
-        scene.r = texture(u_texture, clamp(uv - dispersion, low, high)).r;
-        scene.b = texture(u_texture, clamp(uv + dispersion, low, high)).b;
-    }
     vec3 color = mix(scene * (1.0 - shade), vec3(1.0), specular);
     float alpha = mask * u_strength;
     pixel = vec4(color * alpha, alpha);

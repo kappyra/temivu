@@ -1,5 +1,7 @@
 //! Opt-in visual effects for arbitrary egui content.
-use crate::{Glass, GlassProfile, SurfaceShape, Theme, Vesper};
+use crate::{
+    FadeOut, FadeOutState, Glass, GlassProfile, LightSurface, SurfaceShape, Theme, Vesper,
+};
 use egui::{AsIdSalt, Frame, IdSalt, InnerResponse, Sense, Shape, Stroke, Ui, UiBuilder};
 
 /// A framed egui container with optional glass and interaction lighting.
@@ -24,6 +26,7 @@ pub struct EffectSurface<'a> {
     glass: Option<Glass>,
     glass_profile: GlassProfile,
     lighting: Option<Vesper>,
+    fade_out: FadeOut,
     sense: Sense,
     id_salt: Option<IdSalt>,
 }
@@ -40,6 +43,7 @@ impl<'a> EffectSurface<'a> {
             glass: None,
             glass_profile: GlassProfile::Floating,
             lighting: None,
+            fade_out: FadeOut::default(),
             sense: Sense::hover(),
             id_salt: None,
         }
@@ -80,6 +84,12 @@ impl<'a> EffectSurface<'a> {
         self
     }
 
+    /// Configure the paint-only exit used by [`Self::show_with_fade`].
+    pub fn fade_out(mut self, fade_out: FadeOut) -> Self {
+        self.fade_out = fade_out;
+        self
+    }
+
     /// Set how the background responds to input. Interactive children take
     /// priority over the background. The default senses hover.
     pub fn sense(mut self, sense: Sense) -> Self {
@@ -95,6 +105,42 @@ impl<'a> EffectSurface<'a> {
 
     pub(crate) fn theme(&self) -> &Theme {
         self.theme
+    }
+
+    /// Draw the surface while visible and replay its last paint during exit.
+    /// Keep calling this with `visible = false` until `state.has_snapshot()` is false.
+    /// The content runs only while visible. Custom paint callbacks are skipped
+    /// on exit, with the outer glass backdrop rebuilt live when available.
+    pub fn show_with_fade<R>(
+        self,
+        ui: &mut Ui,
+        state: &mut FadeOutState,
+        visible: bool,
+        content: impl FnOnce(&mut Ui) -> R,
+    ) -> Option<InnerResponse<R>> {
+        let (fade, theme) = (self.fade_out, self.theme);
+        if !visible {
+            state.paint(ui, theme, fade);
+            return None;
+        }
+        let start = FadeOutState::paint_start(ui, theme, fade);
+        let (material, profile, frame) = (self.glass, self.glass_profile, self.frame);
+        let response = self.show(ui, content);
+        let bounds = response.response.rect;
+        let region = material
+            .filter(|_| {
+                start.is_some() && ui.is_enabled() && crate::glass::renderer_available(ui.ctx())
+            })
+            .and_then(|glass| {
+                glass.region(
+                    bounds - frame.outer_margin,
+                    frame.corner_radius.into(),
+                    ui.painter().opacity(),
+                    profile,
+                )
+            });
+        state.capture(ui, start, bounds, region);
+        Some(response)
     }
 
     pub fn show<R>(self, ui: &mut Ui, content: impl FnOnce(&mut Ui) -> R) -> InnerResponse<R> {
@@ -126,6 +172,9 @@ impl<'a> EffectSurface<'a> {
             && ui.clip_rect().intersect(rect).is_positive()
         {
             let corners = self.frame.corner_radius.into();
+            let material = self
+                .glass
+                .map_or(self.frame.fill.into(), |_| LightSurface::Glass);
             if let Some(spill_slot) = spill_slot {
                 crate::lighting::spill::receive_at(
                     ui.painter(),
@@ -133,7 +182,7 @@ impl<'a> EffectSurface<'a> {
                     rect,
                     corners,
                     &lighting,
-                    self.frame.fill,
+                    material,
                     self.theme.card,
                     spill_slot,
                 );
@@ -148,13 +197,13 @@ impl<'a> EffectSurface<'a> {
             let mut interaction = surface.response.union(hover);
             // Lighting may observe a child-owned hold without claiming input.
             interaction.sense = Sense::hover();
-            if let Some(shape) = lighting.interactive_shape_on(
+            if let Some(shape) = lighting.interactive_shape_for(
                 ui.painter(),
                 self.theme,
                 &interaction,
                 rect,
                 corners,
-                self.frame.fill,
+                material,
             ) {
                 ui.painter().set(slot, shape);
             }

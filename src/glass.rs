@@ -1,5 +1,5 @@
 //! Optional optical material for floating surfaces and app-owned backdrops.
-use crate::Theme;
+use crate::{LightSurface, Theme, Vesper};
 use egui::{
     Color32, Context, Frame, Id, Painter, Pos2, Rect, Shape, Stroke, StrokeKind, TextureId, Vec2,
     epaint::{CornerRadiusF32, Mesh, Vertex, WHITE_UV},
@@ -66,6 +66,18 @@ pub struct GlassRegion {
     pub tint: f32,
     pub strength: f32,
     pub tuning: GlassTuning,
+}
+
+impl GlassRegion {
+    /// Update the lens to the final viewport in `egui::PaintCallbackInfo`.
+    /// egui can translate or scale the callback after the widget has laid it out.
+    pub fn with_paint_bounds(mut self, rect: Rect) -> Self {
+        if self.rect.width() > 0.0 {
+            self.corners *= rect.width() / self.rect.width();
+        }
+        self.rect = rect;
+        self
+    }
 }
 
 /// A renderer adapter that samples content already painted beneath a surface.
@@ -276,23 +288,18 @@ impl Glass {
             backdrop.filter(|_| live.is_none() && has_backdrop && frame.fill.a() < 255)
         {
             let mut mesh = Mesh::with_texture(backdrop.texture);
-            let band = (rect.size().min_elem() * 0.26).min(18.0);
-            let bend = match self.mode {
+            let band = (rect.size().min_elem() * 0.36).min(21.0);
+            let lens = match self.mode {
                 GlassMode::Frost => 0.0,
-                GlassMode::SoftPrism | GlassMode::Prism => {
-                    let lens = if self.mode == GlassMode::SoftPrism {
-                        0.92
-                    } else {
-                        1.28
-                    };
-                    band * (1.0 - 0.5 * self.tint) * lens * self.tuning.refraction
-                }
+                GlassMode::SoftPrism => 0.38,
+                GlassMode::Prism => 0.65,
             };
+            let bend = band * (1.0 - 0.35 * self.tint) * lens * self.tuning.refraction;
             let feather = (band * 0.25).min(1.0);
             for (inset, offset, alpha) in [
                 (0.0, bend, 0),
                 (feather, bend, 255),
-                (band * 0.46, bend * 0.48, 255),
+                (band * 0.52, bend * 0.47, 255),
                 (band, 0.0, 255),
             ] {
                 for (position, normal) in outline(rect, corners, inset) {
@@ -334,14 +341,27 @@ impl Glass {
         strength: f32,
         profile: GlassProfile,
     ) -> Shape {
+        self.region(rect, corners, strength, profile)
+            .map_or(Shape::Noop, |region| {
+                Shape::Callback(renderer.callback(region))
+            })
+    }
+
+    pub(crate) fn region(
+        self,
+        rect: Rect,
+        corners: CornerRadiusF32,
+        strength: f32,
+        profile: GlassProfile,
+    ) -> Option<GlassRegion> {
         if !rect.is_finite()
             || rect.size().min_elem() < 4.0
             || strength <= 0.001
             || self.tint >= 0.999
         {
-            return Shape::Noop;
+            return None;
         }
-        Shape::Callback(renderer.callback(GlassRegion {
+        Some(GlassRegion {
             rect,
             corners,
             mode: self.mode,
@@ -349,7 +369,7 @@ impl Glass {
             tint: self.tint,
             strength: strength.clamp(0.0, 1.0),
             tuning: self.tuning,
-        }))
+        })
     }
 
     fn tinted_frame(self, theme: &Theme, mut frame: Frame, has_backdrop: bool) -> Frame {
@@ -403,6 +423,12 @@ impl Glass {
         let outer = 1.0_f32.min(rect.size().min_elem() * 0.15);
         let inner = (outer + 2.5).min(rect.size().min_elem() * 0.4);
         let mut mesh = Mesh::default();
+        let polish = polish
+            * if self.mode == GlassMode::SoftPrism {
+                0.60
+            } else {
+                1.0
+            };
         let strength = if theme.dark { 105.0 } else { 176.0 } * self.tuning.rim;
         for (inset, weight) in [(outer, 1.0), (inner, 0.0)] {
             for (position, normal) in outline(rect, corners, inset) {
@@ -490,6 +516,40 @@ pub(crate) fn live_enabled(ctx: &Context) -> bool {
     Glass::context(ctx).is_some_and(|glass| glass.tint < 0.999) && Glass::renderer(ctx).is_some()
 }
 
+pub(crate) fn backdrop_shape(ctx: &Context, region: GlassRegion) -> Shape {
+    Glass::renderer(ctx).map_or(Shape::Noop, |renderer| {
+        Shape::Callback(renderer.callback(region))
+    })
+}
+
+pub(crate) fn renderer_available(ctx: &Context) -> bool {
+    Glass::renderer(ctx).is_some()
+}
+
+pub(crate) fn receive_overlay_light(
+    ctx: &Context,
+    theme: &Theme,
+    layer: egui::LayerId,
+    id: Id,
+    slot: egui::layers::ShapeIdx,
+    rect: Rect,
+    frame: Frame,
+) {
+    if let Some(light) = Vesper::context(ctx) {
+        let painter = ctx.layer_painter(layer).with_clip_rect(ctx.content_rect());
+        crate::lighting::spill::receive_background_at(
+            &painter,
+            id.with("glass-light"),
+            rect - frame.outer_margin,
+            frame.corner_radius.into(),
+            &light,
+            LightSurface::Glass,
+            theme.card,
+            slot,
+        );
+    }
+}
+
 /// Keeps the base material intact until a live backdrop can take over.
 pub(crate) struct GlassTransition {
     enabled: bool,
@@ -558,22 +618,50 @@ impl GlassTransition {
         }
         shape
     }
+
+    pub fn region(&self, rect: Rect, corners: CornerRadiusF32) -> Option<GlassRegion> {
+        self.live
+            .as_ref()
+            .and_then(|(glass, _)| glass.region(rect, corners, 1.0, GlassProfile::Floating))
+    }
 }
 
 pub(crate) fn show_frame<R>(
     ui: &mut egui::Ui,
+    theme: &Theme,
     frame: Frame,
     profile: Option<GlassProfile>,
+    lighting: Option<Vesper>,
     add: impl FnOnce(&mut egui::Ui) -> R,
 ) -> egui::InnerResponse<R> {
     let Some(profile) = profile.filter(|_| ui.is_visible()) else {
         return frame.show(ui, add);
     };
-    let Some(glass) = Glass::context(ui.ctx()).filter(|glass| glass.tint < 0.999) else {
-        return frame.show(ui, add);
+    let mut light_slot = None;
+    let add = |ui: &mut egui::Ui| {
+        if ui.is_enabled() && lighting.is_some_and(|light| light.spill.is_some()) {
+            light_slot = Some(ui.painter().add(Shape::Noop));
+        }
+        add(ui)
     };
-    let Some(renderer) = Glass::renderer(ui.ctx()) else {
-        return frame.show(ui, add);
+    let glass = Glass::context(ui.ctx()).filter(|glass| glass.tint < 0.999);
+    let result = match glass.zip(Glass::renderer(ui.ctx())) {
+        Some((glass, renderer)) => {
+            glass.show_live_frame(ui, frame, profile, renderer.as_ref(), add)
+        }
+        None => frame.show(ui, add),
     };
-    glass.show_live_frame(ui, frame, profile, renderer.as_ref(), add)
+    if let (Some(light), Some(slot)) = (lighting, light_slot) {
+        crate::lighting::spill::receive_at(
+            ui.painter(),
+            result.response.id,
+            result.response.rect - frame.outer_margin,
+            frame.corner_radius.into(),
+            &light,
+            LightSurface::Glass,
+            theme.card,
+            slot,
+        );
+    }
+    result
 }

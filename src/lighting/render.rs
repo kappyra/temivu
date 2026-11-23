@@ -4,51 +4,34 @@ use egui::{
     pos2, vec2,
 };
 
-use super::{LightQuality, Sample, Vesper};
+use super::{LightQuality, LightSurface, Sample, Vesper};
 
 #[derive(Clone, Copy)]
 pub(super) struct Ink {
     highlight: Color32,
-    pale: f32,
+    headroom: f32,
 }
 
 impl Ink {
-    pub(super) fn new(tint: Option<Color32>, surface: Color32, fallback: Color32) -> Self {
-        if let Some(highlight) = tint.filter(|&color| color != Color32::WHITE) {
-            return Self {
-                highlight,
-                pale: 0.0,
-            };
-        }
-        let luminance = |color: Color32| {
-            let [r, g, b, _] = color.to_srgba_unmultiplied();
-            (0.2126 * f32::from(r) + 0.7152 * f32::from(g) + 0.0722 * f32::from(b)) / 255.0
-        };
-        let luma = egui::lerp(
-            luminance(fallback)..=luminance(surface),
-            f32::from(surface.a()) / 255.0,
-        );
-        let t = ((luma - 0.57) / 0.40).clamp(0.0, 1.0);
+    pub(super) fn new(tint: Option<Color32>, surface: LightSurface, fallback: Color32) -> Self {
         Self {
-            highlight: Color32::WHITE,
-            pale: t * t * (3.0 - 2.0 * t),
+            highlight: tint.unwrap_or(Color32::WHITE).additive(),
+            headroom: surface.headroom(fallback),
         }
     }
 
-    fn color(self, highlight: f32, shadow: f32) -> Color32 {
-        let light = self.highlight.gamma_multiply(highlight.clamp(0.0, 0.62));
-        if self.pale == 0.0 || shadow <= 0.0 {
-            return light;
-        }
-        let shade = (f32::from(255 - light.a()) * (shadow * self.pale).min(0.24)).round() as u8;
-        // A cool, pale reflection stays visible on white without a black halo.
-        let reflection = Color32::from_rgb(160, 187, 213).gamma_multiply(f32::from(shade) / 255.0);
-        Color32::from_rgba_premultiplied(
-            light.r().saturating_add(reflection.r()),
-            light.g().saturating_add(reflection.g()),
-            light.b().saturating_add(reflection.b()),
-            light.a().saturating_add(reflection.a()),
-        )
+    pub(super) fn visible(self) -> bool {
+        self.headroom > 0.0 && self.highlight != Color32::TRANSPARENT
+    }
+
+    fn color(self, highlight: f32) -> Color32 {
+        let ceiling = (self.headroom * 0.82).min(0.50);
+        let knee = ceiling * 0.60;
+        let remaining = ceiling - knee;
+        let excess = (highlight - knee).max(0.0);
+        // Roll off high energy on near-white colors without introducing shade.
+        let light = highlight.min(knee) + remaining * excess / (remaining + excess + f32::EPSILON);
+        self.highlight.gamma_multiply(light)
     }
 }
 
@@ -62,11 +45,17 @@ pub(super) fn mesh(
     sample: Sample,
 ) -> Mesh {
     let mut mesh = Mesh::default();
-    if !rect.is_finite() || !rect.is_positive() || ink.highlight.a() == 0 {
+    if !rect.is_finite() || !rect.is_positive() || !ink.visible() {
         return mesh;
     }
     let energy = sample.energy.clamp(0.0, 1.0) * style.opacity * style.intensity;
     if !energy.is_finite() || energy <= 0.001 {
+        return mesh;
+    }
+    if sample.pulse >= 1.0
+        && sample.flow == Vec2::ZERO
+        && rect.distance_sq_to_pos(sample.point) >= (style.radius * 1.03).powi(2)
+    {
         return mesh;
     }
 
@@ -248,21 +237,16 @@ impl Field<'_> {
         let flow_energy = (sample.flow.length_sq() * 0.007).min(0.14);
         let fill = |point: Pos2| {
             let mut light = 0.0;
-            let mut shadow = 0.0;
             let distance_sq = point.distance_sq(sample.point) * inverse_radius_sq;
             if style.effects.follow {
                 let wash = falloff(distance_sq, style.softness, style.attenuation);
                 let core = (1.0 - distance_sq * 4.2).max(0.0).powi(2);
                 light += 0.47 * wash + 0.34 * core;
-                // White cannot become brighter over a white fill. Make the
-                // center read as light by shading the softer falloff around it.
-                shadow += 0.70 * wash * (1.0 - 0.86 * core) + 0.10 * core;
             }
             if scatter {
                 let d = point.distance_sq(sample.pulse_point) * inverse_spread_sq;
                 let wave = falloff(d, style.softness, style.attenuation);
                 light += pulse_energy * wave;
-                shadow += pulse_energy * wave * (d * 2.0).min(0.68);
             }
             if flow {
                 let d = point.distance_sq(flow_origin) * inverse_radius_sq * 1.9;
@@ -277,7 +261,7 @@ impl Field<'_> {
             let excess = (highlight - 0.26).max(0.0);
             // Keep labels legible and preserve the gradient through bright presses.
             let face = highlight.min(0.26) + 0.09 * excess / (0.09 + excess);
-            self.ink.color(face, shadow * self.energy)
+            self.ink.color(face)
         };
 
         // Reserve a sample at each active source. Otherwise a narrow contact
@@ -391,10 +375,10 @@ impl Field<'_> {
                 0.0
             };
             let opacity = self.energy * (reflection * facing * 1.12 + sheen);
-            mesh.colored_vertex(point, ink.color(opacity, self.energy * reflection * 0.22));
+            mesh.colored_vertex(point, ink.color(opacity));
             mesh.colored_vertex(
                 self.shape.project(point - normal * width * 0.46),
-                ink.color(opacity * 0.28, self.energy * reflection * 0.68),
+                ink.color(opacity * 0.28),
             );
             mesh.colored_vertex(
                 self.shape.project(point - normal * width),
@@ -446,7 +430,7 @@ impl Field<'_> {
             }
             let size = (1.25 + (i % 3) as f32 * 0.25) * (1.0 - progress * 0.57);
             let first = mesh.vertices.len() as u32;
-            mesh.colored_vertex(position, self.ink.color(alpha, 0.0));
+            mesh.colored_vertex(position, self.ink.color(alpha));
             for d in DIRECTIONS {
                 mesh.colored_vertex(
                     self.shape.project(position + d * size),
@@ -621,65 +605,56 @@ mod tests {
     }
 
     #[test]
-    fn neutral_highlight_adapts_to_the_control_fill_and_preserves_tints() {
+    fn only_additive_light_is_used_and_white_skips_it() {
         let white = Color32::WHITE;
         let dark = Color32::from_gray(25);
-        let on_pale = Ink::new(None, white, dark).color(0.2, 0.1);
-        let on_dark = Ink::new(None, dark, white).color(0.2, 0.1);
-        assert_eq!(on_dark.r(), on_dark.a());
-        assert!(on_pale.a() > on_dark.a());
-        assert!(on_pale.r() > on_dark.r());
-        assert!(on_pale.r() < on_pale.g() && on_pale.g() < on_pale.b());
+        let pale = Color32::from_rgb(247, 248, 251);
+        let on_pale = Ink::new(None, pale.into(), dark).color(0.2);
+        let on_dark = Ink::new(None, dark.into(), white).color(0.2);
+        assert_eq!(on_dark, Color32::WHITE.additive().gamma_multiply(0.2));
+        assert_eq!(on_pale.a(), 0);
+        assert!(on_pale.r() > 0 && on_pale.r() < on_dark.r());
+        assert_eq!(on_pale.r(), on_pale.b());
 
         let amber = Color32::from_rgb(252, 219, 180);
+        for tint in [None, Some(amber)] {
+            assert!(!Ink::new(tint, white.into(), dark).visible());
+            assert!(Ink::new(tint, LightSurface::Glass, white).visible());
+        }
         assert_eq!(
-            Ink::new(Some(amber), white, dark).color(0.2, 0.1),
-            amber.gamma_multiply(0.2)
+            Ink::new(Some(amber), dark.into(), white).color(0.2),
+            amber.additive().gamma_multiply(0.2)
         );
     }
 
     #[test]
-    fn steady_light_has_a_visible_gradient_on_white_and_dark_fills() {
+    fn steady_light_increases_brightness_on_pale_and_dark_fills() {
         let (rect, corners, _, mut sample) = fixture();
         sample.point = rect.center() - vec2(27.0, 0.0);
         sample.pulse = 1.0;
         sample.flow = Vec2::ZERO;
         let style = Vesper::subtle();
         let colors = |fill: Color32| {
-            mesh(rect, corners, &style, Ink::new(None, fill, fill), sample)
-                .vertices
-                .into_iter()
-                .map(move |vertex| {
-                    let color = vertex.color;
-                    let composite = u16::from(color.r())
-                        + u16::from(255 - color.a()) * u16::from(fill.r()) / 255;
-                    (vertex.pos, composite)
-                })
-        };
-        let on_white: Vec<_> = colors(Color32::WHITE).collect();
-        let center = on_white
-            .iter()
-            .min_by(|(a, _), (b, _)| {
-                a.distance_sq(sample.point)
-                    .total_cmp(&b.distance_sq(sample.point))
+            mesh(
+                rect,
+                corners,
+                &style,
+                Ink::new(None, fill.into(), fill),
+                sample,
+            )
+            .vertices
+            .into_iter()
+            .map(move |vertex| {
+                assert_eq!(vertex.color.a(), 0);
+                fill.blend(vertex.color).r()
             })
-            .unwrap()
-            .1;
-        assert!(on_white.iter().any(|(_, value)| *value <= 240));
-        assert!(on_white.iter().any(|(_, value)| *value + 4 <= center));
-        assert!(
-            on_white
-                .iter()
-                .any(|(point, value)| point.x >= rect.right() - 3.0 && *value == 255)
-        );
-        let brightest = colors(Color32::from_gray(24))
-            .map(|(_, color)| color)
-            .max()
-            .unwrap();
-        assert!(
-            (78..=145).contains(&brightest),
-            "brightest dark-surface sample: {brightest}"
-        );
+        };
+        assert_eq!(colors(Color32::WHITE).count(), 0);
+        for value in [24, 244] {
+            let colors: Vec<_> = colors(Color32::from_gray(value)).collect();
+            assert!(colors.iter().all(|&color| color >= value));
+            assert!(colors.iter().any(|&color| color > value + 4));
+        }
     }
 
     #[test]
@@ -709,6 +684,6 @@ mod tests {
     }
 
     fn test_ink() -> Ink {
-        Ink::new(None, Color32::WHITE, Color32::WHITE)
+        Ink::new(None, LightSurface::Glass, Color32::WHITE)
     }
 }

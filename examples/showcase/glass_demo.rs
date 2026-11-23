@@ -1,7 +1,7 @@
 use egui::{Color32, ColorImage, Context, Frame, Rect, TextureHandle, TextureOptions, Ui, Vec2};
 use temivu::{
-    Button, ButtonVariant, Glass, GlassBackdrop, GlassTuning, Slider, Switch, Theme,
-    motion::ElasticDrag,
+    Button, ButtonVariant, Glass, GlassBackdrop, GlassTuning, LightSurface, Slider, Switch, Theme,
+    Vesper, motion::ElasticDrag,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -183,7 +183,7 @@ impl SampleMotion {
         size: Vec2,
         label: &str,
         theme: &Theme,
-    ) -> Rect {
+    ) -> (Rect, egui::Response) {
         let travel = ((stage.rect.size() - size) * 0.5 - Vec2::splat(8.0)).max(Vec2::ZERO);
         let sample_at =
             |position: Vec2| Rect::from_center_size(stage.rect.center() + position * travel, size);
@@ -215,7 +215,7 @@ impl SampleMotion {
         let resting = sample_at(self.position);
         let offset = ElasticDrag::new(travel * (Vec2::splat(1.0) - self.position.abs()))
             .offset(&handle, theme.motion);
-        resting.translate(offset)
+        (resting.translate(offset), handle)
     }
 }
 
@@ -265,7 +265,7 @@ impl Artwork {
         ui: &Ui,
         theme: &Theme,
         rect: Rect,
-        sample: Rect,
+        (sample, handle): (Rect, egui::Response),
         glass: Glass,
         preset: Preset,
     ) {
@@ -294,6 +294,16 @@ impl Artwork {
                 bounds: image_bounds,
             }),
         );
+        if let Some(lighting) = Vesper::context(ui.ctx()) {
+            lighting.paint_on_surface(
+                ui.painter(),
+                theme,
+                &handle,
+                sample,
+                26.into(),
+                LightSurface::Glass,
+            );
+        }
         if sample.width() >= 75.0 {
             ui.painter().text(
                 sample.center(),
@@ -318,13 +328,15 @@ mod tests {
                 let (rect, stage) =
                     ui.allocate_exact_size(egui::vec2(280.0, 164.0), egui::Sense::hover());
                 *artwork = rect;
-                *sample = motion.sample(
-                    ui,
-                    &stage,
-                    egui::vec2(160.0, 62.0),
-                    "Glass sample",
-                    &Theme::light(),
-                );
+                *sample = motion
+                    .sample(
+                        ui,
+                        &stage,
+                        egui::vec2(160.0, 62.0),
+                        "Glass sample",
+                        &Theme::light(),
+                    )
+                    .0;
             },
             (SampleMotion::default(), Rect::NOTHING, Rect::NOTHING),
         );

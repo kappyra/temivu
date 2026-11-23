@@ -1,19 +1,12 @@
 //! Responsive notification card with a paint-only exit.
 use crate::{
-    InputMode, Theme,
+    FadeOut, FadeOutState, GlassRegion, InputMode, Theme,
     glass::GlassTransition,
     liquid::{self, DropletAnchor, LiquidStyle, SurfaceTransition, fade_shape},
     motion,
 };
-use egui::{Id, Rect, Response, RichText, Role, Ui, WidgetInfo, vec2};
+use egui::{Rect, Response, RichText, Role, Ui, WidgetInfo, vec2};
 use std::time::Duration;
-
-#[derive(Clone, Debug)]
-struct ToastSnapshot {
-    rect: Rect,
-    frame: egui::Frame,
-    shapes: Vec<egui::epaint::ClippedShape>,
-}
 
 /// Caller-owned visibility and expiry. The clock begins when the toast is first shown
 /// and restarts after pointer hover or keyboard focus on its dismiss control.
@@ -22,7 +15,7 @@ pub struct ToastState {
     visible: bool,
     timeout: Option<Duration>,
     started_at: Option<f64>,
-    snapshot: Option<ToastSnapshot>,
+    pub(crate) fade: FadeOutState,
 }
 
 impl Default for ToastState {
@@ -46,7 +39,7 @@ impl ToastState {
             visible: true,
             timeout,
             started_at: None,
-            snapshot: None,
+            fade: FadeOutState::default(),
         }
     }
     pub fn is_visible(&self) -> bool {
@@ -58,6 +51,7 @@ impl ToastState {
     pub fn restart(&mut self) {
         self.visible = true;
         self.started_at = None;
+        self.fade.reset();
     }
 
     pub(crate) fn pause_timer(&mut self) {
@@ -67,7 +61,7 @@ impl ToastState {
     pub fn status(&self) -> ToastStatus {
         if self.visible {
             ToastStatus::Visible
-        } else if self.snapshot.is_some() {
+        } else if self.fade.has_snapshot() {
             ToastStatus::Closing
         } else {
             ToastStatus::Closed
@@ -76,7 +70,7 @@ impl ToastState {
 
     /// Whether the card or its closing animation still needs to be rendered.
     pub fn needs_render(&self) -> bool {
-        self.visible || self.snapshot.is_some()
+        self.visible || self.fade.has_snapshot()
     }
 
     // Returns the next timer wakeup; bounds the duration passed to egui.
@@ -121,6 +115,7 @@ pub struct Toast<'a> {
     input_mode: Option<InputMode>,
     icon: Option<&'a str>,
     inset: bool,
+    fade_out: FadeOut,
 }
 
 impl<'a> Toast<'a> {
@@ -141,6 +136,7 @@ impl<'a> Toast<'a> {
             input_mode: None,
             icon: None,
             inset: false,
+            fade_out: FadeOut::default(),
         }
     }
     pub fn description(mut self, description: &'a str) -> Self {
@@ -171,6 +167,12 @@ impl<'a> Toast<'a> {
         self
     }
 
+    /// Configure the blur and opacity transition when this card is dismissed.
+    pub fn fade_out(mut self, fade_out: FadeOut) -> Self {
+        self.fade_out = fade_out;
+        self
+    }
+
     pub(crate) fn inset(mut self, inset: bool) -> Self {
         self.inset = inset;
         self
@@ -178,13 +180,14 @@ impl<'a> Toast<'a> {
 
     /// Show the toast and return its response while it is visible.
     /// Keep calling this after dismissal to finish the paint-only exit.
-    pub fn show(mut self, ui: &mut Ui) -> Option<Response> {
+    pub fn show(self, ui: &mut Ui) -> Option<Response> {
         let motion_id = ui.make_persistent_id("temivu-toast-reveal");
         if self.state.timeout == Some(Duration::ZERO) {
             self.state.dismiss();
         }
         if !self.state.visible {
-            self.paint_exit(ui, motion_id);
+            self.state.fade.paint(ui, self.theme, self.fade_out);
+            motion::reset(ui.ctx(), motion_id);
             return None;
         }
 
@@ -196,12 +199,14 @@ impl<'a> Toast<'a> {
             self.theme,
         )
         .min(1.0);
-        let animate = self.theme.motion.animations_enabled(ui.ctx()) && !ui.is_sizing_pass();
         let glass = GlassTransition::new(ui.ctx(), reveal, !self.inset);
         let layer = ui.layer_id();
-        let start = (animate || glass.has_backdrop()).then(|| {
-            ui.ctx()
-                .graphics(|graphics| graphics.get(layer).map_or(0, |list| list.next_idx().0))
+        let fade_start = FadeOutState::paint_start(ui, self.theme, self.fade_out);
+        let start = fade_start.or_else(|| {
+            (reveal < 1.0 || glass.has_backdrop()).then(|| {
+                ui.ctx()
+                    .graphics(|graphics| graphics.get(layer).map_or(0, |list| list.next_idx().0))
+            })
         });
         let mut child = ui.new_child(egui::UiBuilder::new().id_salt(motion_id));
         let compact = self.input_mode.map_or_else(
@@ -244,44 +249,41 @@ impl<'a> Toast<'a> {
 
         let mut response = card.response;
         let layout = toast_layout(ui, response.rect, reveal);
-        if let Some(start) = start {
+        let mut region = None;
+        if let Some(start) = start
+            && (reveal < 1.0 || glass.has_backdrop())
+        {
             let clip = ui.clip_rect();
-            if animate {
-                let snapshot = self.state.snapshot.get_or_insert_with(|| ToastSnapshot {
-                    rect: response.rect,
-                    frame,
-                    shapes: Vec::new(),
-                });
-                snapshot.rect = response.rect;
-                snapshot.frame = frame;
-                snapshot.shapes.clear();
-                ui.ctx().graphics(|graphics| {
-                    if let Some(list) = graphics.get(layer) {
-                        snapshot
-                            .shapes
-                            .extend(list.all_entries().skip(start + 1).cloned());
+            let (surface, backdrop) =
+                toast_surface(response.rect, layout, reveal, frame, self.theme, &glass);
+            region = backdrop;
+            ui.ctx().graphics_mut(|graphics| {
+                let list = graphics.entry(layer);
+                list.set(egui::layers::ShapeIdx(start), clip, surface);
+                if reveal < 1.0 {
+                    let pose = toast_pose(response.rect, layout, clip, reveal, frame);
+                    for index in start + 1..list.next_idx().0 {
+                        list.mutate_shape(egui::layers::ShapeIdx(index), |entry| {
+                            pose_toast(entry, pose);
+                        });
                     }
-                });
-            }
-            if reveal < 1.0 || glass.has_backdrop() {
-                let surface =
-                    toast_surface(response.rect, layout, reveal, frame, self.theme, &glass);
-                ui.ctx().graphics_mut(|graphics| {
-                    let list = graphics.entry(layer);
-                    list.set(egui::layers::ShapeIdx(start), clip, surface);
-                    if reveal < 1.0 {
-                        let pose = toast_pose(response.rect, layout, clip, reveal, frame);
-                        for index in start + 1..list.next_idx().0 {
-                            list.mutate_shape(egui::layers::ShapeIdx(index), |entry| {
-                                pose_toast(entry, pose);
-                            });
-                        }
-                    }
-                });
-            }
+                }
+            });
         }
-        if !animate {
-            self.state.snapshot = None;
+        self.state.fade.capture(ui, fade_start, layout, region);
+        if reveal >= 0.999
+            && ui.is_enabled()
+            && let (Some(start), Some(region)) = (start, region)
+        {
+            crate::glass::receive_overlay_light(
+                ui.ctx(),
+                self.theme,
+                layer,
+                response.id,
+                egui::layers::ShapeIdx(start),
+                region.rect,
+                frame,
+            );
         }
 
         if card.inner.clicked() {
@@ -307,46 +309,6 @@ impl<'a> Toast<'a> {
             node.set_live(egui::accesskit::Live::Polite);
         });
         Some(response)
-    }
-
-    fn paint_exit(&mut self, ui: &mut Ui, id: Id) {
-        let Some(snapshot) = &self.state.snapshot else {
-            motion::reset(ui.ctx(), id);
-            return;
-        };
-        let reveal =
-            liquid::surface_progress(ui.ctx(), id, false, LiquidStyle::droplet(), self.theme)
-                .min(1.0);
-        if reveal <= 0.001 {
-            self.state.snapshot = None;
-            motion::reset(ui.ctx(), id);
-            return;
-        }
-        let rect = Rect::from_min_size(ui.available_rect_before_wrap().min, snapshot.rect.size());
-        let layout = toast_layout(ui, rect, reveal);
-        let pose = toast_pose(
-            snapshot.rect,
-            layout,
-            ui.clip_rect(),
-            reveal,
-            snapshot.frame,
-        );
-        let glass = GlassTransition::new(ui.ctx(), reveal, !self.inset);
-        ui.painter().add(toast_surface(
-            snapshot.rect,
-            layout,
-            reveal,
-            snapshot.frame,
-            self.theme,
-            &glass,
-        ));
-        for entry in &snapshot.shapes {
-            let mut entry = entry.clone();
-            pose_toast(&mut entry, pose);
-            ui.painter()
-                .with_clip_rect(entry.clip_rect)
-                .add(entry.shape);
-        }
     }
 }
 
@@ -542,7 +504,7 @@ fn toast_surface(
     frame: egui::Frame,
     theme: &Theme,
     glass: &GlassTransition,
-) -> egui::Shape {
+) -> (egui::Shape, Option<GlassRegion>) {
     let (source, target) = toast_bounds(rect, layout);
     let frame = glass.frame(theme, frame);
     let mut surface = liquid::matched_shape_with_opacity(
@@ -557,7 +519,7 @@ fn toast_surface(
         fade_shape(&mut surface, reveal);
     }
     if !glass.has_backdrop() {
-        return surface;
+        return (surface, None);
     }
     let (rect, corners) = liquid::anchored_glass_geometry(
         DropletAnchor {
@@ -570,7 +532,10 @@ fn toast_surface(
         SurfaceTransition::Droplet,
         true,
     );
-    glass.with_backdrop(surface, rect, corners)
+    (
+        glass.with_backdrop(surface, rect, corners),
+        glass.region(rect, corners),
+    )
 }
 
 fn toast_pose(

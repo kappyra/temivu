@@ -1,7 +1,7 @@
 //! Responsive navigation surfaces using egui's modal/popover focus and dismissal.
 use crate::{
-    Button, ButtonVariant, Dialog, NavigationItem, Popover, SlideSelect, SurfaceShape, Theme,
-    Vesper,
+    Button, ButtonVariant, Dialog, LightSurface, NavigationItem, Popover, SlideSelect,
+    SurfaceShape, Theme, Vesper,
 };
 use egui::{Id, Rect, Response, Sense, Stroke, Ui, Vec2, pos2, vec2};
 
@@ -236,6 +236,7 @@ fn menu_contents(
         drawer,
         select_on_drag,
     } = view;
+    let glass = crate::Glass::context(ui.ctx()).is_some();
     let top = ui.next_widget_position().y;
     let close = ui
         .horizontal(|ui| {
@@ -359,49 +360,52 @@ fn menu_contents(
                 let surface = rect.shrink(1.0).scale_from_center(1.0 - 0.03 * press);
                 let corner =
                     SurfaceShape::Card.radius(surface.size() * if drawer { 1.0 } else { 0.85 });
-                if drawer || hover > 0.001 || press > 0.001 {
-                    let emphasis = (hover * 0.10 + press * 0.13).clamp(0.0, 0.18);
-                    let fill = if drawer {
-                        let base = if active {
-                            theme.primary
-                        } else {
-                            theme.secondary
-                        };
-                        let fill = base.lerp_to_gamma(foreground, emphasis);
-                        if enabled { fill } else { theme.disable(fill) }
-                    } else {
-                        theme
-                            .foreground
-                            .gamma_multiply((hover * 0.06 + press * 0.09).clamp(0.0, 0.14))
-                    };
+                let base = if active {
+                    theme.primary
+                } else {
+                    theme.secondary
+                };
+                let emphasis = (hover * 0.10 + press * 0.13).clamp(0.0, 0.18);
+                let fill = if drawer {
+                    let fill = base.lerp_to_gamma(foreground, emphasis);
+                    if enabled { fill } else { theme.disable(fill) }
+                } else {
+                    theme
+                        .foreground
+                        .gamma_multiply((hover * 0.06 + press * 0.09).clamp(0.0, 0.14))
+                };
+                if drawer || fill != egui::Color32::TRANSPARENT {
                     ui.painter().add(crate::motion::press_shape(
                         egui::epaint::RectShape::filled(surface, corner, fill),
                         press,
                     ));
                 }
-                if let Some(light) = lighting
-                    && let Some(shape) = light.interactive_shape(
+                if enabled && let Some(light) = lighting {
+                    let material = if drawer {
+                        base.into()
+                    } else if glass {
+                        LightSurface::Glass
+                    } else {
+                        fill.into()
+                    };
+                    let corners = crate::motion::press_corners(surface, corner.into(), press);
+                    if let Some(shape) = light.interactive_shape_for(
                         ui.painter(),
                         theme,
                         &response,
                         surface,
-                        crate::motion::press_corners(surface, corner.into(), press),
-                    )
-                {
-                    ui.painter().add(shape);
-                }
-                if enabled && let Some(light) = lighting {
+                        corners,
+                        material,
+                    ) {
+                        ui.painter().add(shape);
+                    }
                     crate::lighting::spill::receive(
                         ui.painter(),
                         response.id,
                         surface,
-                        crate::motion::press_corners(surface, corner.into(), press),
+                        corners,
                         &light,
-                        if active && drawer {
-                            theme.primary
-                        } else {
-                            theme.secondary
-                        },
+                        material,
                         theme.card,
                     );
                 }

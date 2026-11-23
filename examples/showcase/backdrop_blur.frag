@@ -4,6 +4,7 @@ uniform vec2 u_axis;
 uniform float u_center;
 uniform vec4 u_offsets;
 uniform vec4 u_weights;
+uniform bool u_reduce;
 out vec4 pixel;
 
 vec3 sample_scene(vec2 texel) {
@@ -12,6 +13,10 @@ vec3 sample_scene(vec2 texel) {
 
 void main() {
     vec2 point = gl_FragCoord.xy;
+    if (u_reduce) {
+        pixel = vec4(sample_scene(point * 2.0), 1.0);
+        return;
+    }
     vec3 color = sample_scene(point) * u_center;
     for (int tap = 0; tap < 4; ++tap) {
         vec2 offset = u_axis * u_offsets[tap];

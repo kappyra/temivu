@@ -22,6 +22,34 @@ pub enum LightTracking {
     Spring,
 }
 
+/// The material beneath a Vesper highlight.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LightSurface {
+    /// The actual fill of an opaque or translucent control. White skips illumination.
+    Solid(Color32),
+    /// A Frost, Soft Prism, or Prism surface with a changing backdrop.
+    Glass,
+}
+
+impl From<Color32> for LightSurface {
+    fn from(color: Color32) -> Self {
+        Self::Solid(color)
+    }
+}
+
+impl LightSurface {
+    fn headroom(self, fallback: Color32) -> f32 {
+        match self {
+            Self::Solid(fill) => {
+                let color = fallback.blend(fill);
+                let darkest = color.r().min(color.g()).min(color.b());
+                f32::from(255 - darkest) / 255.0
+            }
+            Self::Glass => 1.0,
+        }
+    }
+}
+
 /// Choose any combination of effects. Motion preferences still apply.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LightEffects {
@@ -45,7 +73,7 @@ pub struct Vesper {
     pub effects: LightEffects,
     pub quality: LightQuality,
     pub tracking: LightTracking,
-    /// An optional tint. The default is white with a neutral shadow on pale surfaces.
+    /// An optional additive highlight tint. The default is neutral white.
     pub color: Option<Color32>,
     pub intensity: f32,
     pub opacity: f32,
@@ -116,7 +144,7 @@ impl Vesper {
             attenuation: 1.6,
             inertia: 0.32,
             elevation: 0.35,
-            spill: None,
+            spill: Some(LightSpill::standard()),
         }
     }
 
@@ -131,7 +159,7 @@ impl Vesper {
         style
     }
 
-    /// Set an inherited material for Temivu buttons and switches in this context.
+    /// Set the inherited material for Temivu controls that support lighting.
     /// The default is disabled.
     pub fn set_context(ctx: &Context, style: Option<Self>) {
         if style.is_some_and(|style| style.spill.is_some()) {
@@ -179,13 +207,27 @@ impl Vesper {
         corners: CornerRadius,
         surface: Color32,
     ) {
+        self.paint_on_surface(painter, theme, response, rect, corners, surface.into());
+    }
+
+    /// Paint over an explicitly chosen material, including any of the glass presets.
+    /// Call after painting the material and before painting foreground content.
+    pub fn paint_on_surface(
+        &self,
+        painter: &Painter,
+        theme: &Theme,
+        response: &Response,
+        rect: Rect,
+        corners: CornerRadius,
+        surface: LightSurface,
+    ) {
         if let Some(shape) =
-            self.interactive_shape_on(painter, theme, response, rect, corners.into(), surface)
+            self.interactive_shape_for(painter, theme, response, rect, corners.into(), surface)
         {
             painter.add(shape);
         }
         if response.enabled() {
-            self.receive(painter, theme, response.id, rect, corners, surface);
+            self.receive_on_surface(painter, theme, response.id, rect, corners, surface);
         }
     }
 
@@ -201,6 +243,19 @@ impl Vesper {
         rect: Rect,
         corners: CornerRadius,
         surface: Color32,
+    ) {
+        self.receive_on_surface(painter, theme, id, rect, corners, surface.into());
+    }
+
+    /// Receive the shared pointer highlight on a custom solid or glass surface.
+    pub fn receive_on_surface(
+        &self,
+        painter: &Painter,
+        theme: &Theme,
+        id: Id,
+        rect: Rect,
+        corners: CornerRadius,
+        surface: LightSurface,
     ) {
         if self.spill.is_some() && self.can_paint(painter, rect) {
             spill::receive(
@@ -225,6 +280,29 @@ impl Vesper {
         point: Pos2,
         strength: f32,
     ) {
+        self.paint_at_on_surface(
+            painter,
+            theme,
+            rect,
+            corners,
+            point,
+            strength,
+            theme.card.into(),
+        );
+    }
+
+    /// Paint a caller-positioned highlight over a specific solid or glass material.
+    #[allow(clippy::too_many_arguments)]
+    pub fn paint_at_on_surface(
+        &self,
+        painter: &Painter,
+        theme: &Theme,
+        rect: Rect,
+        corners: CornerRadius,
+        point: Pos2,
+        strength: f32,
+        surface: LightSurface,
+    ) {
         let style = self.bounded();
         let energy = bounded(strength, 0.0, 0.0, 1.0);
         if energy <= 0.0 || !point.is_finite() || !style.can_paint(painter, rect) {
@@ -238,20 +316,10 @@ impl Vesper {
             velocity: Vec2::ZERO,
             flow: Vec2::ZERO,
         };
-        if let Some(shape) = style.shape(theme, rect, corners.into(), theme.card, sample) {
+        let ink = render::Ink::new(style.color, surface, theme.card);
+        if let Some(shape) = style.shape(rect, corners.into(), ink, sample) {
             painter.add(shape);
         }
-    }
-
-    pub(crate) fn interactive_shape(
-        &self,
-        painter: &Painter,
-        theme: &Theme,
-        response: &Response,
-        rect: Rect,
-        corners: egui::epaint::CornerRadiusF32,
-    ) -> Option<Shape> {
-        self.interactive_shape_on(painter, theme, response, rect, corners, theme.card)
     }
 
     pub(crate) fn interactive_shape_on(
@@ -263,7 +331,20 @@ impl Vesper {
         corners: egui::epaint::CornerRadiusF32,
         surface: Color32,
     ) -> Option<Shape> {
-        if !response.enabled() || !self.can_paint(painter, rect) {
+        self.interactive_shape_for(painter, theme, response, rect, corners, surface.into())
+    }
+
+    pub(crate) fn interactive_shape_for(
+        &self,
+        painter: &Painter,
+        theme: &Theme,
+        response: &Response,
+        rect: Rect,
+        corners: egui::epaint::CornerRadiusF32,
+        surface: LightSurface,
+    ) -> Option<Shape> {
+        let ink = render::Ink::new(self.color, surface, theme.card);
+        if !response.enabled() || !self.can_paint(painter, rect) || !ink.visible() {
             return None;
         }
         let style = self.bounded();
@@ -277,7 +358,7 @@ impl Vesper {
         {
             spill::emit(painter, response.id, rect, &style, sample);
         }
-        style.shape(theme, rect, corners, surface, sample)
+        style.shape(rect, corners, ink, sample)
     }
 
     fn can_paint(&self, painter: &Painter, rect: Rect) -> bool {
@@ -295,13 +376,11 @@ impl Vesper {
 
     fn shape(
         &self,
-        theme: &Theme,
         rect: Rect,
         corners: egui::epaint::CornerRadiusF32,
-        surface: Color32,
+        ink: render::Ink,
         sample: Sample,
     ) -> Option<Shape> {
-        let ink = render::Ink::new(self.color, surface, theme.card);
         let mesh = render::mesh(rect, corners, self, ink, sample);
         (!mesh.is_empty()).then(|| Shape::mesh(mesh))
     }
@@ -325,7 +404,7 @@ impl Vesper {
         let ctx = &response.ctx;
         let id = response.id.with("vesper");
         let activated = response.clicked();
-        let (now, primary_press) = ctx.input(|input| {
+        let (now, primary_press, hover_pos) = ctx.input(|input| {
             let pointer = &input.pointer;
             let press = if pointer.primary_down() && !input.key_pressed(egui::Key::Escape) {
                 pointer
@@ -335,7 +414,7 @@ impl Vesper {
             } else {
                 None
             };
-            (input.time, press)
+            (input.time, press, pointer.hover_pos())
         });
         if !now.is_finite() {
             return None;
@@ -384,12 +463,19 @@ impl Vesper {
             spring.reset::<2>();
         }
 
-        // Track normalized widget coordinates so a resize does not move the light
-        // into an unrelated part of the next frame.
+        let shares_light = self
+            .spill
+            .is_some_and(|settings| settings.bounded().intensity > 0.0);
+        // Use widget coordinates so its shape can move, while allowing a shared
+        // source to travel outside that widget with the same contact.
         let pointer = if held {
-            response
-                .interact_pointer_pos()
-                .or_else(|| primary_press.and_then(|(_, _, position)| position.map(to_local)))
+            primary_press
+                .and_then(|(_, _, position)| position.map(to_local))
+                .or_else(|| response.interact_pointer_pos())
+        } else if shares_light && !keyboard_focus {
+            hover_pos
+                .map(to_local)
+                .or_else(|| response.interact_pointer_pos())
         } else if activated {
             response
                 .interact_pointer_pos()
@@ -403,12 +489,16 @@ impl Vesper {
                     .filter(|_| !active || held)
                     .map_or(Pos2::new(0.5, 0.5), |state| state.target)
             },
-            |p| {
-                ((p - rect.min) / rect.size())
-                    .clamp(Vec2::ZERO, Vec2::splat(1.0))
-                    .to_pos2()
-            },
+            |p| ((p - rect.min) / rect.size()).to_pos2(),
         );
+        let constrain = |point: Pos2| {
+            if shares_light {
+                point
+            } else {
+                point.clamp(Pos2::ZERO, Pos2::new(1.0, 1.0))
+            }
+        };
+        let target = constrain(target);
         let target_energy = if held {
             1.0
         } else if response.hovered() {
@@ -419,10 +509,15 @@ impl Vesper {
             0.0
         };
         let animated = theme.motion.animations_enabled(ctx);
+        let hover_entry = animated && shares_light && response.hovered() && !held;
         let mut state = previous.unwrap_or(Interaction {
             target,
             position: target,
-            energy: target_energy,
+            energy: if hover_entry {
+                target_energy * 0.45
+            } else {
+                target_energy
+            },
             time: now,
             held: false,
             press_start: None,
@@ -463,17 +558,18 @@ impl Vesper {
                         state.position.lerp(target, smoothing)
                     }
                 }
-                LightTracking::Spring => spring
-                    .sample(
-                        state.position,
-                        target,
-                        crate::motion::MotionSpec::Spring(crate::motion::Spring::response(
-                            motion.normal,
-                            0.82,
-                        )),
-                    )
-                    .value
-                    .clamp(Pos2::ZERO, Pos2::new(1.0, 1.0)),
+                LightTracking::Spring => constrain(
+                    spring
+                        .sample(
+                            state.position,
+                            target,
+                            crate::motion::MotionSpec::Spring(crate::motion::Spring::response(
+                                motion.normal,
+                                0.82,
+                            )),
+                        )
+                        .value,
+                ),
             };
             let fade = crate::motion::tracking_alpha(
                 dt,

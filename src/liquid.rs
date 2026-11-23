@@ -648,6 +648,9 @@ pub(crate) fn popup<R>(
             }
         }
     });
+    if (amount - 1.0).abs() < 0.001 && glass.enabled() {
+        crate::glass::receive_overlay_light(ctx, theme, layer, id, background, target, frame);
+    }
     Some(result)
 }
 
@@ -1519,6 +1522,11 @@ impl OverlayPass {
             if crate::glass::live_enabled(ctx) {
                 let shape = self.optical_surface(ctx, theme, rect, frame, clip);
                 ctx.graphics_mut(|graphics| graphics.entry(self.layer).set(surface, clip, shape));
+            }
+            if crate::Glass::context(ctx).is_some() {
+                crate::glass::receive_overlay_light(
+                    ctx, theme, self.layer, self.id, surface, rect, frame,
+                );
             }
             return;
         }

@@ -24,9 +24,9 @@ fn actions(ui: &mut egui::Ui, theme: &Theme, enabled: &mut bool) {
 }
 ```
 
-Call `Vesper::set_context(ctx, None)` to remove the inherited style. Explicit widget overrides apply independently. `Vesper::subtle()` is the default preset. `Vesper::expressive()` increases reach and enables spring tracking and a short trailing highlight. The individual `LightEffects` flags select pointer follow, edge light, scattering, flow, particles, and depth. Set `color` to override the neutral light, or leave it at `None` to let the light adapt to the surface. The style also exposes intensity, opacity, radius, softness, propagation speed, attenuation, inertia, and elevation.
+Call `Vesper::set_context(ctx, None)` to remove the inherited style. Explicit widget overrides apply independently. `Vesper::subtle()` is the default preset. `Vesper::expressive()` increases reach and enables spring tracking and a short trailing highlight. The individual `LightEffects` flags select pointer follow, edge light, scattering, flow, particles, and depth. Set `color` to choose an additive light tint or leave it at `None` for white light. The style also exposes intensity, opacity, radius, softness, propagation speed, attenuation, inertia, and elevation.
 
-For custom widgets, paint the material between the background and foreground. Supply the same rectangle and corners used for the background. `paint_on` also takes the actual fill so the light can distinguish a dark primary action from a pale field in the same theme. `paint` uses the theme card as its fill hint.
+For custom widgets, paint the light between the background and foreground. Supply the same rectangle and corners used for the background. `paint_on` takes the actual fill. Dark and pale colored fills brighten according to available contrast. A white fill skips the highlight. `paint` uses the theme card as its fill hint. For Frost, Soft Prism and Prism, use `paint_on_surface` with `LightSurface::Glass`. `EffectSurface` picks up the glass material from its own `glass` option.
 
 ```rust
 use temivu::{Theme, Vesper};
@@ -47,14 +47,14 @@ fn lit_surface(ui: &mut egui::Ui, theme: &Theme) {
 }
 ```
 
-Use `paint_at` for a steady light at an explicit point. Repeated calls can layer additional light sources, with one mesh per call. The interactive API combines a tracked light and one activation burst in the same mesh. The Showcase’s **Overview → Vesper lighting** panel has a drag surface, lit and plain buttons, a lit switch, and a 24-surface load preview.
+Use `paint_at` for a steady light at an explicit point on the theme card color, or `paint_at_on_surface` to name the underlying material. Repeated calls can layer additional light sources. The interactive API combines a tracked light and one activation burst in the same mesh. The Showcase’s **Overview → Vesper lighting** panel has a drag surface, lit and plain buttons, a lit switch, and a 24-surface load preview.
 
 ## Share light between nearby objects
 
-Set `spill` on each participating material. Interactive objects emit their pointer light, and passive objects can receive light through `Vesper::receive` or `EffectSurface`. Each receiver picks the strongest nearby emitter on the same egui layer and paints inside its own shape. The UI can expose a separate preference by setting `spill` to `None` while keeping local lighting enabled.
+Both presets enable `spill`. The source follows a held finger or mouse in viewport coordinates after it leaves the originating widget. Nearby participating surfaces on any layer in that viewport can pick up the light through `Vesper::receive`, `Vesper::receive_on_surface` or `EffectSurface`. The receiving material and its parent clip shape the reflection. Use `LightSpill::radius` and `LightSpill::intensity` to tune the reach and brightness, or set `spill` to `None` for local-only feedback.
 
 ```rust
-use temivu::{EffectSurface, LightSpill, Theme, Vesper};
+use temivu::{EffectSurface, Glass, LightSpill, Theme, Vesper};
 
 fn adjacent_objects(ui: &mut egui::Ui, theme: &Theme) {
     let shared = Vesper {
@@ -63,6 +63,7 @@ fn adjacent_objects(ui: &mut egui::Ui, theme: &Theme) {
     };
     ui.horizontal(|ui| {
         EffectSurface::new(theme)
+            .glass(Some(Glass::frost()))
             .lighting(Some(shared))
             .show(ui, |ui| ui.label("Receiving surface"));
         temivu::Button::new("Hold here", theme)
@@ -95,7 +96,7 @@ A bounded distance falloff was selected after comparing physically based attenua
 
 The interaction state is keyed by egui’s widget ID. Pointer positions are normalized so resizing a surface preserves the light’s relative location. Direct tracking follows the input immediately. Smooth tracking uses a time-based lag and spring tracking reuses Temivu’s spring. The contact highlight follows a held mouse button or touch, including after egui recognizes a long press. A hover-only surface can observe the contact while its children retain their input behavior. On release, the light settles to the hover level or fades when the pointer leaves. Keyboard focus can show a centered cue. Reduced motion makes the response immediate and skips the animated burst and flow.
 
-The renderer builds one bounded vertex-color mesh for each active surface. The core and expanding wash use polynomial falloff on squared distances. The grid adds samples near a narrow light on wide surfaces, and the beveled rim samples straight sections in proportion to their length. A pale blue-gray reflection makes the white contact core visible on light fills. Dark fills use the white highlight directly. The mesh uses two pre-sized vectors and bounds particle counts to four, six, or eight per burst at Low, Balanced, and High. The spill resolver uses the Low mesh density, checks at most 16 emitters and 256 receivers per pass, and requests no repaints of its own. Controls draw the lighting meshes behind their text and indicators.
+The renderer builds one bounded vertex-color mesh for each active surface. The core and expanding wash use polynomial falloff on squared distances. The grid adds samples near a narrow light on wide surfaces, and the beveled rim samples straight sections in proportion to their length. The mesh adds light to the underlying color. It uses two pre-sized vectors and bounds particle counts to four, six, or eight per burst at Low, Balanced, and High. The spill resolver uses the Low mesh density, checks at most 16 emitters and 256 receivers per pass, and requests no repaints of its own. Controls draw the lighting meshes behind their text and indicators.
 
 ## Verification and measurements
 
@@ -113,6 +114,6 @@ Run the same fixture under Cargo’s release profile with `cargo test --release 
 
 ## Scope and trade-offs
 
-Flow and particles are optional expressive accents. The depth treatment is directional shading on each surface. Automatic device-based quality selection and a 3D material model are possible extensions. Applications can select Low explicitly for tighter rendering budgets.
+Flow and particles are optional expressive accents. The depth treatment adds a directional highlight. Automatic device-based quality selection and a 3D material model are possible extensions. Applications can select Low explicitly for tighter rendering budgets.
 
 The light is drawn through egui’s ordinary mesh path without adding dependencies or requiring a glass material. Dense interfaces, high-DPI rendering, and custom light colors can change the cost and perceived contrast. Use the Showcase’s stress preview to compare quality settings on target devices.

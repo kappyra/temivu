@@ -1,7 +1,10 @@
 //! Caller-owned queue for responsive notification cards.
 //! Visible entries are limited, and closing cards release their space smoothly.
 use crate::toast::{Notice, notice_close, notice_frame};
-use crate::{Button, ButtonVariant, Dialog, Theme, Toast, ToastState, ToastStatus, ToastVariant};
+use crate::{
+    Button, ButtonVariant, Dialog, EffectSurface, FadeOut, Theme, Toast, ToastState, ToastStatus,
+    ToastVariant,
+};
 use egui::{Align2, Area, Id, Order, Response, Ui, Vec2};
 use std::time::Duration;
 
@@ -14,6 +17,7 @@ pub struct ToastEntry {
     timeout: Option<Duration>,
     variant: ToastVariant,
     icon: Option<String>,
+    fade_out: FadeOut,
 }
 
 impl ToastEntry {
@@ -26,6 +30,7 @@ impl ToastEntry {
             timeout: Some(Duration::from_secs(5)),
             variant: ToastVariant::Primary,
             icon: None,
+            fade_out: FadeOut::default(),
         }
     }
     pub fn description(mut self, description: impl Into<String>) -> Self {
@@ -45,6 +50,11 @@ impl ToastEntry {
     /// An optional decorative leading icon (text glyph approximation).
     pub fn icon(mut self, icon: impl Into<String>) -> Self {
         self.icon = Some(icon.into());
+        self
+    }
+    /// Configure this entry's exit in the preview and notification center.
+    pub fn fade_out(mut self, fade_out: FadeOut) -> Self {
+        self.fade_out = fade_out;
         self
     }
     fn notice(&self) -> Notice<'_> {
@@ -233,7 +243,7 @@ impl ToasterState {
             }
             close = center_header(ui, theme, labels, count, touch).clicked();
 
-            if count == 0 {
+            if count == 0 && !self.needs_render() {
                 notice_frame(theme).show(ui, |ui| {
                     ui.label(egui::RichText::new(labels.empty).color(theme.muted_foreground));
                 });
@@ -246,23 +256,20 @@ impl ToasterState {
                 0.0
             };
             let remaining = (max_height - ui.min_rect().height() - footer_height - 8.0).max(1.0);
-            let mut dismissed = None;
             egui::ScrollArea::vertical()
                 .max_height(remaining)
                 .min_scrolled_height(0.0)
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
                     egui::Frame::NONE.inner_margin(3).show(ui, |ui| {
-                        for queued in self
-                            .entries
-                            .iter()
-                            .filter(|queued| queued.state.is_visible())
-                        {
-                            let entry = &queued.entry;
+                        for QueuedToast { entry, state } in &mut self.entries {
                             ui.push_id(entry.id, |ui| {
                                 let accessible = format!("{}: {}", labels.dismiss, entry.title);
-                                notice_frame(theme).show(ui, |ui| {
-                                    let response =
+                                let visible = state.is_visible();
+                                let response = EffectSurface::new(theme)
+                                    .frame(notice_frame(theme))
+                                    .fade_out(entry.fade_out)
+                                    .show_with_fade(ui, &mut state.fade, visible, |ui| {
                                         entry.notice().show(ui, theme, touch, false, |ui, size| {
                                             notice_close(
                                                 ui,
@@ -272,17 +279,19 @@ impl ToasterState {
                                                 size,
                                                 false,
                                             )
-                                        });
-                                    if response.clicked() {
-                                        dismissed = Some(entry.id);
-                                    }
-                                });
+                                        })
+                                    });
+                                if response.is_some_and(|result| result.inner.clicked()) {
+                                    state.dismiss();
+                                    ctx.request_repaint();
+                                }
                             });
                         }
                     });
                 });
-            if let Some(id) = dismissed {
-                self.entries.retain(|queued| queued.entry.id != id);
+            let before = self.entries.len();
+            self.prune();
+            if self.entries.len() != before {
                 ctx.request_repaint();
             }
             if self.len() > 1 {
@@ -294,7 +303,7 @@ impl ToasterState {
                         .show(ui)
                         .clicked()
                     {
-                        self.entries.clear();
+                        self.clear();
                         ctx.request_repaint();
                     }
                 });
@@ -401,7 +410,8 @@ impl ToasterState {
                         } else {
                             (egui::Frame::NONE, None)
                         };
-                        crate::glass::show_frame(ui, tray, backdrop, |ui| {
+                        let lighting = crate::Vesper::context(ui.ctx());
+                        crate::glass::show_frame(ui, theme, tray, backdrop, lighting, |ui| {
                             let overflow = self.len().saturating_sub(self.limit);
                             let action_space = if footer.is_some() {
                                 if compact && width < 350.0 {
@@ -528,6 +538,7 @@ fn show_toast(
 ) -> bool {
     let mut toast = Toast::new(state, theme, &entry.title, dismiss_label)
         .variant(entry.variant)
+        .fade_out(entry.fade_out)
         .inset(inset);
     if let Some(description) = &entry.description {
         toast = toast.description(description);

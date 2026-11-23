@@ -515,8 +515,15 @@ impl LightingDemo {
                 let angle = phase + index as f32 * 0.32;
                 let (y, x) = angle.sin_cos();
                 let source = cell.center() + egui::vec2(x, y) * (size * 0.26);
-                self.style
-                    .paint_at(ui.painter(), theme, cell, corners, source, 0.85);
+                self.style.paint_at_on_surface(
+                    ui.painter(),
+                    theme,
+                    cell,
+                    corners,
+                    source,
+                    0.85,
+                    STAGE.into(),
+                );
             }
         }
     }

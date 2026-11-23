@@ -273,7 +273,7 @@ impl<'a> Button<'a> {
                         &response,
                         response.rect,
                         crate::motion::press_corners(response.rect, radius.into(), press),
-                        surface,
+                        fill,
                     ) {
                         // egui paints the button frame first. Keep the label and
                         // focus treatment above the interaction mesh.
@@ -295,7 +295,7 @@ impl<'a> Button<'a> {
                             response.rect,
                             crate::motion::press_corners(response.rect, radius.into(), press),
                             &style,
-                            surface,
+                            fill,
                             self.theme.card,
                             start,
                         );

@@ -1,9 +1,11 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use egui::{Color32, Context, Frame, Margin, Rect, Sense, Shape, vec2};
 use egui_kittest::{Harness, kittest::Queryable};
 use temivu::{
-    EffectSurface, Glass, GlassProfile, GlassRegion, GlassRenderer, LightSpill, Theme, Vesper,
+    EffectSurface, FadeOut, FadeOutState, Glass, GlassProfile, GlassRegion, GlassRenderer,
+    LightSpill, Theme, Vesper,
 };
 
 struct TestRenderer;
@@ -21,6 +23,52 @@ fn region(shape: &Shape) -> Option<&GlassRegion> {
     match shape {
         Shape::Callback(callback) => callback.callback.downcast_ref(),
         _ => None,
+    }
+}
+
+#[test]
+fn custom_glass_surface_fades_its_backdrop_and_retires_its_contents() {
+    let ctx = Context::default();
+    Glass::set_renderer(&ctx, Some(Arc::new(TestRenderer)));
+    ctx.all_styles_mut(|style| style.animation_time = 0.2);
+    let theme = Theme::light();
+    let mut state = FadeOutState::default();
+    let mut calls = 0;
+    for (time, visible, expected) in [
+        (0.0, true, Some(1.0)),
+        (0.1, false, Some(1.0)),
+        (0.2, false, Some(0.5)),
+        (0.5, false, None),
+    ] {
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                time: Some(time),
+                ..Default::default()
+            },
+            |ui| {
+                let result = EffectSurface::new(&theme)
+                    .glass(Some(Glass::soft_prism()))
+                    .fade_out(FadeOut {
+                        duration: Duration::from_millis(200),
+                        blur_radius: 0.0,
+                    })
+                    .show_with_fade(ui, &mut state, visible, |ui| {
+                        calls += 1;
+                        ui.button("Custom action")
+                    });
+                assert_eq!(result.is_some(), visible);
+            },
+        );
+        output.textures_delta.clear();
+        assert_eq!(
+            output
+                .shapes
+                .iter()
+                .find_map(|entry| region(&entry.shape).map(|region| region.strength)),
+            expected
+        );
+        assert_eq!(state.has_snapshot(), expected.is_some());
+        assert_eq!(calls, 1);
     }
 }
 

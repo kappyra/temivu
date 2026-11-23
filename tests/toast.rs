@@ -188,7 +188,7 @@ fn toast_card_alpha(harness: &Harness<'_, ToastState>) -> Option<u8> {
 }
 
 #[test]
-fn toast_fade_in_respects_motion_settings() {
+fn toast_defocuses_in_place_and_entrance_respects_motion_settings() {
     let theme = Theme::light();
     let mut harness = Harness::builder().build_ui_state(
         |ui, state: &mut ToastState| {
@@ -215,7 +215,20 @@ fn toast_fade_in_respects_motion_settings() {
     harness.step();
     let (closing, fill) = toast_card(&harness).expect("paint-only closing card");
     assert!(fill.a() > 0 && fill.a() < 255);
-    assert!(closing.width() < full.width());
+    assert!((closing.width() - full.width()).abs() < 0.01);
+    assert!(closing.center().distance(full.center()) <= 4.0);
+    let copies: Vec<_> = harness
+        .output()
+        .shapes
+        .iter()
+        .filter_map(|entry| match &entry.shape {
+            egui::Shape::Text(text) if text.galley.job.text == "Saved" => Some(text),
+            _ => None,
+        })
+        .collect();
+    assert!(copies.len() > 1);
+    assert!(copies.iter().all(|text| text.opacity_factor < 1.0));
+    assert!(copies.iter().any(|text| text.pos != copies[0].pos));
     assert!(
         harness
             .query_by_role(egui::accesskit::Role::Alert)

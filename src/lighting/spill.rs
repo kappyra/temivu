@@ -3,17 +3,18 @@ use std::collections::HashMap;
 
 use egui::{
     Color32, Context, Id, LayerId, Painter, Pos2, Rect, Shape, Ui, Vec2, ViewportId,
+    emath::TSTransform,
     epaint::{CornerRadiusF32, RectShape},
     layers::{GraphicLayers, ShapeIdx},
     plugin::Plugin,
 };
 
-use super::{LightEffects, LightQuality, Sample, Vesper, bounded, render};
+use super::{LightEffects, LightQuality, LightSurface, Sample, Vesper, bounded, render};
 
 const MAX_EMITTERS: usize = 16;
 const MAX_RECEIVERS: usize = 256;
 
-/// Optional light transfer between nearby surfaces in the same UI layer.
+/// Optional light transfer between participating surfaces in the same viewport.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LightSpill {
     /// Maximum reach in logical points.
@@ -24,15 +25,19 @@ pub struct LightSpill {
 
 impl Default for LightSpill {
     fn default() -> Self {
+        Self::standard()
+    }
+}
+
+impl LightSpill {
+    pub(super) const fn standard() -> Self {
         Self {
             radius: 144.0,
             intensity: 0.55,
         }
     }
-}
 
-impl LightSpill {
-    fn bounded(self) -> Self {
+    pub(super) fn bounded(self) -> Self {
         let defaults = Self::default();
         Self {
             radius: bounded(self.radius, defaults.radius, 12.0, 420.0),
@@ -50,7 +55,11 @@ struct Marker {
 }
 
 impl Marker {
-    fn update(self, graphics: &mut GraphicLayers, apply: impl FnOnce(&mut Shape, RectShape, Rect)) {
+    fn update(
+        self,
+        graphics: &mut GraphicLayers,
+        apply: impl FnOnce(&mut Shape, RectShape, Rect, TSTransform),
+    ) {
         if let Some(list) = graphics.get_mut(self.layer) {
             list.mutate_shape(self.slot, |entry| {
                 let shape = if self.keep_background {
@@ -67,7 +76,12 @@ impl Marker {
                 if matches!(shape, Shape::Rect(rect) if rect.fill == Color32::TRANSPARENT)
                     && let Shape::Rect(rect) = std::mem::replace(shape, Shape::Noop)
                 {
-                    apply(shape, rect, entry.clip_rect);
+                    apply(
+                        shape,
+                        rect,
+                        entry.clip_rect,
+                        entry.transform_after_tessellation,
+                    );
                 }
             });
         }
@@ -85,7 +99,7 @@ struct Emitter {
 
 #[derive(Clone, Copy)]
 struct ActiveSource {
-    marker: Marker,
+    id: Id,
     point: Pos2,
     radius: f32,
     energy: f32,
@@ -97,7 +111,7 @@ struct Receiver {
     corners: CornerRadiusF32,
     original_width: f32,
     style: Vesper,
-    surface: Color32,
+    surface: LightSurface,
     fallback: Color32,
     opacity: f32,
 }
@@ -147,73 +161,102 @@ impl Plugin for SpillPlugin {
             return;
         }
 
+        let mut layer_transforms = HashMap::new();
+        for layer in scene
+            .emitters
+            .iter()
+            .map(|item| item.marker.layer)
+            .chain(scene.receivers.iter().map(|item| item.marker.layer))
+        {
+            layer_transforms.entry(layer).or_insert_with(|| {
+                ctx.layer_transform_to_global(layer)
+                    .unwrap_or(TSTransform::IDENTITY)
+            });
+        }
         ctx.graphics_mut(|graphics| {
             let mut sources = [None; MAX_EMITTERS];
             for (source, emitter) in sources.iter_mut().zip(scene.emitters.drain(..)) {
-                emitter.marker.update(graphics, |_, marker, clip| {
-                    let point = marker.rect.min + emitter.position * marker.rect.size();
-                    if marker.rect.is_positive() && point.is_finite() && clip.contains(point) {
-                        let scale = marker.rect.width() / emitter.original_width;
-                        *source = Some(ActiveSource {
-                            marker: emitter.marker,
-                            point,
-                            radius: (emitter.radius * scale).clamp(1.0, 420.0),
-                            energy: emitter.energy,
-                            color: emitter.color,
-                        });
-                    }
-                });
+                let layer = layer_transforms[&emitter.marker.layer];
+                emitter
+                    .marker
+                    .update(graphics, |_, marker, clip, transform| {
+                        let visible = transform.mul_rect(marker.rect).intersect(clip);
+                        let to_global = layer * transform;
+                        let point =
+                            to_global * (marker.rect.min + emitter.position * marker.rect.size());
+                        if visible.is_positive() && point.is_finite() {
+                            let scale =
+                                to_global.scaling * marker.rect.width() / emitter.original_width;
+                            *source = Some(ActiveSource {
+                                id: emitter.marker.id,
+                                point,
+                                radius: (emitter.radius * scale).clamp(1.0, 420.0),
+                                energy: emitter.energy,
+                                color: emitter.color,
+                            });
+                        }
+                    });
             }
             for receiver in scene.receivers.drain(..) {
-                receiver.marker.update(graphics, |slot, marker, clip| {
-                    let bounds = marker.rect.intersect(clip);
-                    if !bounds.is_positive() {
-                        return;
-                    }
-                    let source = sources
-                        .iter()
-                        .flatten()
-                        .filter(|source| {
-                            source.marker.layer == receiver.marker.layer
-                                && source.marker.id != receiver.marker.id
-                        })
-                        .filter_map(|source| {
-                            let proximity = 1.0
-                                - bounds.distance_sq_to_pos(source.point) / source.radius.powi(2);
-                            (proximity > 0.0).then_some((source, source.energy * proximity.powi(2)))
-                        })
-                        .max_by(|(_, a), (_, b)| a.total_cmp(b));
-                    let Some((source, _)) = source else {
-                        return;
-                    };
-                    let mut style = receiver.style;
-                    style.quality = LightQuality::Low;
-                    style.radius = source.radius;
-                    style.effects = LightEffects {
-                        follow: true,
-                        edge: style.effects.edge,
-                        ..LightEffects::default()
-                    };
-                    let ink = render::Ink::new(
-                        source.color.or(style.color),
-                        receiver.surface,
-                        receiver.fallback,
-                    );
-                    let sample = Sample {
-                        point: source.point,
-                        energy: source.energy * receiver.opacity,
-                        pulse_point: source.point,
-                        pulse: 1.0,
-                        velocity: Vec2::ZERO,
-                        flow: Vec2::ZERO,
-                    };
-                    let scale = marker.rect.width() / receiver.original_width;
-                    let mesh =
-                        render::mesh(marker.rect, receiver.corners * scale, &style, ink, sample);
-                    if !mesh.is_empty() {
-                        *slot = Shape::mesh(mesh);
-                    }
-                });
+                let layer = layer_transforms[&receiver.marker.layer];
+                receiver
+                    .marker
+                    .update(graphics, |slot, marker, clip, transform| {
+                        let bounds =
+                            layer.mul_rect(transform.mul_rect(marker.rect).intersect(clip));
+                        if !bounds.is_positive() {
+                            return;
+                        }
+                        let source = sources
+                            .iter()
+                            .flatten()
+                            .filter(|source| source.id != receiver.marker.id)
+                            .filter_map(|source| {
+                                let proximity = 1.0
+                                    - bounds.distance_sq_to_pos(source.point)
+                                        / source.radius.powi(2);
+                                (proximity > 0.0)
+                                    .then_some((source, source.energy * proximity.powi(2)))
+                            })
+                            .max_by(|(_, a), (_, b)| a.total_cmp(b));
+                        let Some((source, _)) = source else {
+                            return;
+                        };
+                        let mut style = receiver.style;
+                        style.quality = LightQuality::Low;
+                        let to_global = layer * transform;
+                        let point = to_global.inverse() * source.point;
+                        style.radius = source.radius / to_global.scaling;
+                        style.effects = LightEffects {
+                            follow: true,
+                            edge: style.effects.edge,
+                            ..LightEffects::default()
+                        };
+                        let ink = render::Ink::new(
+                            source.color.or(style.color),
+                            receiver.surface,
+                            receiver.fallback,
+                        );
+                        let sample = Sample {
+                            point,
+                            energy: source.energy * receiver.opacity,
+                            pulse_point: point,
+                            pulse: 1.0,
+                            velocity: Vec2::ZERO,
+                            flow: Vec2::ZERO,
+                        };
+                        let scale = marker.rect.width() / receiver.original_width;
+                        let mesh = render::mesh(
+                            marker.rect,
+                            receiver.corners * scale,
+                            &style,
+                            ink,
+                            sample,
+                        );
+                        if !mesh.is_empty() {
+                            *slot = Shape::mesh(mesh);
+                        }
+                    });
             }
         });
     }
@@ -228,11 +271,7 @@ pub(super) fn emit(painter: &Painter, id: Id, rect: Rect, style: &Vesper, sample
         return;
     };
     let energy = sample.energy * settings.intensity * style.intensity * painter.opacity();
-    if !energy.is_finite()
-        || energy <= 0.004
-        || !painter.clip_rect().contains(sample.point)
-        || style.color.is_some_and(|color| color.a() == 0)
-    {
+    if !energy.is_finite() || energy <= 0.004 || !sample.point.is_finite() {
         return;
     }
     let ctx = painter.ctx();
@@ -268,10 +307,19 @@ pub(crate) fn receive(
     rect: Rect,
     corners: CornerRadiusF32,
     style: &Vesper,
-    surface: Color32,
+    surface: impl Into<LightSurface>,
     fallback: Color32,
 ) {
-    register_receiver(painter, id, rect, corners, style, surface, fallback, None);
+    register_receiver(
+        painter,
+        id,
+        rect,
+        corners,
+        style,
+        surface.into(),
+        fallback,
+        None,
+    );
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -281,7 +329,7 @@ pub(crate) fn receive_at(
     rect: Rect,
     corners: CornerRadiusF32,
     style: &Vesper,
-    surface: Color32,
+    surface: impl Into<LightSurface>,
     fallback: Color32,
     slot: ShapeIdx,
 ) {
@@ -291,7 +339,7 @@ pub(crate) fn receive_at(
         rect,
         corners,
         style,
-        surface,
+        surface.into(),
         fallback,
         Some((slot, false)),
     );
@@ -304,7 +352,7 @@ pub(crate) fn receive_background_at(
     rect: Rect,
     corners: CornerRadiusF32,
     style: &Vesper,
-    surface: Color32,
+    surface: impl Into<LightSurface>,
     fallback: Color32,
     slot: ShapeIdx,
 ) {
@@ -314,7 +362,7 @@ pub(crate) fn receive_background_at(
         rect,
         corners,
         style,
-        surface,
+        surface.into(),
         fallback,
         Some((slot, true)),
     );
@@ -327,7 +375,7 @@ fn register_receiver(
     rect: Rect,
     corners: CornerRadiusF32,
     style: &Vesper,
-    surface: Color32,
+    surface: LightSurface,
     fallback: Color32,
     placement: Option<(ShapeIdx, bool)>,
 ) {
@@ -335,6 +383,7 @@ fn register_receiver(
         .spill
         .is_some_and(|settings| settings.bounded().intensity > 0.0)
         || !style.can_paint(painter, rect)
+        || !render::Ink::new(style.color, surface, fallback).visible()
     {
         return;
     }
@@ -451,7 +500,7 @@ mod tests {
         assert!(render(Some((Rect::EVERYTHING, false)), true));
         assert!(!render(None, true));
         assert!(!render(Some((receiver, false)), true));
-        assert!(!render(Some((Rect::EVERYTHING, true)), true));
+        assert!(render(Some((Rect::EVERYTHING, true)), true));
         assert!(!render(Some((Rect::EVERYTHING, false)), false));
     }
 }

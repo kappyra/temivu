@@ -1,5 +1,5 @@
 //! Preliminary bottom navigation; icons, localized position semantics and parity remain open.
-use crate::{Theme, Vesper};
+use crate::{LightSurface, Theme, Vesper};
 use egui::{Color32, Id, Painter, Rect, RichText, Ui};
 
 /// Draw an icon inside the supplied rectangle using the current foreground.
@@ -377,12 +377,20 @@ impl<'a> FloatingNavigation<'a> {
                         None
                     };
                     let (surface, radius) = surface.unwrap_or((rect.shrink(5.0), 20));
-                    if let Some(shape) = style.interactive_shape(
+                    let material = if glass.is_some() {
+                        LightSurface::Glass
+                    } else if preview == Some(index) {
+                        active_fill.into()
+                    } else {
+                        frame.fill.into()
+                    };
+                    if let Some(shape) = style.interactive_shape_for(
                         ui.painter(),
                         theme,
                         &response,
                         surface,
                         f32::from(radius).into(),
+                        material,
                     ) {
                         // At most the hovered destination and the focused one
                         // can produce lighting. The hovered light takes priority.
@@ -397,7 +405,7 @@ impl<'a> FloatingNavigation<'a> {
                             surface,
                             f32::from(radius).into(),
                             &style,
-                            theme.secondary,
+                            material,
                             theme.card,
                         );
                     }
@@ -482,8 +490,10 @@ impl<'a> FloatingNavigation<'a> {
                 }
                 crate::glass::show_frame(
                     ui,
+                    theme,
                     frame,
                     glass.map(|_| crate::GlassProfile::Dock),
+                    lighting,
                     |ui| {
                         let rim = glass
                             .filter(|_| !crate::glass::live_enabled(ui.ctx()))

@@ -129,7 +129,8 @@ impl<'a> Scaffold<'a> {
                 .show(ctx, |ui| {
                     let frame = crate::glass::floating_frame(ctx, self.theme, frame);
                     let profile = crate::Glass::context(ctx).map(|_| crate::GlassProfile::Floating);
-                    crate::glass::show_frame(ui, frame, profile, |ui| {
+                    let lighting = crate::Vesper::context(ui.ctx());
+                    crate::glass::show_frame(ui, self.theme, frame, profile, lighting, |ui| {
                         ui.set_width(width);
                         header(ui);
                     });
