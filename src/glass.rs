@@ -119,6 +119,21 @@ impl Glass {
         Self::new(0.24).mode(GlassMode::Frost)
     }
 
+    /// Lighter frost with a color-preserving backdrop and no optical bevel.
+    ///
+    /// Uses the same diffuse treatment as [`GlassMode::Frost`] with a lighter
+    /// tint, shallower blur, and subtler edge. Live renderers receive those
+    /// settings through the standard [`GlassRegion`].
+    pub fn clear_frost() -> Self {
+        Self::new(0.06)
+            .mode(GlassMode::Frost)
+            .with_tuning(GlassTuning {
+                blur: 0.52,
+                rim: 0.72,
+                ..GlassTuning::default()
+            })
+    }
+
     /// Clear optical glass with a polished, refracting rim.
     pub fn prism() -> Self {
         Self::new(0.22)
@@ -156,6 +171,11 @@ impl Glass {
 
     pub fn tuning(self) -> GlassTuning {
         self.tuning
+    }
+
+    /// Return the configured tint strength.
+    pub fn tint(self) -> f32 {
+        self.tint
     }
 
     pub fn mode(mut self, mode: GlassMode) -> Self {
@@ -373,14 +393,11 @@ impl Glass {
     }
 
     fn tinted_frame(self, theme: &Theme, mut frame: Frame, has_backdrop: bool) -> Frame {
-        if frame.fill == Color32::TRANSPARENT {
-            return frame;
-        }
         let [r, g, b, alpha] = frame.fill.to_srgba_unmultiplied();
         let minimum = match (self.mode, has_backdrop) {
-            (GlassMode::Frost, true) => 0.40,
-            (GlassMode::SoftPrism, true) => 0.40,
-            (GlassMode::Prism, true) => 0.24,
+            (GlassMode::Frost, true) => 0.16,
+            (GlassMode::SoftPrism, true) => 0.28,
+            (GlassMode::Prism, true) => 0.20,
             (GlassMode::Frost | GlassMode::SoftPrism, false) => 0.91,
             (GlassMode::Prism, false) => 0.85,
         };
@@ -388,13 +405,18 @@ impl Glass {
         frame.fill =
             Color32::from_rgba_unmultiplied(r, g, b, (f32::from(alpha) * opacity).round() as u8);
         if frame.stroke.width > 0.0 {
-            let edge = match (self.mode, theme.dark) {
-                (GlassMode::Frost, true) => Color32::from_white_alpha(16),
-                (GlassMode::SoftPrism, true) => Color32::from_white_alpha(33),
-                (GlassMode::Prism, true) => Color32::from_white_alpha(49),
-                (GlassMode::Frost, false) => Color32::from_black_alpha(12),
-                (GlassMode::SoftPrism, false) => Color32::from_black_alpha(19),
-                (GlassMode::Prism, false) => Color32::from_black_alpha(30),
+            let [light, dark] = match (self.mode, has_backdrop) {
+                (GlassMode::Frost, _) => [12, 15],
+                // The lens already draws a directional rim. Keep the frame
+                // stroke quiet so the two edges do not add up to a hard line.
+                (GlassMode::SoftPrism | GlassMode::Prism, true) => [7, 10],
+                (GlassMode::SoftPrism, false) => [12, 17],
+                (GlassMode::Prism, false) => [15, 20],
+            };
+            let edge = if theme.dark {
+                Color32::from_white_alpha(dark)
+            } else {
+                Color32::from_black_alpha(light)
             };
             frame.stroke = Stroke::new(frame.stroke.width, edge.gamma_multiply(self.tuning.rim));
         }
@@ -420,8 +442,8 @@ impl Glass {
         {
             return Shape::Noop;
         }
-        let outer = 1.0_f32.min(rect.size().min_elem() * 0.15);
-        let inner = (outer + 2.5).min(rect.size().min_elem() * 0.4);
+        let outer = 0.7_f32.min(rect.size().min_elem() * 0.15);
+        let inner = (outer + 1.6).min(rect.size().min_elem() * 0.4);
         let mut mesh = Mesh::default();
         let polish = polish
             * if self.mode == GlassMode::SoftPrism {
@@ -429,7 +451,7 @@ impl Glass {
             } else {
                 1.0
             };
-        let strength = if theme.dark { 105.0 } else { 176.0 } * self.tuning.rim;
+        let strength = if theme.dark { 62.0 } else { 96.0 } * self.tuning.rim;
         for (inset, weight) in [(outer, 1.0), (inner, 0.0)] {
             for (position, normal) in outline(rect, corners, inset) {
                 let sheen = (-normal.y * 0.82 - normal.x * 0.45).max(0.0);

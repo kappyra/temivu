@@ -7,16 +7,18 @@ use temivu::{
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Preset {
     Frost,
+    ClearFrost,
     SoftPrism,
     Prism,
 }
 
 impl Preset {
-    const ALL: [Self; 3] = [Self::Frost, Self::SoftPrism, Self::Prism];
+    const ALL: [Self; 4] = [Self::Frost, Self::ClearFrost, Self::SoftPrism, Self::Prism];
 
     fn label(self) -> &'static str {
         match self {
             Self::Frost => "Frost",
+            Self::ClearFrost => "Clear Frost",
             Self::SoftPrism => "Soft Prism",
             Self::Prism => "Prism",
         }
@@ -25,30 +27,39 @@ impl Preset {
     fn material(self) -> Glass {
         match self {
             Self::Frost => Glass::frost(),
+            Self::ClearFrost => Glass::clear_frost(),
             Self::SoftPrism => Glass::soft_prism(),
             Self::Prism => Glass::prism(),
         }
+    }
+
+    fn is_frost(self) -> bool {
+        matches!(self, Self::Frost | Self::ClearFrost)
     }
 }
 
 pub(super) struct GlassDemo {
     pub enabled: bool,
-    tint: f64,
+    tint: [f64; Preset::ALL.len()],
     preset: Preset,
-    tuning: [GlassTuning; 3],
+    tuning: [GlassTuning; Preset::ALL.len()],
     artwork: Option<Artwork>,
-    motion: [SampleMotion; 3],
+    motion: [SampleMotion; Preset::ALL.len()],
+    move_backdrop: bool,
+    backdrop_phase: f32,
 }
 
 impl Default for GlassDemo {
     fn default() -> Self {
         Self {
             enabled: false,
-            tint: 0.28,
+            tint: Preset::ALL.map(|preset| f64::from(preset.material().tint())),
             preset: Preset::SoftPrism,
             tuning: Preset::ALL.map(|preset| preset.material().tuning()),
             artwork: None,
             motion: Default::default(),
+            move_backdrop: false,
+            backdrop_phase: 0.0,
         }
     }
 }
@@ -57,7 +68,7 @@ impl GlassDemo {
     fn material(&self, preset: Preset) -> Glass {
         preset
             .material()
-            .with_tint(self.tint as f32)
+            .with_tint(self.tint[preset as usize] as f32)
             .with_tuning(self.tuning[preset as usize])
     }
 
@@ -91,7 +102,7 @@ impl GlassDemo {
                     });
                 }
             });
-            Slider::new(&mut self.tint, theme)
+            Slider::new(&mut self.tint[self.preset as usize], theme)
                 .expect("the tint stays within the slider range")
                 .label("Glass tint")
                 .filled(true)
@@ -99,7 +110,7 @@ impl GlassDemo {
             ui.collapsing("Optical settings", |ui| {
                 let tuning = &mut self.tuning[self.preset as usize];
                 tuning_slider(ui, theme, "Backdrop blur", &mut tuning.blur);
-                if self.preset != Preset::Frost {
+                if !self.preset.is_frost() {
                     tuning_slider(ui, theme, "Refraction", &mut tuning.refraction);
                 }
                 tuning_slider(ui, theme, "Rim", &mut tuning.rim);
@@ -116,12 +127,21 @@ impl GlassDemo {
             ui,
             theme,
             "Glass studio",
-            "Pull and release each sample to compare the three materials.",
+            "Drag a sample or move the backdrop to compare the four materials.",
             |ui| {
+                let full_motion = theme.motion.animations_enabled(ui.ctx());
+                ui.add_enabled_ui(full_motion, |ui| {
+                    Switch::new(&mut self.move_backdrop, theme)
+                        .label("Move backdrop")
+                        .show(ui);
+                });
+                ui.add_space(10.0);
                 let materials = Preset::ALL.map(|preset| self.material(preset));
+                let mut pan = None;
                 let mut sample = |ui: &mut Ui, preset: Preset| {
                     let title = match preset {
                         Preset::Frost => "Frost glassmorphism",
+                        Preset::ClearFrost => "Clear Frost glassmorphism",
                         Preset::SoftPrism => "Soft Prism optical glass",
                         Preset::Prism => "Prism optical glass",
                     };
@@ -134,18 +154,33 @@ impl GlassDemo {
                     if !ui.is_rect_visible(rect) || !rect.is_positive() {
                         return;
                     }
+                    let pan = *pan.get_or_insert_with(|| {
+                        if self.move_backdrop && full_motion {
+                            let dt = ui.input(|input| input.stable_dt).min(0.05);
+                            self.backdrop_phase =
+                                (self.backdrop_phase + dt * 0.68) % std::f32::consts::TAU;
+                            ui.ctx().request_repaint();
+                        }
+                        egui::vec2(
+                            0.52 * self.backdrop_phase.sin() - 0.35,
+                            (self.backdrop_phase * 2.0).sin(),
+                        )
+                    });
                     let size = Vec2::new((rect.width() * 0.64).min(208.0), 62.0);
                     let index = preset as usize;
                     let sample = self.motion[index].sample(ui, &stage, size, title, theme);
                     let artwork = self.artwork.get_or_insert_with(|| Artwork::new(ui.ctx()));
-                    artwork.paint(ui, theme, rect, sample, materials[index], preset);
+                    artwork.paint(ui, theme, rect, sample, (preset, materials[index]), pan);
                 };
-                if ui.available_width() >= 720.0 {
-                    ui.columns(3, |columns| {
-                        for (column, preset) in columns.iter_mut().zip(Preset::ALL) {
-                            sample(column, preset);
-                        }
-                    });
+                if ui.available_width() >= 620.0 {
+                    for row in Preset::ALL.as_chunks::<2>().0 {
+                        ui.columns(2, |columns| {
+                            for (column, &preset) in columns.iter_mut().zip(row) {
+                                sample(column, preset);
+                            }
+                        });
+                        ui.add_space(12.0);
+                    }
                 } else {
                     for preset in Preset::ALL {
                         sample(ui, preset);
@@ -221,14 +256,12 @@ impl SampleMotion {
 
 struct Artwork {
     scene: TextureHandle,
-    frost: TextureHandle,
-    soft_prism: TextureHandle,
-    prism: TextureHandle,
+    filtered: [TextureHandle; Preset::ALL.len()],
 }
 
 impl Artwork {
     fn new(ctx: &Context) -> Self {
-        // The embedded asset is decoded once and shared by all three samples.
+        // Decode the artwork once and share it across the samples.
         let scene = image::load_from_memory_with_format(
             include_bytes!("assets/glass-studio.png"),
             image::ImageFormat::Png,
@@ -241,22 +274,26 @@ impl Artwork {
             )
         };
         let fallback = scene.resize_exact(320, 180, image::imageops::FilterType::Triangle);
-        let frost = to_color(fallback.blur(9.0).into_rgba8());
-        let soft_prism = to_color(fallback.blur(4.0).into_rgba8());
-        let prism = to_color(fallback.blur(1.5).into_rgba8());
+        let filtered = Preset::ALL.map(|preset| {
+            let sigma = match preset {
+                Preset::Frost => 8.0,
+                Preset::ClearFrost => 4.8,
+                Preset::SoftPrism => 4.2,
+                Preset::Prism => 1.7,
+            };
+            ctx.load_texture(
+                preset.label(),
+                to_color(fallback.blur(sigma).into_rgba8()),
+                TextureOptions::LINEAR,
+            )
+        });
         Self {
             scene: ctx.load_texture(
                 "glass-studio",
                 to_color(scene.into_rgba8()),
                 TextureOptions::LINEAR,
             ),
-            frost: ctx.load_texture("glass-studio-frost", frost, TextureOptions::LINEAR),
-            soft_prism: ctx.load_texture(
-                "glass-studio-soft-prism",
-                soft_prism,
-                TextureOptions::LINEAR,
-            ),
-            prism: ctx.load_texture("glass-studio-prism", prism, TextureOptions::LINEAR),
+            filtered,
         }
     }
 
@@ -266,13 +303,18 @@ impl Artwork {
         theme: &Theme,
         rect: Rect,
         (sample, handle): (Rect, egui::Response),
-        glass: Glass,
-        preset: Preset,
+        (preset, glass): (Preset, Glass),
+        pan: Vec2,
     ) {
         let photo = egui::vec2(800.0, 450.0);
-        let scale = (rect.width() / photo.x).max(rect.height() / photo.y);
-        let image_bounds = Rect::from_center_size(rect.center(), photo * scale);
-        let uv = Rect::from_center_size(egui::pos2(0.5, 0.5), rect.size() / image_bounds.size());
+        let scale = (rect.width() / photo.x).max(rect.height() / photo.y) * 1.25;
+        let size = photo * scale;
+        let offset = (size - rect.size()) * 0.42 * pan;
+        let image_bounds = Rect::from_center_size(rect.center() + offset, size);
+        let uv = Rect::from_min_max(
+            ((rect.min - image_bounds.min) / size).to_pos2(),
+            ((rect.max - image_bounds.min) / size).to_pos2(),
+        );
         ui.painter().add(
             egui::epaint::RectShape::filled(rect, 19, Color32::WHITE)
                 .with_texture(self.scene.id(), uv),
@@ -286,11 +328,7 @@ impl Artwork {
                 .stroke(egui::Stroke::new(1.0, theme.border))
                 .corner_radius(26),
             Some(GlassBackdrop {
-                texture: match preset {
-                    Preset::Frost => self.frost.id(),
-                    Preset::SoftPrism => self.soft_prism.id(),
-                    Preset::Prism => self.prism.id(),
-                },
+                texture: self.filtered[preset as usize].id(),
                 bounds: image_bounds,
             }),
         );

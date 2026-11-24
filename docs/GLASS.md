@@ -1,32 +1,32 @@
 # Glass surfaces
 
 Enable **Glass surfaces** on the Showcase Overview to choose the material used
-by navigation and overlays. **Glass studio** shows Frost, Soft Prism and Prism
-over matching crops of the same generated street photograph. Pull and release
-a sample to compare the filters in motion. Focus a sample and use the arrow
-keys to change its resting position.
+by navigation and overlays. **Glass studio** compares four presets over one
+photograph. Use **Move backdrop** to see the same scene pan behind all four
+surfaces. Drag a sample to move its lens, or focus it and use the arrow keys.
 
-- **Frost** uses even diffusion and a translucent matte tint, with a fine
-  outline. The volume controls and other translucent panels in Android 17
-  are visual references for this material. [Android window blur guidance](https://source.android.com/docs/core/display/window-blurs) · [Android 17 panel screenshots](https://9to5google.com/2026/05/19/android-17-beta-1-blur/)
-- **Soft Prism** uses stronger diffusion and gentler refraction along the
-  bevel. Showcase selects this preset when glass is first enabled.
-- **Prism** keeps a clearer center and uses stronger refraction, a fine darkened
-  inner edge and a brighter specular rim. It is the library's default material.
-  [iOS 26 lensing](https://developer.apple.com/videos/play/wwdc2025/219/?time=89) · [iOS 27 material refinements](https://developer.apple.com/videos/play/wwdc2026/102/?time=1363)
+- **Frost** diffuses fine details under an even matte tint and a fine outline.
+- **Clear Frost** keeps more of the backdrop's color and silhouette under a
+  lighter tint, inspired by translucent Android panels. Both frost presets
+  use even diffusion. [Android window blurs](https://source.android.com/docs/core/display/window-blurs) · [Android 17 compositor source](https://android.googlesource.com/platform/frameworks/native/+/android17-release/libs/renderengine/skia/SkiaRenderEngine.cpp)
+- **Soft Prism** softens high-contrast detail across the face and uses a gently
+  refracting bevel. Showcase selects this preset when glass is first enabled.
+- **Prism** keeps the clearer center and stronger refraction. Both prism
+  presets add a thin, directional reflection over a shaded inner edge. The
+  sharp and diffuse samples come from the same frame. [iOS lensing](https://developer.apple.com/videos/play/wwdc2025/219/?time=89) · [iOS 27 material refinements](https://developer.apple.com/videos/play/wwdc2026/102/?time=1363)
 
 **Glass tint** controls the strength of the surface color. **Optical settings**
 adjust blur, refraction and rim visibility for the chosen preset. High contrast
 uses opaque surfaces.
 
-The Showcase's OpenGL renderer captures the visible region beneath each
-surface at framebuffer resolution, with a margin for blur and refraction. It
-reuses one capture texture and two work textures. Successive 2:1 reductions
-stay aligned to the framebuffer even when the widget moves, a scroll area clips
-it or the viewport ends at an odd pixel. Two separable Gaussian passes smooth
-the reduced image. Soft Prism and Prism reproject that image along the rounded
-edge. The renderer samples current-frame content in screen coordinates and
-leaves foreground text and controls sharp. [Arm's multiscale filtering notes](https://developer.arm.com/cfs-file/__key/communityserver-blogs-components-weblogsfiles/00-00-00-20-66/siggraph2015_2D00_mmg_2D00_marius_2D00_notes.pdf)
+The Showcase OpenGL renderer captures the visible region drawn so far in
+each frame, with padding for blur and refraction. When the region permits it,
+the copy starts at half resolution. Odd bounds and drivers that reject
+scaled copies use an exact shader reduction with the same sampling grid.
+Two separable Gaussian passes run at the selected lower resolution. The
+renderer reuses three textures, grows storage in blocks, and samples sharp
+and blurred detail in screen coordinates as the backdrop scrolls or the
+surface moves. Foreground text and controls draw on top of the glass.
 
 The floating navigation adds a soft scroll-edge fade through the viewport edge
 and uses a wider vertical blur. During a Droplet transition, the optical mask
@@ -45,10 +45,11 @@ fn configure_glass(ctx: &egui::Context) {
 }
 ```
 
-For per-surface materials, use `Glass::frost()`, `Glass::soft_prism()` and
-`Glass::prism()` in the same frame. Each surface has its own tint and
-optical tuning. To layer materials, nest the surfaces so the live renderer
-can sample the outer material beneath the inner one.
+Use `Glass::frost()`, `Glass::clear_frost()`, `Glass::soft_prism()` and
+`Glass::prism()` on individual surfaces. Clear Frost uses `GlassMode::Frost`
+with its own tint and tuning, so an existing renderer can handle it through
+the same callback. Nest glass surfaces to sample the outer material beneath
+the inner one.
 
 ```rust
 use temivu::{Glass, GlassProfile, Theme};

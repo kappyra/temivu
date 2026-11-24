@@ -850,20 +850,22 @@ fn showcase_glass_is_optional_and_yields_to_high_contrast() {
     assert!(temivu::Glass::context(&harness.ctx).is_some());
     harness.get_by_label("Glass tint");
     harness.get_by_label("Frost glassmorphism");
+    harness.get_by_label("Clear Frost glassmorphism");
+    harness.get_by_label("Move backdrop");
     harness.get_by_label("Prism optical glass");
 
-    harness.get_by_label("Frost").click();
+    harness.get_by_label("Clear Frost").click();
     harness.run_steps(3);
     assert!(
         harness
-            .get_by_label("Frost")
+            .get_by_label("Clear Frost")
             .accesskit_node()
             .is_selected()
             .unwrap_or(false)
     );
     assert_eq!(
         temivu::Glass::context(&harness.ctx),
-        Some(temivu::Glass::new(0.28).mode(temivu::GlassMode::Frost))
+        Some(temivu::Glass::clear_frost())
     );
 
     harness.get_by_label("High contrast").click();
@@ -874,7 +876,7 @@ fn showcase_glass_is_optional_and_yields_to_high_contrast() {
     harness.run_steps(3);
     assert!(
         harness
-            .get_by_label("Frost")
+            .get_by_label("Clear Frost")
             .accesskit_node()
             .is_selected()
             .unwrap_or(false)

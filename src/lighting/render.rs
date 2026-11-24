@@ -360,7 +360,7 @@ impl Field<'_> {
         let rect = self.shape.rect;
         let first = mesh.vertices.len() as u32;
         let arcs_and_centers = self.shape.arc_centers();
-        let width = (rect.size().min_elem() * 0.106).clamp(1.0, 4.0);
+        let width = (rect.size().min_elem() * 0.064).clamp(0.8, 2.4);
         let inverse_radius_sq = (self.style.radius * 1.03).max(1.0).recip().powi(2);
         let shift = (self.sample.point - rect.center()) / (rect.size() * 0.5);
         let side_density = sides as f32 / rect.size().max_elem();
@@ -374,7 +374,7 @@ impl Field<'_> {
             } else {
                 0.0
             };
-            let opacity = self.energy * (reflection * facing * 1.12 + sheen);
+            let opacity = self.energy * (reflection * facing * 0.78 + sheen * 0.65);
             mesh.colored_vertex(point, ink.color(opacity));
             mesh.colored_vertex(
                 self.shape.project(point - normal * width * 0.46),

@@ -234,7 +234,7 @@ fn droplet_retains_a_solid_surface_until_the_filtered_backdrop_is_ready() {
 }
 
 #[test]
-fn three_glass_materials_can_share_a_context_and_nest() {
+fn glass_presets_can_share_a_context_and_nest() {
     let ctx = Context::default();
     Glass::set_renderer(&ctx, Some(Arc::new(TestRenderer)));
     let theme = Theme::light();
@@ -248,6 +248,9 @@ fn three_glass_materials_can_share_a_context_and_nest() {
         Glass::soft_prism().show(ui, &theme, frame, temivu::GlassProfile::Dock, |ui| {
             ui.allocate_space(vec2(120.0, 40.0));
         });
+        Glass::clear_frost().show(ui, &theme, frame, temivu::GlassProfile::Floating, |ui| {
+            ui.allocate_space(vec2(120.0, 40.0));
+        });
     });
     output.textures_delta.clear();
     let regions: Vec<_> = output
@@ -257,7 +260,18 @@ fn three_glass_materials_can_share_a_context_and_nest() {
         .collect();
     assert_eq!(
         regions.iter().map(|region| region.mode).collect::<Vec<_>>(),
-        [GlassMode::Frost, GlassMode::Prism, GlassMode::SoftPrism]
+        [
+            GlassMode::Frost,
+            GlassMode::Prism,
+            GlassMode::SoftPrism,
+            GlassMode::Frost
+        ]
     );
     assert!(regions[0].rect.contains_rect(regions[1].rect));
+    let [frost, _, _, clear_frost] = regions.as_slice() else {
+        panic!("all four presets should paint a glass region");
+    };
+    assert!(clear_frost.tint < frost.tint);
+    assert!(clear_frost.tuning.blur < frost.tuning.blur);
+    assert!(clear_frost.tuning.rim < frost.tuning.rim);
 }

@@ -112,10 +112,10 @@ impl Capture {
         }
         let sigma = optics.sigma.into_iter().fold(0.0_f32, f32::max);
         let mut step = 1;
-        while sigma * info.pixels_per_point > 4.25 * step as f32 && step < 32 {
+        while sigma * info.pixels_per_point > 3.65 * step as f32 && step < 32 {
             step *= 2;
         }
-        let padding = sigma * 2.8 + optics.lens + 4.0;
+        let padding = sigma * 3.25 + optics.lens + 4.0;
         let capture = egui::epaint::ViewportInPixels::from_points(
             &visible.expand(padding),
             info.pixels_per_point,
@@ -143,6 +143,16 @@ impl Capture {
             step,
         })
     }
+
+    fn blit_step(self) -> i32 {
+        // An odd edge needs a clamped partial texel. Use the exact shader
+        // reduction there instead of stretching the whole copy to fit.
+        if self.step > 1 && self.width % 2 == 0 && self.height % 2 == 0 {
+            2
+        } else {
+            1
+        }
+    }
 }
 
 struct Optics {
@@ -150,15 +160,17 @@ struct Optics {
     lens: f32,
     bevel: f32,
     polish: f32,
+    saturation: f32,
 }
 
 impl Optics {
     fn new(region: GlassRegion) -> Self {
-        let (mut sigma, lens, bevel, polish) = match region.mode {
-            GlassMode::Frost => ([15.5, 15.5], 0.0, 0.0, 0.0),
-            GlassMode::SoftPrism => ([7.0, 7.0], 7.5, 20.0, 0.62),
-            GlassMode::Prism => ([3.6, 3.6], 13.0, 22.0, 1.0),
+        let (sigma, lens, bevel, polish, saturation) = match region.mode {
+            GlassMode::Frost => (14.0, 0.0, 0.0, 0.0, 1.11),
+            GlassMode::SoftPrism => (7.4, 8.5, 19.0, 0.68, 1.05),
+            GlassMode::Prism => (3.9, 13.0, 21.0, 1.0, 1.03),
         };
+        let mut sigma = [sigma; 2];
         if region.profile == GlassProfile::Dock {
             sigma[1] *= 1.25;
         }
@@ -168,6 +180,7 @@ impl Optics {
             lens: lens * (1.0 - 0.35 * tint) * region.tuning.refraction,
             bevel,
             polish: polish * region.tuning.rim,
+            saturation,
         }
     }
 }
@@ -175,22 +188,38 @@ impl Optics {
 #[derive(Clone, Copy)]
 struct Surface {
     texture: glow::Texture,
+    framebuffer: glow::Framebuffer,
     size: [i32; 2],
 }
 
 impl Surface {
-    fn new(texture: glow::Texture) -> Self {
-        Self {
-            texture,
-            size: [0; 2],
+    unsafe fn new(gl: &glow::Context) -> Result<Self, String> {
+        unsafe {
+            let texture = gl.create_texture()?;
+            let framebuffer = gl
+                .create_framebuffer()
+                .inspect_err(|_| gl.delete_texture(texture))?;
+            Ok(Self {
+                texture,
+                framebuffer,
+                size: [0; 2],
+            })
         }
     }
 
-    unsafe fn reserve(&mut self, gl: &glow::Context, width: i32, height: i32) {
-        if width <= self.size[0] && height <= self.size[1] {
-            return;
+    unsafe fn reserve(&mut self, gl: &glow::Context, size: [i32; 2], limit: i32) -> bool {
+        if size[0] <= self.size[0] && size[1] <= self.size[1] {
+            return true;
         }
-        self.size = [width.max(self.size[0]), height.max(self.size[1])];
+        if size.into_iter().any(|edge| edge > limit) {
+            return false;
+        }
+        // Grow in blocks so a resize or a moving crop cannot reallocate GPU
+        // storage one pixel at a time. Shaders still clamp to the live extent.
+        let size = std::array::from_fn(|axis| {
+            let edge = size[axis].max(self.size[axis]);
+            ((edge + 63) / 64 * 64).min(limit)
+        });
         // SAFETY: the callback owns the current context and texture.
         unsafe {
             gl.bind_texture(glow::TEXTURE_2D, Some(self.texture));
@@ -198,8 +227,8 @@ impl Surface {
                 glow::TEXTURE_2D,
                 0,
                 glow::RGBA8 as i32,
-                self.size[0],
-                self.size[1],
+                size[0],
+                size[1],
                 0,
                 glow::RGBA,
                 glow::UNSIGNED_BYTE,
@@ -208,18 +237,56 @@ impl Surface {
             for parameter in [glow::TEXTURE_MIN_FILTER, glow::TEXTURE_MAG_FILTER] {
                 gl.tex_parameter_i32(glow::TEXTURE_2D, parameter, glow::LINEAR as i32);
             }
+            gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(self.framebuffer));
+            gl.framebuffer_texture_2d(
+                glow::DRAW_FRAMEBUFFER,
+                glow::COLOR_ATTACHMENT0,
+                glow::TEXTURE_2D,
+                Some(self.texture),
+                0,
+            );
+            if gl.check_framebuffer_status(glow::DRAW_FRAMEBUFFER) != glow::FRAMEBUFFER_COMPLETE {
+                return false;
+            }
+            self.size = size;
         }
+        true
+    }
+
+    unsafe fn destroy(self, gl: &glow::Context) {
+        unsafe {
+            gl.delete_framebuffer(self.framebuffer);
+            gl.delete_texture(self.texture);
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct SceneSample {
+    surface: Surface,
+    extent: [i32; 2],
+    step: i32,
+}
+
+impl SceneSample {
+    fn texels(self) -> [f32; 4] {
+        [
+            self.extent[0] as f32,
+            self.extent[1] as f32,
+            self.surface.size[0] as f32,
+            self.surface.size[1] as f32,
+        ]
     }
 }
 
 struct Gpu {
     program: glow::Program,
     vao: glow::VertexArray,
-    target: glow::Framebuffer,
-    full: Surface,
-    reduced: [Surface; 2],
+    surfaces: [Surface; 3],
+    texture_limit: i32,
+    scaled_blit: bool,
     filter: Filter,
-    uniforms: [Option<glow::UniformLocation>; 7],
+    uniforms: [Option<glow::UniformLocation>; 9],
 }
 
 impl Gpu {
@@ -234,41 +301,38 @@ impl Gpu {
             let vao = gl
                 .create_vertex_array()
                 .inspect_err(|_| gl.delete_program(program))?;
-            let target = gl.create_framebuffer().inspect_err(|_| {
-                gl.delete_vertex_array(vao);
-                gl.delete_program(program);
-            })?;
-            let mut textures = Vec::with_capacity(3);
+            let mut surfaces = Vec::with_capacity(3);
             let setup = (|| {
                 for _ in 0..3 {
-                    textures.push(gl.create_texture()?);
+                    surfaces.push(Surface::new(gl)?);
                 }
                 Filter::new(gl)
             })();
             let filter = setup.inspect_err(|_| {
-                for &texture in &textures {
-                    gl.delete_texture(texture);
+                for &surface in &surfaces {
+                    surface.destroy(gl);
                 }
-                gl.delete_framebuffer(target);
                 gl.delete_vertex_array(vao);
                 gl.delete_program(program);
             })?;
             let uniforms = [
                 "u_texture",
+                "u_detail",
                 "u_region",
                 "u_corners",
                 "u_capture",
                 "u_texels",
+                "u_detail_texels",
                 "u_effect",
-                "u_strength",
+                "u_layer",
             ]
             .map(|name| gl.get_uniform_location(program, name));
             Ok(Self {
                 program,
                 vao,
-                target,
-                full: Surface::new(textures[0]),
-                reduced: [Surface::new(textures[1]), Surface::new(textures[2])],
+                surfaces: [surfaces[0], surfaces[1], surfaces[2]],
+                texture_limit: gl.get_parameter_i32(glow::MAX_TEXTURE_SIZE),
+                scaled_blit: true,
                 filter,
                 uniforms,
             })
@@ -293,7 +357,7 @@ impl Gpu {
             gl.bind_framebuffer(glow::FRAMEBUFFER, destination);
             gl.enable(glow::SCISSOR_TEST);
             gl.enable(glow::BLEND);
-            let Some((surface, [w, h])) = filtered else {
+            let Some((blurred, detail)) = filtered else {
                 return false;
             };
             let viewport = info.viewport_in_pixels();
@@ -303,12 +367,26 @@ impl Gpu {
                 viewport.width_px,
                 viewport.height_px,
             );
-            gl.bind_texture(glow::TEXTURE_2D, Some(surface.texture));
+            gl.active_texture(glow::TEXTURE1);
+            gl.bind_texture(glow::TEXTURE_2D, Some(detail.surface.texture));
+            gl.active_texture(glow::TEXTURE0);
+            gl.bind_texture(glow::TEXTURE_2D, Some(blurred.surface.texture));
 
-            let [texture, bounds, corners, captured, texels, effect, strength] = &self.uniforms;
+            let [
+                texture,
+                detail_texture,
+                bounds,
+                corners,
+                captured,
+                texels,
+                detail_texels,
+                effect,
+                layer,
+            ] = &self.uniforms;
             let center = region.rect.center();
             gl.use_program(Some(self.program));
             gl.uniform_1_i32(texture.as_ref(), 0);
+            gl.uniform_1_i32(detail_texture.as_ref(), 1);
             gl.uniform_4_f32(
                 bounds.as_ref(),
                 center.x * scale,
@@ -323,26 +401,23 @@ impl Gpu {
                 region.corners.sw * scale,
                 region.corners.se * scale,
             );
-            gl.uniform_3_f32(
+            gl.uniform_4_f32(
                 captured.as_ref(),
                 capture.x as f32,
                 capture.y as f32,
-                (capture.step as f32).recip(),
+                (blurred.step as f32).recip(),
+                (detail.step as f32).recip(),
             );
+            gl.uniform_4_f32_slice(texels.as_ref(), &blurred.texels());
+            gl.uniform_4_f32_slice(detail_texels.as_ref(), &detail.texels());
             gl.uniform_4_f32(
-                texels.as_ref(),
-                w as f32,
-                h as f32,
-                surface.size[0] as f32,
-                surface.size[1] as f32,
-            );
-            gl.uniform_3_f32(
                 effect.as_ref(),
                 optics.lens * scale,
                 optics.bevel * scale,
                 optics.polish,
+                optics.saturation,
             );
-            gl.uniform_1_f32(strength.as_ref(), region.strength);
+            gl.uniform_2_f32(layer.as_ref(), region.strength, scale.recip());
             gl.bind_vertex_array(Some(self.vao));
             gl.draw_arrays(glow::TRIANGLES, 0, 3);
             // The painter restores its program, VAO and viewport after the callback.
@@ -357,94 +432,148 @@ impl Gpu {
         capture: Capture,
         optics: &Optics,
         scale: f32,
-    ) -> Option<(Surface, [i32; 2])> {
+    ) -> Option<(SceneSample, SceneSample)> {
         unsafe {
-            let mut extent = [capture.width, capture.height];
-            self.full.reserve(gl, extent[0], extent[1]);
-            gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(self.target));
-            if !Self::attach(gl, glow::DRAW_FRAMEBUFFER, self.full.texture) {
+            let step = if self.scaled_blit {
+                capture.blit_step()
+            } else {
+                1
+            };
+            let detail = match self.copy_scene(gl, destination, capture, step) {
+                Some(sample) => sample,
+                None if step == 2 => {
+                    // Keep live glass on drivers that reject a scaled blit.
+                    self.scaled_blit = false;
+                    self.copy_scene(gl, destination, capture, 1)?
+                }
+                None => return None,
+            };
+
+            let mut sigma = optics.sigma.map(|value| value * scale);
+            if sigma[0].max(sigma[1]) <= 0.05 {
+                return Some((detail, detail));
+            }
+
+            let reduced_sigma = |value: f32| (value.powi(2) - 0.25).max(0.0).sqrt() * 0.5;
+            gl.bind_vertex_array(Some(self.vao));
+            let (detail, work) = if detail.step == 1 && capture.step > 1 {
+                // The bevel uses the same detail resolution with the shader
+                // fallback as it does when a scaled blit is available.
+                (self.reduce_scene(gl, detail, 1)?, [0, 2])
+            } else {
+                (detail, [1, 2])
+            };
+            if detail.step == 2 {
+                sigma = sigma.map(reduced_sigma);
+            }
+            let mut source = detail;
+            let mut next = 0;
+            while source.step < capture.step {
+                source = self.reduce_scene(gl, source, work[next])?;
+                next = 1 - next;
+                sigma = sigma.map(reduced_sigma);
+            }
+            let extent = source.extent;
+            let [scratch_index, result_index] = [work[next], work[1 - next]];
+            if !self.surfaces[scratch_index].reserve(gl, extent, self.texture_limit)
+                || !self.surfaces[result_index].reserve(gl, extent, self.texture_limit)
+            {
                 return None;
             }
+            let scratch = self.surfaces[scratch_index];
+            let result = self.surfaces[result_index];
+            gl.viewport(0, 0, extent[0], extent[1]);
+            gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(scratch.framebuffer));
+            self.filter.prepare(gl, extent, source.surface.size);
+            self.filter.pass(
+                gl,
+                source.surface.texture,
+                [1.0, 0.0],
+                Kernel::new(sigma[0]),
+            );
+            gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(result.framebuffer));
+            self.filter.prepare(gl, extent, scratch.size);
+            self.filter
+                .pass(gl, scratch.texture, [0.0, 1.0], Kernel::new(sigma[1]));
+            Some((
+                SceneSample {
+                    surface: result,
+                    extent,
+                    step: source.step,
+                },
+                detail,
+            ))
+        }
+    }
+
+    unsafe fn reduce_scene(
+        &mut self,
+        gl: &glow::Context,
+        source: SceneSample,
+        target: usize,
+    ) -> Option<SceneSample> {
+        unsafe {
+            let half = source.extent.map(|edge| (edge + 1) / 2);
+            if !self.surfaces[target].reserve(gl, half, self.texture_limit) {
+                return None;
+            }
+            let surface = self.surfaces[target];
+            gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(surface.framebuffer));
+            gl.viewport(0, 0, half[0], half[1]);
+            self.filter.prepare(gl, source.extent, source.surface.size);
+            self.filter.reduce(gl, source.surface.texture);
+            Some(SceneSample {
+                surface,
+                extent: half,
+                step: source.step * 2,
+            })
+        }
+    }
+
+    unsafe fn copy_scene(
+        &mut self,
+        gl: &glow::Context,
+        destination: Option<glow::Framebuffer>,
+        capture: Capture,
+        step: i32,
+    ) -> Option<SceneSample> {
+        unsafe {
+            let extent = [capture.width / step, capture.height / step];
+            if !self.surfaces[0].reserve(gl, extent, self.texture_limit) {
+                return None;
+            }
+            let surface = self.surfaces[0];
+            gl.bind_framebuffer(glow::DRAW_FRAMEBUFFER, Some(surface.framebuffer));
             gl.bind_framebuffer(glow::READ_FRAMEBUFFER, destination);
             gl.blit_framebuffer(
                 capture.x,
                 capture.y,
-                capture.x + extent[0],
-                capture.y + extent[1],
+                capture.x + capture.width,
+                capture.y + capture.height,
                 0,
                 0,
                 extent[0],
                 extent[1],
                 glow::COLOR_BUFFER_BIT,
-                glow::NEAREST,
+                if step == 1 {
+                    glow::NEAREST
+                } else {
+                    glow::LINEAR
+                },
             );
-
-            let mut sigma = optics.sigma.map(|value| value * scale);
-            if sigma[0].max(sigma[1]) <= 0.05 {
-                return (gl.get_error() == glow::NO_ERROR).then_some((self.full, extent));
-            }
-
-            // An exact 2:1 shader step keeps the sample spacing even when the
-            // framebuffer edge leaves a partial texel in the last row/column.
-            let mut source = self.full;
-            let mut next = 0;
-            let mut step = 1;
-            gl.bind_vertex_array(Some(self.vao));
-            while step < capture.step {
-                let half = extent.map(|edge| (edge + 1) / 2);
-                self.reduced[next].reserve(gl, half[0], half[1]);
-                let target = self.reduced[next];
-                if !Self::attach(gl, glow::DRAW_FRAMEBUFFER, target.texture) {
-                    return None;
-                }
-                gl.viewport(0, 0, half[0], half[1]);
-                self.filter.prepare(gl, extent, source.size);
-                self.filter.reduce(gl, source.texture);
-                sigma = sigma.map(|value| (value.powi(2) - 0.25).max(0.0).sqrt() * 0.5);
-                source = target;
-                extent = half;
-                next = 1 - next;
-                step *= 2;
-            }
-            self.reduced[next].reserve(gl, extent[0], extent[1]);
-            let scratch = self.reduced[next];
-            gl.viewport(0, 0, extent[0], extent[1]);
-            let horizontal = Self::attach(gl, glow::DRAW_FRAMEBUFFER, scratch.texture);
-            if horizontal {
-                self.filter.prepare(gl, extent, source.size);
-                self.filter
-                    .pass(gl, source.texture, [1.0, 0.0], Kernel::new(sigma[0]));
-            }
-            let vertical = horizontal && Self::attach(gl, glow::DRAW_FRAMEBUFFER, source.texture);
-            if vertical {
-                self.filter.prepare(gl, extent, scratch.size);
-                self.filter
-                    .pass(gl, scratch.texture, [0.0, 1.0], Kernel::new(sigma[1]));
-            }
-            (vertical && gl.get_error() == glow::NO_ERROR).then_some((source, extent))
-        }
-    }
-
-    unsafe fn attach(gl: &glow::Context, framebuffer: u32, texture: glow::Texture) -> bool {
-        unsafe {
-            gl.framebuffer_texture_2d(
-                framebuffer,
-                glow::COLOR_ATTACHMENT0,
-                glow::TEXTURE_2D,
-                Some(texture),
-                0,
-            );
-            gl.check_framebuffer_status(framebuffer) == glow::FRAMEBUFFER_COMPLETE
+            (gl.get_error() == glow::NO_ERROR).then_some(SceneSample {
+                surface,
+                extent,
+                step,
+            })
         }
     }
 
     unsafe fn destroy(&self, gl: &glow::Context) {
         unsafe {
             gl.delete_vertex_array(self.vao);
-            gl.delete_framebuffer(self.target);
-            gl.delete_texture(self.full.texture);
-            for surface in self.reduced {
-                gl.delete_texture(surface.texture);
+            for surface in self.surfaces {
+                surface.destroy(gl);
             }
             gl.delete_program(self.filter.program);
             gl.delete_program(self.program);
@@ -609,6 +738,7 @@ mod tests {
             lens: 8.0,
             bevel: 20.0,
             polish: 0.7,
+            saturation: 1.0,
         };
         let screen = [375, 311];
         let scale = 1.5;
@@ -631,11 +761,29 @@ mod tests {
             assert_eq!(capture.x % capture.step, 0);
             assert_eq!(capture.y % capture.step, 0);
             assert_eq!(capture.x + capture.width, screen[0] as i32);
+            assert_eq!(capture.blit_step(), 1);
             let sample =
                 (pixel - egui::vec2(capture.x as f32, capture.y as f32)) / capture.step as f32;
             let phase = [sample.x.fract(), sample.y.fract()];
             assert_eq!(*sample_phase.get_or_insert(phase), phase);
         }
+    }
+
+    #[test]
+    fn an_even_capture_can_kick_off_the_blur_at_half_resolution() {
+        let mut capture = Capture {
+            x: 80,
+            y: 48,
+            width: 224,
+            height: 128,
+            step: 4,
+        };
+        assert_eq!(capture.blit_step(), 2);
+        capture.height -= 1;
+        assert_eq!(capture.blit_step(), 1);
+        capture.height += 1;
+        capture.step = 1;
+        assert_eq!(capture.blit_step(), 1);
     }
 
     #[test]

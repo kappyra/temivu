@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
+## [0.1.8] - 2026-11-24
+
+- Added Clear Frost, a lighter diffuse glass preset that preserves more of the
+  backdrop's color. Glass Studio compares all four presets over a moving scene.
+- Refined the prism bevel with softer directional reflections, a narrow inner
+  shade and sharper detail at the refracted edge. Vesper highlights are thinner.
+- Reduced live backdrop filtering cost with half-resolution captures,
+  screen-aligned sampling and reusable framebuffer storage.
+
 ## [0.1.7] - 2026-11-23
 
 - Added reversible shared-element transitions for cards, dialogs, popovers,
