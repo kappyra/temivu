@@ -49,7 +49,7 @@ fn luminous_spinner_has_six_bounded_glowing_dots_and_a_stable_static_frame() {
     };
     let active = draw(0.0, Motion::Enabled, 0.8);
     let advanced = draw(0.2, Motion::Enabled, 0.8);
-    assert_eq!(active.vertices.len(), 6 * 66);
+    assert_eq!(active.vertices.len(), 6 * 82);
     assert_ne!(active.vertices, advanced.vertices);
     assert!(
         active

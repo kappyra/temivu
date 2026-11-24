@@ -18,6 +18,6 @@ impl DemoVideo {
         )
         .max_height(240.0)
         .show(ui, &mut self.player, |_| {});
-        ui.label("Local video playback is available in the Linux showcase.");
+        ui.label("Local video playback is available in the Linux desktop Showcase.");
     }
 }

@@ -14,12 +14,15 @@ mod motion_gallery;
 mod motion_lab;
 #[path = "showcase/shared_elements.rs"]
 mod shared_elements;
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 #[path = "showcase/video_demo.rs"]
 mod video_demo;
-#[cfg(target_os = "android")]
-#[path = "showcase/video_android.rs"]
+#[cfg(any(target_os = "android", target_arch = "wasm32"))]
+#[path = "showcase/video_unavailable.rs"]
 mod video_demo;
+#[cfg(target_arch = "wasm32")]
+#[path = "showcase/web.rs"]
+mod web;
 #[path = "showcase/widget_catalog.rs"]
 mod widget_catalog;
 
@@ -281,6 +284,8 @@ impl Default for DemoState {
 pub(crate) struct Showcase {
     #[cfg(target_os = "android")]
     android_app: Option<android_activity::AndroidApp>,
+    #[cfg(target_arch = "wasm32")]
+    web_touch: bool,
     menu_open: bool,
     island_open: bool,
     motion_preview: bool,
@@ -308,6 +313,8 @@ impl Default for Showcase {
         Self {
             #[cfg(target_os = "android")]
             android_app: None,
+            #[cfg(target_arch = "wasm32")]
+            web_touch: false,
             menu_open: false,
             island_open: false,
             motion_preview: false,
@@ -1938,6 +1945,10 @@ impl eframe::App for Showcase {
         {
             theme = theme.touch();
         }
+        #[cfg(target_arch = "wasm32")]
+        if self.web_touch {
+            theme = theme.touch();
+        }
         if self.high_contrast {
             theme = theme.high_contrast();
         }
@@ -2209,7 +2220,10 @@ impl eframe::App for Showcase {
     }
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(target_arch = "wasm32")]
+fn main() {}
+
+#[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
 fn main() -> eframe::Result {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
     let mobile = arguments.iter().any(|argument| argument == "--mobile");

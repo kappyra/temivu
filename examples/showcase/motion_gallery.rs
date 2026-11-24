@@ -1,7 +1,7 @@
 use egui::{Id, RichText, Ui};
 use temivu::{
     Button, ButtonVariant, CircularProgress, Direction, Item, PaginationState, PopoverMenu, Select,
-    SelectOption, Switch, SwitchStyle, Tabs, Theme, ViewMode, direction_pad, layout_toggle,
+    SelectOption, Slider, Switch, SwitchStyle, Tabs, Theme, ViewMode, direction_pad, layout_toggle,
     link_preview, navigation_arrows, pagination, quantity_stepper, search_box, toggle_button,
 };
 
@@ -19,6 +19,7 @@ pub struct Gallery {
     expanded: bool,
     load_started: Option<f64>,
     load_completed: bool,
+    spinner_phase: Option<f64>,
     menu: bool,
     action: Option<&'static str>,
     category: Option<Id>,
@@ -35,7 +36,7 @@ impl Gallery {
         let examples: [Example; 15] = [
             (
                 "Circular loading",
-                "Watch the spinner or start a timed load.",
+                "Scrub the spinner to see the dots swap sides, or start a timed load.",
                 Self::loading,
             ),
             (
@@ -255,24 +256,54 @@ impl Gallery {
             self.load_started = None;
             self.load_completed = true;
         }
+        let value = progress.or(self.load_completed.then_some(1.0));
         ui.horizontal_wrapped(|ui| {
-            let ring = if let Some(value) = progress.or(self.load_completed.then_some(1.0)) {
+            if let Some(value) = value {
                 if value < 1.0 {
                     ui.ctx()
                         .request_repaint_after(std::time::Duration::from_millis(16));
                 }
-                CircularProgress::determinate(theme, value).expect("normalized loading progress")
-            } else {
-                CircularProgress::new(theme).loading_style(temivu::CircularLoading::LuminousDots(
-                    temivu::SpinnerStyle::default(),
-                ))
-            };
-            ring.diameter(40.0)
-                .expect("static ring diameter")
-                .label("Circular progress")
-                .show(ui);
-            if let Some(value) = progress.or(self.load_completed.then_some(1.0)) {
+                CircularProgress::determinate(theme, value)
+                    .expect("normalized loading progress")
+                    .diameter(40.0)
+                    .expect("static ring diameter")
+                    .label("Circular progress")
+                    .show(ui);
                 ui.label(format!("{:.0}%", value * 100.0));
+            } else {
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgb(23, 29, 40))
+                    .corner_radius(28)
+                    .inner_margin(3)
+                    .show(ui, |ui| {
+                        let ring = CircularProgress::new(theme)
+                            .diameter(50.0)
+                            .expect("static spinner diameter")
+                            .label("Circular progress")
+                            .loading_style(temivu::CircularLoading::LuminousDots(
+                                temivu::SpinnerStyle {
+                                    color: Some(egui::Color32::WHITE),
+                                    ..Default::default()
+                                },
+                            ));
+                        match self.spinner_phase {
+                            Some(phase) => ring.loading_phase(phase as f32),
+                            None => ring,
+                        }
+                        .show(ui);
+                    });
+                let action = if self.spinner_phase.is_some() {
+                    "Play spinner"
+                } else {
+                    "Scrub spinner"
+                };
+                if Button::new(action, theme)
+                    .variant(ButtonVariant::Ghost)
+                    .show(ui)
+                    .clicked()
+                {
+                    self.spinner_phase = self.spinner_phase.is_none().then_some(0.442);
+                }
             }
             if Button::new("Start loading", theme)
                 .variant(ButtonVariant::Secondary)
@@ -284,7 +315,24 @@ impl Gallery {
                 self.load_completed = false;
                 ui.ctx().request_repaint();
             }
+            if self.load_completed
+                && Button::new("Show spinner", theme)
+                    .variant(ButtonVariant::Ghost)
+                    .show(ui)
+                    .clicked()
+            {
+                self.load_completed = false;
+                ui.ctx().request_repaint();
+            }
         });
+        if value.is_none()
+            && let Some(phase) = &mut self.spinner_phase
+        {
+            Slider::new(phase, theme)
+                .expect("normalized spinner phase")
+                .label("Spinner phase")
+                .show(ui);
+        }
     }
 
     fn menu(&mut self, ui: &mut Ui, theme: &Theme) {

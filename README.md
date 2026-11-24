@@ -32,6 +32,10 @@ Temivu began as a [Rust/egui port](docs/MIGRATION.md) of Forui’s Dart/Flutter 
 
 ## Demo
 
+[Open the interactive Showcase](https://kappyra.github.io/temivu/) in a browser.
+Select **Widgets**, then **Scrub spinner** in **Circular loading** to inspect
+the dot swaps.
+
 https://github.com/user-attachments/assets/3a0d534d-143f-424b-b976-2acb06b394eb
 
 [Watch the demo](https://github.com/user-attachments/assets/3a0d534d-143f-424b-b976-2acb06b394eb) · [Download MP4](https://raw.githubusercontent.com/kappyra/temivu/main/docs/demo/temivu_demo.mp4) · [Overview screenshot](docs/demo/overview.png) · [Widget catalog screenshot](docs/demo/catalog.png) · [Dialog screenshot](docs/demo/dialog.png)
@@ -60,7 +64,7 @@ notarization is pending, so Gatekeeper may block it.
 The Android APK supports arm64 and x86-64 and uses a new debug signing key for each run.
 Uninstall an older preview before installing an APK signed with a different key.
 
-The showcase needs a desktop graphics session. On Linux, to play a local video, open **Widgets → Media**. Select **Choose video…**, or enter a local filename and select **Open path** or press Enter. The chooser uses Zenity on Linux. Playback requires system Python with PyGObject, GStreamer 1.0 and plugins for the chosen media format.
+The native Showcase needs a graphics session. On Linux, to play a local video, open **Widgets → Media**. Select **Choose video…**, or enter a local filename and select **Open path** or press Enter. The chooser uses Zenity on Linux. Playback requires system Python with PyGObject, GStreamer 1.0 and plugins for the chosen media format.
 
 The library’s `VideoPlayer` accepts a texture and emits playback actions for the host’s media backend.
 
@@ -93,7 +97,7 @@ Create a theme such as `Theme::light()` in the host, apply it to the egui contex
 - [Accessibility and verification scope](docs/ACCESSIBILITY.md)
 - [Changes since the first public version](CHANGELOG.md)
 
-The showcase recording was captured on Linux. The showcase can also be [built for Android](examples/showcase/android/). Web validation remains open. The API is pre-1.0. The [dependency advisory record](docs/DEPENDENCY_ADVISORIES.md) tracks three open informational advisories in the optional Linux accessibility stack.
+The showcase recording was captured on Linux. The showcase can also be [built for Android](examples/showcase/android/). Maintainers can publish the browser demo from `main` with the [Showcase website workflow](https://github.com/kappyra/temivu/actions/workflows/showcase-pages.yml). The API is pre-1.0. The [dependency advisory record](docs/DEPENDENCY_ADVISORIES.md) tracks three open informational advisories in the optional Linux accessibility stack.
 
 ## License
 

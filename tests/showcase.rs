@@ -747,6 +747,19 @@ fn circular_loading_demo_fills_to_completion() {
 }
 
 #[test]
+fn circular_loading_demo_can_be_scrubbed_and_resumed() {
+    let mut app = harness();
+    app.get_by_label("Widgets").click();
+    app.run_steps(3);
+    app.get_by_label("Scrub spinner").click();
+    app.run_steps(3);
+    app.get_by_role_and_label(egui::accesskit::Role::Slider, "Spinner phase");
+    app.get_by_label("Play spinner").click();
+    app.run_steps(3);
+    assert!(app.query_by_label("Spinner phase").is_none());
+}
+
+#[test]
 fn widgets_open_from_the_header_and_filter_by_name() {
     let mut harness = harness();
     harness.get_by_label("Widgets").click();

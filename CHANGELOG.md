@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file. The project
 is experimental until 1.0; APIs may change between releases.
 
+## [0.1.9] - 2026-11-24
+
+- Added the interactive Temivu Showcase on GitHub Pages using the same egui
+  app in WebAssembly.
+- Updated the luminous loading indicator with a spinning orbit, staggered
+  swaps across its center and soft bloom. The Showcase can scrub both swaps
+  with its phase slider.
+
 ## [0.1.8] - 2026-11-24
 
 - Added Clear Frost, a lighter diffuse glass preset that preserves more of the

@@ -39,6 +39,7 @@ impl Default for LightingDemo {
 }
 
 impl LightingDemo {
+    #[cfg(not(target_arch = "wasm32"))]
     pub(super) fn enable_surfaces(&mut self) {
         self.surfaces_enabled = true;
     }
