@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="branding/temivu-wordmark-matted.png">
-    <img src="branding/temivu-wordmark.png" alt="Temivu" width="448">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/temivu-readme-dark.png">
+    <img src="docs/images/temivu-readme.png" alt="Temivu" width="280">
   </picture>
 </p>
 
@@ -102,5 +102,3 @@ The showcase recording was captured on Linux. The showcase can also be [built fo
 ## License
 
 Temivu is distributed under the [MIT License](LICENSE). The [third-party notices](THIRD_PARTY_NOTICES.md) preserve Forui attribution and the terms for bundled fonts and other assets. The [first public release](https://github.com/kappyra/temivu/releases/tag/v0.0.0) remains available as a [source ZIP](https://github.com/kappyra/temivu/releases/download/v0.0.0/temivu-v0.0.0-source.zip).
-
-<p align="center"><img src="branding/temivu-mark.svg" alt="Temivu symbol" width="56"></p>
